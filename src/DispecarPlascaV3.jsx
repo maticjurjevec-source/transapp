@@ -612,21 +612,10 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
     setAiLoading(true);
     showToast("⏳ AI razčlenjuje...");
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          model:"claude-sonnet-4-20250514",
-          max_tokens:1000,
-          messages:[{ role:"user", content:`Iz tega dokumenta izvleci podatke za transportni nalog. Vrni SAMO JSON brez razlage:
-{"stranka":"","blago":"","kolicina":"","teza":"","nakFirma":"","nakKraj":"","nakNaslov":"","nakReferenca":"","nakDatum":"","nakCas":"","razFirma":"","razKraj":"","razNaslov":"","razReferenca":"","razDatum":"","razCas":"","navodila":"","kontaktEmail":"","kontaktIme":""}
-Datumi: YYYY-MM-DD, casi: HH:MM.
-
-Dokument:
-${vir}` }]
-        })
-      });
-      const data = await res.json();
+      const { data, error } = await supabase.functions.invoke("ai-razcleni", {
+      body: { tekst: vir }
+    });
+    if (error) throw error;
       const txt = data.content?.map(i=>i.text||"").join("").replace(/```json|```/g,"").trim();
       const parsed = JSON.parse(txt);
       setForm({...parsed, voznikId:""});
