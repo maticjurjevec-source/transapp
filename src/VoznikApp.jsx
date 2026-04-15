@@ -150,10 +150,22 @@ export default function App({ voznikId:propVoznikId=null, voznikIme='', voznikVo
 
   const odstraniSliko = (idx) => setForm(f=>({...f, slike:(f.slike||[]).filter((_,i)=>i!==idx)}));
 
-  const potrdiZakljucitev = async () => {
+ const potrdiZakljucitev = async () => {
     const nalog = st.nalogi.find(n=>n.id===form.nalogId);
     const slike = (form.slike||[]).filter(Boolean);
     try {
+      for (const sl of slike) {
+        const blob = await fetch(sl.img).then(r=>r.blob());
+        const pot = `${nalog.id}/${Date.now()}-${sl.ime||'cmr.jpg'}`;
+        const { error: upErr } = await supabase.storage
+          .from('cmr-dokumenti').upload(pot, blob, { contentType:'image/jpeg', upsert:false });
+        if (upErr) throw upErr;
+        await supabase.from('cmr_dokumenti').insert([{
+          nalog_id: nalog.id,
+          ime_datoteke: sl.ime||'cmr.jpg',
+          storage_pot: pot
+        }]);
+      }
       const { error } = await supabase.from('nalogi').update({
         status: 'zakljucen',
         zakljucen_cas: new Date().toISOString()
@@ -161,11 +173,7 @@ export default function App({ voznikId:propVoznikId=null, voznikIme='', voznikVo
       if (error) throw error;
       upd(s=>({...s, nalogi:s.nalogi.map(n=>n.id===nalog.id?{...n,status:"zakljucen",zakljucenCas:new Date().toISOString(),cmrSlike:slike}:n)}));
       closeModal(); setSelectedNalog(null);
-      showToast("✅ Nalog zaključen! CMR poslan dispečerju.");
-    } catch(err) {
-      showToast("❌ Napaka pri zaključitvi!", true);
-    }
-  };
+      showToast("✅ Nalog zaključen! CMR shranjen.");
 
   const novihNalogov = st.nalogi.filter(n=>n.status==="nov"||n.status==="poslan").length;
   const nepovezanihCMR = (st.prostiCMR||[]).filter(c=>!c.povezan).length;

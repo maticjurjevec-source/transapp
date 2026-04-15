@@ -122,6 +122,20 @@ export default function DispecarPlasca() {
     }
     setLoading(false);
   };
+  const naložiCMR = async (nalogId) => {
+  try {
+    const { data } = await supabase.from('cmr_dokumenti').select('*').eq('nalog_id', nalogId).order('created_at');
+    if (!data || data.length === 0) return [];
+    return data.map(d => ({
+      url: supabase.storage.from('cmr-dokumenti').getPublicUrl(d.storage_pot).data.publicUrl,
+      ime: d.ime_datoteke
+    }));
+  } catch { return []; }
+};
+const odpriNalog = async (n) => {
+  const cmr = await naložiCMR(n.id);
+  setSelNalog({...n, cmrSlike: cmr});
+};
   const [aiParsing,setAiParsing]=useState(false);
 
   const upd=(fn)=>{const ns=fn(st);setSt(ns);save(ns);};
@@ -265,7 +279,7 @@ export default function DispecarPlasca() {
           <Sec title="🏁 Razklad"><R label="Firma" val={n.razFirma} bold/><R label="Kraj" val={n.razKraj}/><R label="Naslov" val={n.razNaslov}/><R label="Referenca" val={n.razReferenca} mono/><R label="Datum" val={`${fmt(n.razDatum)} ob ${n.razCas}`}/></Sec>
           {n.navodila&&<Sec title="⚠️ Navodila"><div style={{fontSize:13,background:"#fffbeb",borderRadius:8,padding:"10px 12px",border:"1px solid #fde68a"}}>{n.navodila}</div></Sec>}
           {n.kontaktEmail&&<Sec title="💶 Kontakt za račun"><R label="Email" val={n.kontaktEmail} mono/></Sec>}
-          {n.cmrSlike?.length>0&&<Sec title="📄 CMR"><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{n.cmrSlike.filter(Boolean).map((sl,i)=><img key={i} src={sl.img} alt="" style={{width:80,height:107,objectFit:"cover",borderRadius:8,border:"1px solid #e2e8f0"}}/>)}</div></Sec>}
+    {n.cmrSlike?.length>0&&<Sec title="📄 CMR"><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{n.cmrSlike.filter(Boolean).map((sl,i)=><img key={i} src={sl.url||sl.img} alt="" style={{width:80,height:107,objectFit:"cover",borderRadius:8,border:"1px solid #e2e8f0"}}/>)}</div></Sec>}
           {n.status==="nov"&&<div style={{background:"#f8fafc",border:"1.5px solid #e2e8f0",borderRadius:14,padding:16,marginTop:8}}>
             <div style={{fontWeight:700,fontSize:14,color:"#0f2744",marginBottom:10}}>📤 Dodeli voznika</div>
             <select style={s.sel} value={izVoz} onChange={e=>setIzVoz(e.target.value)}><option value="">– Izberi voznika –</option>{vozniki.map(v=><option key={v.id} value={v.id}>{v.ime} · {v.vozilo}</option>)}</select>
@@ -328,7 +342,7 @@ export default function DispecarPlasca() {
             <button key={id} style={{...s.tab,...(tab===id?s.tabOn:{})}} onClick={()=>setTab(id)}>{label}</button>
           ))}
         </div>
-        {tab==="pregled"&&<PregledTab stats={stats} nalogi={st.nalogi} obracuni={st.obracuni} onSelNalog={setSelNalog} onSelOb={setSelObracun}/>}
+        {tab==="pregled"&&<PregledTab stats={stats} nalogi={st.nalogi} obracuni={st.obracuni} onSelNalog={odpriNalog} onSelOb={setSelObracun}/>}
         {tab==="nalogi"&&<NalogiTab nalogi={st.nalogi} onSelect={setSelNalog} openNovNalog={openNovNalog}/>}
         {tab==="vozniki"&&<VoznikiTab nalogi={st.nalogi} vozniki={vozniki}/>}
         {tab==="obracuni"&&<ObracuniTab obracuni={st.obracuni} onSelect={setSelObracun}/>}
