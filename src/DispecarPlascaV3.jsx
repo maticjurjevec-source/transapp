@@ -279,7 +279,7 @@ const odpriNalog = async (n) => {
           <Sec title="🏁 Razklad"><R label="Firma" val={n.razFirma} bold/><R label="Kraj" val={n.razKraj}/><R label="Naslov" val={n.razNaslov}/><R label="Referenca" val={n.razReferenca} mono/><R label="Datum" val={`${fmt(n.razDatum)} ob ${n.razCas}`}/></Sec>
           {n.navodila&&<Sec title="⚠️ Navodila"><div style={{fontSize:13,background:"#fffbeb",borderRadius:8,padding:"10px 12px",border:"1px solid #fde68a"}}>{n.navodila}</div></Sec>}
           {n.kontaktEmail&&<Sec title="💶 Kontakt za račun"><R label="Email" val={n.kontaktEmail} mono/></Sec>}
-    {n.cmrSlike?.length>0&&<Sec title="📄 CMR"><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{n.cmrSlike.filter(Boolean).map((sl,i)=><img key={i} src={sl.url||sl.img} alt="" style={{width:80,height:107,objectFit:"cover",borderRadius:8,border:"1px solid #e2e8f0"}}/>)}</div></Sec>}
+{(n.status==="zakljucen"||n.cmrSlike?.length>0)&&<Sec title="📄 CMR"><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{(n.cmrSlike||[]).filter(Boolean).map((sl,i)=><img key={i} src={sl.url||sl.img} alt="" style={{width:80,height:107,objectFit:"cover",borderRadius:8,border:"1px solid #e2e8f0"}}/>)}{n.cmrSlike?.length===0&&<div style={{fontSize:13,color:"#94a3b8"}}>Ni CMR slik.</div>}</div></Sec>}
           {n.status==="nov"&&<div style={{background:"#f8fafc",border:"1.5px solid #e2e8f0",borderRadius:14,padding:16,marginTop:8}}>
             <div style={{fontWeight:700,fontSize:14,color:"#0f2744",marginBottom:10}}>📤 Dodeli voznika</div>
             <select style={s.sel} value={izVoz} onChange={e=>setIzVoz(e.target.value)}><option value="">– Izberi voznika –</option>{vozniki.map(v=><option key={v.id} value={v.id}>{v.ime} · {v.vozilo}</option>)}</select>
