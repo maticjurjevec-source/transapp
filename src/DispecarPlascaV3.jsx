@@ -60,7 +60,6 @@ export default function DispecarPlasca() {
   const [vozniki,setVozniki]=useState(VOZNIKI);
   const [loading,setLoading]=useState(false);
 
-  // Naloži podatke iz Supabase ob zagonu
   useEffect(()=>{ naložiPodatke(); },[]);
 
   const naložiPodatke = async () => {
@@ -73,10 +72,9 @@ export default function DispecarPlasca() {
         supabase.from('racuni').select('*').order('created_at',{ascending:false}),
       ]);
 
-      // Mapiraj Supabase voznika v lokalni format
       if (sbVozniki) {
         const mapped = sbVozniki.map(v=>({
-          id: v.id, // pravi UUID
+          id: v.id,
           ime: `${v.ime} ${v.priimek}`,
           vozilo: v.vozilo||"",
           tel: v.tel||"",
@@ -122,20 +120,24 @@ export default function DispecarPlasca() {
     }
     setLoading(false);
   };
+
   const naložiCMR = async (nalogId) => {
-  try {
-    const { data } = await supabase.from('cmr_dokumenti').select('*').eq('nalog_id', nalogId).order('created_at');
-    if (!data || data.length === 0) return [];
-    return data.map(d => ({
-      url: supabase.storage.from('cmr-dokumenti').getPublicUrl(d.storage_pot).data.publicUrl,
-      ime: d.ime_datoteke
-    }));
-  } catch { return []; }
-};
-const odpriNalog = async (n) => {
-  const cmr = await naložiCMR(n.id);
-  setSelNalog({...n, cmrSlike: cmr});
-};
+    try {
+      const { data } = await supabase.from('cmr_dokumenti').select('*').eq('nalog_id', nalogId).order('created_at');
+      if (!data || data.length === 0) return [];
+      return data.map(d => ({
+        url: supabase.storage.from('cmr-dokumenti').getPublicUrl(d.storage_pot).data.publicUrl,
+        ime: d.ime_datoteke
+      }));
+    } catch { return []; }
+  };
+
+  // POPRAVEK: odpriNalog vedno naloži CMR slike iz Supabase
+  const odpriNalog = async (n) => {
+    const cmr = await naložiCMR(n.id);
+    setSelNalog({...n, cmrSlike: cmr});
+  };
+
   const [aiParsing,setAiParsing]=useState(false);
 
   const upd=(fn)=>{const ns=fn(st);setSt(ns);save(ns);};
@@ -224,7 +226,6 @@ const odpriNalog = async (n) => {
     try{
       let txt="";
       if(file.type==="application/pdf"){
-        // Try PDF.js
         try{
           const lib=await new Promise(res=>{if(window.pdfjsLib)return res(window.pdfjsLib);const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";s.onload=()=>{window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";res(window.pdfjsLib);};document.head.appendChild(s);});
           const ab=await file.arrayBuffer();
@@ -248,6 +249,8 @@ const odpriNalog = async (n) => {
   // Nalog detail
   if(selNalog){
     const n=st.nalogi.find(x=>x.id===selNalog.id)||selNalog;
+    // Uporabi cmrSlike iz selNalog (ki jih je naložil odpriNalog)
+    const cmrSlike = selNalog.cmrSlike || [];
     const sc=SC[n.status]||{};
     const naslednji={poslan:{next:"sprejet",label:"Označi: Sprejeto",icon:"✅"},sprejet:{next:"zakljucen",label:"Označi: Zaključeno",icon:"✔️"},zakljucen:{next:"za_fakturo",label:"Premakni v Finance",icon:"💶"}}[n.status];
     return(
@@ -279,7 +282,22 @@ const odpriNalog = async (n) => {
           <Sec title="🏁 Razklad"><R label="Firma" val={n.razFirma} bold/><R label="Kraj" val={n.razKraj}/><R label="Naslov" val={n.razNaslov}/><R label="Referenca" val={n.razReferenca} mono/><R label="Datum" val={`${fmt(n.razDatum)} ob ${n.razCas}`}/></Sec>
           {n.navodila&&<Sec title="⚠️ Navodila"><div style={{fontSize:13,background:"#fffbeb",borderRadius:8,padding:"10px 12px",border:"1px solid #fde68a"}}>{n.navodila}</div></Sec>}
           {n.kontaktEmail&&<Sec title="💶 Kontakt za račun"><R label="Email" val={n.kontaktEmail} mono/></Sec>}
-{(n.status==="zakljucen"||n.cmrSlike?.length>0)&&<Sec title="📄 CMR"><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{(n.cmrSlike||[]).filter(Boolean).map((sl,i)=><img key={i} src={sl.url||sl.img} alt="" style={{width:80,height:107,objectFit:"cover",borderRadius:8,border:"1px solid #e2e8f0"}}/>)}{n.cmrSlike?.length===0&&<div style={{fontSize:13,color:"#94a3b8"}}>Ni CMR slik.</div>}</div></Sec>}
+          {/* CMR sekcija - vedno vidna za zaključene naloge */}
+          <Sec title="📄 CMR dokumenti">
+            {cmrSlike.length > 0 ? (
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {cmrSlike.map((sl,i)=>(
+                  <a key={i} href={sl.url} target="_blank" rel="noopener noreferrer">
+                    <img src={sl.url} alt={sl.ime||`CMR ${i+1}`} style={{width:80,height:107,objectFit:"cover",borderRadius:8,border:"1px solid #e2e8f0",cursor:"pointer"}}/>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <div style={{fontSize:13,color:"#94a3b8"}}>
+                {n.status==="zakljucen" ? "Ni CMR dokumentov." : "CMR bo prikazan po zaključitvi naloga."}
+              </div>
+            )}
+          </Sec>
           {n.status==="nov"&&<div style={{background:"#f8fafc",border:"1.5px solid #e2e8f0",borderRadius:14,padding:16,marginTop:8}}>
             <div style={{fontWeight:700,fontSize:14,color:"#0f2744",marginBottom:10}}>📤 Dodeli voznika</div>
             <select style={s.sel} value={izVoz} onChange={e=>setIzVoz(e.target.value)}><option value="">– Izberi voznika –</option>{vozniki.map(v=><option key={v.id} value={v.id}>{v.ime} · {v.vozilo}</option>)}</select>
@@ -343,12 +361,12 @@ const odpriNalog = async (n) => {
           ))}
         </div>
         {tab==="pregled"&&<PregledTab stats={stats} nalogi={st.nalogi} obracuni={st.obracuni} onSelNalog={odpriNalog} onSelOb={setSelObracun}/>}
-        {tab==="nalogi"&&<NalogiTab nalogi={st.nalogi} onSelect={setSelNalog} openNovNalog={openNovNalog}/>}
+        {tab==="nalogi"&&<NalogiTab nalogi={st.nalogi} onSelect={odpriNalog} openNovNalog={openNovNalog}/>}
         {tab==="vozniki"&&<VoznikiTab nalogi={st.nalogi} vozniki={vozniki}/>}
         {tab==="obracuni"&&<ObracuniTab obracuni={st.obracuni} onSelect={setSelObracun}/>}
         {tab==="finance"&&<FinanceTab st={st} upd={upd} showToast={showToast}/>}
-        {tab==="prosticmr"&&<ProstiCMRTab st={st} upd={upd} showToast={showToast}/>
-        }{tab==="email"&&<EmailNalogTab upd={upd} showToast={showToast} naložiPodatke={naložiPodatke} vozniki={vozniki}/>}
+        {tab==="prosticmr"&&<ProstiCMRTab st={st} upd={upd} showToast={showToast}/>}
+        {tab==="email"&&<EmailNalogTab upd={upd} showToast={showToast} naložiPodatke={naložiPodatke} vozniki={vozniki}/>}
       </div>
       {/* Nov nalog modal */}
       {modal==="nalog"&&(
@@ -574,12 +592,8 @@ function ProstiCMRTab({st,upd,showToast}){
   </div>);
 }
 
-// Shared cards
-// ═══════════════════════════════════════════════════════════════════════════
-// EMAIL → NALOG TAB
-// ═══════════════════════════════════════════════════════════════════════════
 function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
-  const [korak, setKorak] = useState("vnos"); // vnos | razcleni | forma
+  const [korak, setKorak] = useState("vnos");
   const [vnosText, setVnosText] = useState("");
   const [priponka, setPriponka] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -627,9 +641,9 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
     showToast("⏳ AI razčlenjuje...");
     try {
       const { data, error } = await supabase.functions.invoke("ai-razcleni", {
-      body: { tekst: vir }
-    });
-    if (error) throw error;
+        body: { tekst: vir }
+      });
+      if (error) throw error;
       const txt = data.content?.map(i=>i.text||"").join("").replace(/```json|```/g,"").trim();
       const parsed = JSON.parse(txt);
       setForm({...parsed, voznikId:""});
@@ -687,8 +701,6 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
         <div style={{fontWeight:800,fontSize:16,marginBottom:6}}>🤖 Email → Nalog</div>
         <div style={{fontSize:13,opacity:0.85}}>Prilepi besedilo emaila ali naloži PDF priponko — AI bo avtomatsko izpolnil nalog.</div>
       </div>
-
-      {/* Priponka - drag & drop */}
       <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
         <div style={{fontWeight:700,fontSize:14,color:"#0f2744",marginBottom:8}}>📎 Naloži priponko iz emaila</div>
         {priponka ? (
@@ -722,8 +734,6 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
           </div>
         )}
       </div>
-
-      {/* Besedilo emaila */}
       <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
         <div style={{fontWeight:700,fontSize:14,color:"#0f2744",marginBottom:8}}>📝 Ali prilepi besedilo emaila</div>
         <textarea
@@ -733,7 +743,6 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
           onChange={e=>setVnosText(e.target.value)}
         />
       </div>
-
       <button style={{width:"100%",background:"linear-gradient(135deg,#0f2744,#1d4ed8)",color:"#fff",border:"none",borderRadius:12,padding:14,fontSize:15,fontWeight:700,cursor:"pointer",opacity:aiLoading?0.6:1}} onClick={razcleni} disabled={aiLoading}>
         {aiLoading?"⏳ AI razčlenjuje...":"🤖 Razčleni z AI →"}
       </button>
@@ -746,13 +755,10 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
         <div style={{fontWeight:700,fontSize:16,color:"#0f2744"}}>✅ Preveri in potrdi nalog</div>
         <button style={{background:"#f1f5f9",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:13,color:"#64748b"}} onClick={()=>setKorak("vnos")}>← Nazaj</button>
       </div>
-
       <div style={{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#16a34a",fontWeight:600}}>
         🤖 AI je izpolnil podatke — preveri in popravi po potrebi
       </div>
-
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px",marginBottom:14}}>
-        {/* Voznik */}
         <div style={{gridColumn:"1/-1"}}>
           <label style={s2.lbl}>Voznik</label>
           <select style={s2.sel} value={form.voznikId||""} onChange={e=>sf("voznikId",e.target.value)}>
@@ -782,7 +788,6 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
         <Fi2 l="Kontaktna oseba" v={form.kontaktIme} s={v=>sf("kontaktIme",v)}/>
         <div style={{gridColumn:"1/-1"}}><label style={s2.lbl}>Navodila</label><textarea style={{...s2.inp,resize:"vertical",height:60}} value={form.navodila||""} onChange={e=>sf("navodila",e.target.value)}/></div>
       </div>
-
       <button style={{width:"100%",background:"linear-gradient(135deg,#065f46,#16a34a)",color:"#fff",border:"none",borderRadius:12,padding:14,fontSize:15,fontWeight:700,cursor:"pointer"}} onClick={ustvariNalog}>
         📋 Ustvari nalog v sistemu →
       </button>
