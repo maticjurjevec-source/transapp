@@ -60,9 +60,9 @@ export default function DispecarPlasca() {
   const [vozniki,setVozniki]=useState(VOZNIKI);
   const [loading,setLoading]=useState(false);
 
-  useEffect(()=>{ naložiPodatke(); },[]);
+  useEffect(()=>{ naloziPodatke(); },[]);
 
-  const naložiPodatke = async () => {
+  const naloziPodatke = async () => {
     setLoading(true);
     try {
       const [{ data: sbVozniki }, { data: nalogi }, { data: obracuni }, { data: racuni }] = await Promise.all([
@@ -71,151 +71,75 @@ export default function DispecarPlasca() {
         supabase.from('obracuni').select('*, vozniki(id,ime,priimek,vozilo)').order('created_at',{ascending:false}),
         supabase.from('racuni').select('*').order('created_at',{ascending:false}),
       ]);
-
       if (sbVozniki) {
-        const mapped = sbVozniki.map(v=>({
-          id: v.id,
-          ime: `${v.ime} ${v.priimek}`,
-          vozilo: v.vozilo||"",
-          tel: v.tel||"",
-        }));
+        const mapped = sbVozniki.map(v=>({id:v.id,ime:`${v.ime} ${v.priimek}`,vozilo:v.vozilo||"",tel:v.tel||""}));
         setVozniki(mapped);
       }
-
-      const mapNalog = (n) => ({
-        ...n,
-        id: n.id,
-        stevilkaNaloga: n.stevilka_naloga,
-        stranka: n.stranka,
-        blago: n.blago,
-        kolicina: n.kolicina,
-        teza: n.teza,
-        nakFirma: n.nak_firma,
-        nakKraj: n.nak_kraj,
-        nakNaslov: n.nak_naslov,
-        nakReferenca: n.nak_referenca,
-        nakDatum: n.nak_datum,
-        nakCas: n.nak_cas,
-        razFirma: n.raz_firma,
-        razKraj: n.raz_kraj,
-        razNaslov: n.raz_naslov,
-        razReferenca: n.raz_referenca,
-        razDatum: n.raz_datum,
-        razCas: n.raz_cas,
-        navodila: n.navodila,
-        voznikId: n.voznik_id,
-        poslan: n.poslan_cas || n.created_at,
-        sprejetCas: n.sprejet_cas,
-        zakljucenCas: n.zakljucen_cas,
-        cmrSlike: [],
-      });
-      setSt(s => ({
-        ...s,
-        nalogi: nalogi ? nalogi.map(mapNalog) : s.nalogi,
-        obracuni: obracuni ? obracuni.map(o=>({...o, voznikId:o.voznik_id, datZac:o.dat_zac, datKon:o.dat_kon, zakljucen:o.zakljucen, zakljucenCas:o.zakljucen_cas})) : s.obracuni,
-        racuni: racuni ? racuni.map(r=>({...r, nalogId:r.nalog_id, datum:r.datum_izdaje, rok:r.datum_rok})) : s.racuni,
-      }));
-    } catch(err) {
-      console.error('Supabase napaka:', err);
-    }
+      const mapNalog=(n)=>({...n,id:n.id,stevilkaNaloga:n.stevilka_naloga,stranka:n.stranka,blago:n.blago,kolicina:n.kolicina,teza:n.teza,nakFirma:n.nak_firma,nakKraj:n.nak_kraj,nakNaslov:n.nak_naslov,nakReferenca:n.nak_referenca,nakDatum:n.nak_datum,nakCas:n.nak_cas,razFirma:n.raz_firma,razKraj:n.raz_kraj,razNaslov:n.raz_naslov,razReferenca:n.raz_referenca,razDatum:n.raz_datum,razCas:n.raz_cas,navodila:n.navodila,voznikId:n.voznik_id,poslan:n.poslan_cas||n.created_at,sprejetCas:n.sprejet_cas,zakljucenCas:n.zakljucen_cas,cmrSlike:[]});
+      setSt(s=>({...s,nalogi:nalogi?nalogi.map(mapNalog):s.nalogi,obracuni:obracuni?obracuni.map(o=>({...o,voznikId:o.voznik_id,datZac:o.dat_zac,datKon:o.dat_kon,zakljucen:o.zakljucen,zakljucenCas:o.zakljucen_cas})):s.obracuni,racuni:racuni?racuni.map(r=>({...r,nalogId:r.nalog_id,datum:r.datum_izdaje,rok:r.datum_rok})):s.racuni}));
+    } catch(err){console.error('Supabase napaka:',err);}
     setLoading(false);
   };
 
-  const naložiCMR = async (nalogId) => {
-    try {
-      const { data } = await supabase.from('cmr_dokumenti').select('*').eq('nalog_id', nalogId).order('created_at');
-      if (!data || data.length === 0) return [];
-      return data.map(d => ({
-        url: supabase.storage.from('cmr-dokumenti').getPublicUrl(d.storage_pot).data.publicUrl,
-        ime: d.ime_datoteke
-      }));
-    } catch { return []; }
+  const nalozi_cmr=async(nalogId)=>{
+    try{
+      const{data}=await supabase.from('cmr_dokumenti').select('*').eq('nalog_id',nalogId).order('created_at');
+      if(!data||data.length===0)return[];
+      return data.map(d=>({url:supabase.storage.from('cmr-dokumenti').getPublicUrl(d.storage_pot).data.publicUrl,ime:d.ime_datoteke}));
+    }catch{return[];}
   };
 
-  // POPRAVEK: odpriNalog vedno naloži CMR slike iz Supabase
-  const odpriNalog = async (n) => {
-    const cmr = await naložiCMR(n.id);
-    setSelNalog({...n, cmrSlike: cmr});
+  const odpriNalog=async(n)=>{
+    const cmr=await nalozi_cmr(n.id);
+    setSelNalog({...n,cmrSlike:cmr});
   };
 
   const [aiParsing,setAiParsing]=useState(false);
-
   const upd=(fn)=>{const ns=fn(st);setSt(ns);save(ns);};
   const showToast=(txt,err)=>{setToast({txt,err});setTimeout(()=>setToast(null),3500);};
   const closeModal=()=>{setModal(null);setForm({});};
   const voz=(id)=>vozniki.find(v=>v.id===id);
-
   const openNovNalog=()=>{setForm({voznikId:"",stranka:"",blago:"",kolicina:"",teza:"",nakFirma:"",nakKraj:"",nakNaslov:"",nakReferenca:"",nakDatum:"",nakCas:"",razFirma:"",razKraj:"",razNaslov:"",razReferenca:"",razDatum:"",razCas:"",navodila:"",kontaktEmail:""});setModal("nalog");};
 
   const submitNalog=async()=>{
     if(!form.stranka||!form.nakKraj||!form.razKraj)return showToast("Izpolni obvezna polja!",true);
-    try {
-      const { data, error } = await supabase.from('nalogi').insert([{
-        stevilka_naloga: '',
-        status: 'nov',
-        stranka: form.stranka,
-        blago: form.blago,
-        kolicina: form.kolicina,
-        teza: form.teza,
-        nak_firma: form.nakFirma,
-        nak_kraj: form.nakKraj,
-        nak_naslov: form.nakNaslov,
-        nak_referenca: form.nakReferenca,
-        nak_datum: form.nakDatum||null,
-        nak_cas: form.nakCas ? form.nakCas.slice(0,5) : null,
-        raz_firma: form.razFirma,
-        raz_kraj: form.razKraj,
-        raz_naslov: form.razNaslov,
-        raz_referenca: form.razReferenca,
-        raz_datum: form.razDatum||null,
-        raz_cas: form.razCas ? form.razCas.slice(0,5) : null,
-        navodila: form.navodila,
-        voznik_id: form.voznikId||null,
-      }]).select().single();
-      if(error) throw error;
-      await naložiPodatke();
+    try{
+      const{data,error}=await supabase.from('nalogi').insert([{stevilka_naloga:'',status:'nov',stranka:form.stranka,blago:form.blago,kolicina:form.kolicina,teza:form.teza,nak_firma:form.nakFirma,nak_kraj:form.nakKraj,nak_naslov:form.nakNaslov,nak_referenca:form.nakReferenca,nak_datum:form.nakDatum||null,nak_cas:form.nakCas?form.nakCas.slice(0,5):null,raz_firma:form.razFirma,raz_kraj:form.razKraj,raz_naslov:form.razNaslov,raz_referenca:form.razReferenca,raz_datum:form.razDatum||null,raz_cas:form.razCas?form.razCas.slice(0,5):null,navodila:form.navodila,voznik_id:form.voznikId||null}]).select().single();
+      if(error)throw error;
+      await naloziPodatke();
       closeModal();showToast(`✅ Nalog ${data.stevilka_naloga} ustvarjen!`);
-    } catch(err) {
-      showToast("❌ Napaka pri shranjevanju!",true);
-      console.error(err);
-    }
+    }catch(err){showToast("❌ Napaka pri shranjevanju!",true);console.error(err);}
   };
 
   const dodelijNalog=async(nalogId,voznikId)=>{
-    try {
-      const { error } = await supabase.from('nalogi').update({ voznik_id:voznikId, status:'poslan', poslan_cas:new Date().toISOString() }).eq('id',nalogId);
-      if(error) throw error;
+    try{
+      const{error}=await supabase.from('nalogi').update({voznik_id:voznikId,status:'poslan',poslan_cas:new Date().toISOString()}).eq('id',nalogId);
+      if(error)throw error;
       upd(s=>({...s,nalogi:s.nalogi.map(n=>n.id===nalogId?{...n,voznikId,status:"poslan",poslanCas:new Date().toISOString()}:n)}));
       showToast(`✅ Nalog poslan vozniku ${voz(voznikId)?.ime}!`);setSelNalog(null);
-    } catch(err) {
-      showToast("❌ Napaka!",true);
-    }
+    }catch(err){showToast("❌ Napaka!",true);}
   };
 
   const spremenStatus=async(id,status)=>{
-    try {
-      const updates = { status };
-      if(status==='poslan') updates.poslan_cas = new Date().toISOString();
-      if(status==='sprejet') updates.sprejet_cas = new Date().toISOString();
-      if(status==='zakljucen') updates.zakljucen_cas = new Date().toISOString();
-      const { error } = await supabase.from('nalogi').update(updates).eq('id',id);
-      if(error) throw error;
+    try{
+      const updates={status};
+      if(status==='poslan')updates.poslan_cas=new Date().toISOString();
+      if(status==='sprejet')updates.sprejet_cas=new Date().toISOString();
+      if(status==='zakljucen')updates.zakljucen_cas=new Date().toISOString();
+      const{error}=await supabase.from('nalogi').update(updates).eq('id',id);
+      if(error)throw error;
       upd(s=>({...s,nalogi:s.nalogi.map(n=>n.id===id?{...n,status}:n)}));
       showToast(`✅ Status: ${SC[status]?.label}`);
-    } catch(err) {
-      showToast("❌ Napaka pri posodobitvi!",true);
-    }
+    }catch(err){showToast("❌ Napaka pri posodobitvi!",true);}
   };
 
   const izbrisiNalog=async(id)=>{
-    try {
-      const { error } = await supabase.from('nalogi').delete().eq('id',id);
-      if(error) throw error;
+    try{
+      const{error}=await supabase.from('nalogi').delete().eq('id',id);
+      if(error)throw error;
       upd(s=>({...s,nalogi:s.nalogi.filter(n=>n.id!==id)}));
       setSelNalog(null);showToast("Nalog izbrisan.");
-    } catch(err) {
-      showToast("❌ Napaka pri brisanju!",true);
-    }
+    }catch(err){showToast("❌ Napaka pri brisanju!",true);}
   };
 
   const handleDrop=async(e)=>{
@@ -227,9 +151,8 @@ export default function DispecarPlasca() {
       let txt="";
       if(file.type==="application/pdf"){
         try{
-          const lib=await new Promise(res=>{if(window.pdfjsLib)return res(window.pdfjsLib);const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";s.onload=()=>{window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";res(window.pdfjsLib);};document.head.appendChild(s);});
-          const ab=await file.arrayBuffer();
-          const pdf=await lib.getDocument({data:ab}).promise;
+          const lib=await new Promise(res=>{if(window.pdfjsLib)return res(window.pdfjsLib);const sc=document.createElement("script");sc.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";sc.onload=()=>{window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";res(window.pdfjsLib);};document.head.appendChild(sc);});
+          const ab=await file.arrayBuffer();const pdf=await lib.getDocument({data:ab}).promise;
           for(let i=1;i<=Math.min(pdf.numPages,4);i++){const p=await pdf.getPage(i);const tc=await p.getTextContent();txt+=tc.items.map(x=>x.str).join(" ")+"\n";}
         }catch(e){txt="";}
       }
@@ -243,14 +166,11 @@ export default function DispecarPlasca() {
   };
 
   const stats={skupaj:st.nalogi.length,novi:st.nalogi.filter(n=>n.status==="nov").length,aktivni:st.nalogi.filter(n=>["poslan","sprejet"].includes(n.status)).length,zaFakturo:st.nalogi.filter(n=>n.status==="za_fakturo").length};
-
   const [izVoz,setIzVoz]=useState("");
 
-  // Nalog detail
   if(selNalog){
     const n=st.nalogi.find(x=>x.id===selNalog.id)||selNalog;
-    // Uporabi cmrSlike iz selNalog (ki jih je naložil odpriNalog)
-    const cmrSlike = selNalog.cmrSlike || [];
+    const cmrSlike=selNalog.cmrSlike||[];
     const sc=SC[n.status]||{};
     const naslednji={poslan:{next:"sprejet",label:"Označi: Sprejeto",icon:"✅"},sprejet:{next:"zakljucen",label:"Označi: Zaključeno",icon:"✔️"},zakljucen:{next:"za_fakturo",label:"Premakni v Finance",icon:"💶"}}[n.status];
     return(
@@ -262,7 +182,6 @@ export default function DispecarPlasca() {
             <span style={{...s.sPill,background:sc.color+"22",color:sc.color}}>{sc.icon} {sc.label}</span>
             {voz(n.voznikId)&&<span style={{fontSize:13,color:"#475569",fontWeight:600,marginLeft:8}}>🚛 {voz(n.voznikId).ime} · {voz(n.voznikId).vozilo}</span>}
           </div>
-          {/* Timeline */}
           <div style={{display:"flex",overflowX:"auto",marginBottom:14,paddingBottom:4}}>
             {SRed.slice(0,6).map((k,i)=>{const sc2=SC[k];const done=SRed.indexOf(n.status)>i;const cur=n.status===k;return(
               <div key={k} style={{display:"flex",flexDirection:"column",alignItems:"center",position:"relative",minWidth:70,flex:1}}>
@@ -272,7 +191,6 @@ export default function DispecarPlasca() {
               </div>
             );})}
           </div>
-          {/* Naslednji korak */}
           {naslednji&&<div style={{background:SC[naslednji.next].bg,border:`1.5px solid ${SC[naslednji.next].color}33`,borderRadius:12,padding:"12px 16px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div><div style={{fontSize:12,color:"#64748b"}}>Naslednji korak</div><div style={{fontWeight:700,color:SC[naslednji.next].color}}>{naslednji.icon} {naslednji.label}</div></div>
             <button style={{background:SC[naslednji.next].color,color:"#fff",border:"none",borderRadius:10,padding:"9px 16px",fontWeight:700,cursor:"pointer"}} onClick={()=>spremenStatus(n.id,naslednji.next)}>Potrdi →</button>
@@ -282,9 +200,8 @@ export default function DispecarPlasca() {
           <Sec title="🏁 Razklad"><R label="Firma" val={n.razFirma} bold/><R label="Kraj" val={n.razKraj}/><R label="Naslov" val={n.razNaslov}/><R label="Referenca" val={n.razReferenca} mono/><R label="Datum" val={`${fmt(n.razDatum)} ob ${n.razCas}`}/></Sec>
           {n.navodila&&<Sec title="⚠️ Navodila"><div style={{fontSize:13,background:"#fffbeb",borderRadius:8,padding:"10px 12px",border:"1px solid #fde68a"}}>{n.navodila}</div></Sec>}
           {n.kontaktEmail&&<Sec title="💶 Kontakt za račun"><R label="Email" val={n.kontaktEmail} mono/></Sec>}
-          {/* CMR sekcija - vedno vidna za zaključene naloge */}
           <Sec title="📄 CMR dokumenti">
-            {cmrSlike.length > 0 ? (
+            {cmrSlike.length>0?(
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                 {cmrSlike.map((sl,i)=>(
                   <a key={i} href={sl.url} target="_blank" rel="noopener noreferrer">
@@ -292,10 +209,8 @@ export default function DispecarPlasca() {
                   </a>
                 ))}
               </div>
-            ) : (
-              <div style={{fontSize:13,color:"#94a3b8"}}>
-                {n.status==="zakljucen" ? "Ni CMR dokumentov." : "CMR bo prikazan po zaključitvi naloga."}
-              </div>
+            ):(
+              <div style={{fontSize:13,color:"#94a3b8"}}>{n.status==="zakljucen"?"Ni CMR dokumentov.":"CMR bo prikazan po zaključitvi naloga."}</div>
             )}
           </Sec>
           {n.status==="nov"&&<div style={{background:"#f8fafc",border:"1.5px solid #e2e8f0",borderRadius:14,padding:16,marginTop:8}}>
@@ -309,7 +224,6 @@ export default function DispecarPlasca() {
     );
   }
 
-  // Obracun detail
   if(selObracun){
     const ob=selObracun;const v=voz(ob.voznikId);
     const zaslKm=(ob.km||0)*0.18,zaslStr=(ob.stranke||0)*20,ost=(ob.stroski||[]).reduce((a,x)=>a+(parseFloat(x.znesek)||0),0);
@@ -336,14 +250,13 @@ export default function DispecarPlasca() {
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div><div style={s.logo}>⚡ TransDispečer</div><div style={s.sub}>{VOZNIKI.length} voznikov</div></div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
-            {loading && <div style={{fontSize:12,opacity:0.7}}>⏳ Nalagam...</div>}
+            {loading&&<div style={{fontSize:12,opacity:0.7}}>⏳ Nalagam...</div>}
             <button style={s.novBtn} onClick={openNovNalog}>+ Nov nalog</button>
           </div>
         </div>
       </div>
       {toast&&<Toast t={toast}/>}
       <div style={s.content}>
-        {/* AI drop zone */}
         <div style={{...s.drop,...(dragOver?s.dropA:{}),...(aiParsing?s.dropP:{})}} onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)} onDrop={handleDrop}>
           {aiParsing?<div style={{textAlign:"center"}}><div style={{fontSize:28,marginBottom:4}}>⏳</div><div style={{fontWeight:700,color:"#0f2744"}}>AI bere dokument...</div></div>:
           <div style={{textAlign:"center"}}>
@@ -354,7 +267,6 @@ export default function DispecarPlasca() {
             <label htmlFor="drop-f" style={s.dropBtn}>📂 Izberi datoteko</label>
           </div>}
         </div>
-        {/* Tabs */}
         <div style={s.tabs}>
           {[["pregled","📊 Pregled"],["nalogi","📋 Nalogi"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["finance","🧾 Finance"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`]].map(([id,label])=>(
             <button key={id} style={{...s.tab,...(tab===id?s.tabOn:{})}} onClick={()=>setTab(id)}>{label}</button>
@@ -362,13 +274,12 @@ export default function DispecarPlasca() {
         </div>
         {tab==="pregled"&&<PregledTab stats={stats} nalogi={st.nalogi} obracuni={st.obracuni} onSelNalog={odpriNalog} onSelOb={setSelObracun}/>}
         {tab==="nalogi"&&<NalogiTab nalogi={st.nalogi} onSelect={odpriNalog} openNovNalog={openNovNalog}/>}
-        {tab==="vozniki"&&<VoznikiTab nalogi={st.nalogi} vozniki={vozniki}/>}
+        {tab==="vozniki"&&<VoznikiTab nalogi={st.nalogi} vozniki={vozniki} onSelNalog={odpriNalog}/>}
         {tab==="obracuni"&&<ObracuniTab obracuni={st.obracuni} onSelect={setSelObracun}/>}
         {tab==="finance"&&<FinanceTab st={st} upd={upd} showToast={showToast}/>}
         {tab==="prosticmr"&&<ProstiCMRTab st={st} upd={upd} showToast={showToast}/>}
-        {tab==="email"&&<EmailNalogTab upd={upd} showToast={showToast} naložiPodatke={naložiPodatke} vozniki={vozniki}/>}
+        {tab==="email"&&<EmailNalogTab upd={upd} showToast={showToast} naloziPodatke={naloziPodatke} vozniki={vozniki}/>}
       </div>
-      {/* Nov nalog modal */}
       {modal==="nalog"&&(
         <div style={s.overlay}>
           <div style={{...s.mbox,maxWidth:680}}>
@@ -416,9 +327,7 @@ function PregledTab({stats,nalogi,obracuni,onSelNalog,onSelOb}){
     <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:16}}>
       {[["📋","Skupaj",stats.skupaj,"#2563eb"],["🔘","Novi",stats.novi,"#64748b"],["🚛","Aktivni",stats.aktivni,"#0891b2"],["💶","Za fakturo",stats.zaFakturo,"#9333ea"]].map(([ic,lb,vl,cl])=>(
         <div key={lb} style={{background:"#fff",borderRadius:14,padding:"14px 10px",textAlign:"center",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
-          <div style={{fontSize:20,marginBottom:4}}>{ic}</div>
-          <div style={{fontSize:22,fontWeight:800,color:cl}}>{vl}</div>
-          <div style={{fontSize:11,color:"#94a3b8"}}>{lb}</div>
+          <div style={{fontSize:20,marginBottom:4}}>{ic}</div><div style={{fontSize:22,fontWeight:800,color:cl}}>{vl}</div><div style={{fontSize:11,color:"#94a3b8"}}>{lb}</div>
         </div>
       ))}
     </div>
@@ -448,24 +357,65 @@ function NalogiTab({nalogi,onSelect,openNovNalog}){
   </div>);
 }
 
-function VoznikiTab({nalogi,vozniki}){
+// POSODOBLJENI VoznikiTab z razširljivimi nalogi
+function VoznikiTab({nalogi,vozniki,onSelNalog}){
+  const [odprt,setOdprt]=useState(null);
+  const [filterStanje,setFilterStanje]=useState("vsi");
   return(<div>
     <div style={{fontWeight:700,fontSize:15,color:"#0f2744",marginBottom:12}}>Vozniki ({vozniki.length})</div>
     {vozniki.map(v=>{
       const vn=nalogi.filter(n=>n.voznikId===v.id);
       const ak=vn.filter(n=>["poslan","sprejet"].includes(n.status));
-      return(<div key={v.id} style={{background:"#fff",borderRadius:14,padding:14,marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-          <div style={{width:40,height:40,borderRadius:"50%",background:"linear-gradient(135deg,#0f2744,#1d4ed8)",color:"#fff",fontSize:16,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{v.ime.charAt(0)}</div>
-          <div style={{flex:1}}><div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{v.ime}</div><div style={{fontSize:12,color:"#64748b"}}>{v.vozilo}</div></div>
-          <div style={{padding:"4px 10px",borderRadius:20,fontSize:12,fontWeight:700,background:ak.length>0?"#fffbeb":"#f0fdf4",color:ak.length>0?"#d97706":"#16a34a"}}>{ak.length>0?`🟡 ${ak.length} aktiven`:"✅ Prost"}</div>
+      const jeOdprt=odprt===v.id;
+      const filtrirani=filterStanje==="vsi"?vn:vn.filter(n=>n.status===filterStanje);
+      return(
+        <div key={v.id} style={{background:"#fff",borderRadius:14,marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",overflow:"hidden"}}>
+          {/* Glava - klik odpre/zapre */}
+          <div style={{padding:14,cursor:"pointer"}} onClick={()=>setOdprt(jeOdprt?null:v.id)}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+              <div style={{width:40,height:40,borderRadius:"50%",background:"linear-gradient(135deg,#0f2744,#1d4ed8)",color:"#fff",fontSize:16,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{v.ime.charAt(0)}</div>
+              <div style={{flex:1}}><div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{v.ime}</div><div style={{fontSize:12,color:"#64748b"}}>{v.vozilo}</div></div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <div style={{padding:"4px 10px",borderRadius:20,fontSize:12,fontWeight:700,background:ak.length>0?"#fffbeb":"#f0fdf4",color:ak.length>0?"#d97706":"#16a34a"}}>{ak.length>0?`🟡 ${ak.length} aktiven`:"✅ Prost"}</div>
+                <div style={{fontSize:12,color:"#94a3b8",transform:jeOdprt?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▼</div>
+              </div>
+            </div>
+            <div style={{display:"flex",borderTop:"1px solid #f1f5f9",paddingTop:10}}>
+              {[["Nalogov",vn.length],["Aktivnih",ak.length],["Zaključenih",vn.filter(n=>n.status==="zakljucen").length]].map(([l,val])=>(
+                <div key={l} style={{flex:1,textAlign:"center"}}><div style={{fontSize:18,fontWeight:800,color:"#0f2744"}}>{val}</div><div style={{fontSize:11,color:"#94a3b8"}}>{l}</div></div>
+              ))}
+            </div>
+          </div>
+          {/* Razširjeni seznam nalogov */}
+          {jeOdprt&&(
+            <div style={{borderTop:"2px solid #f1f5f9",padding:"12px 14px",background:"#f8fafc"}}>
+              <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+                {[["vsi","Vsi"],["poslan","Poslani"],["sprejet","Sprejeto"],["zakljucen","Zaključeni"],["za_fakturo","Za fakturo"]].map(([val,lab])=>(
+                  <button key={val} style={{...s.fBtn,...(filterStanje===val?s.fOn:{}),padding:"4px 10px",fontSize:11}} onClick={e=>{e.stopPropagation();setFilterStanje(val);}}>
+                    {lab}
+                  </button>
+                ))}
+              </div>
+              {filtrirani.length===0?(
+                <div style={{textAlign:"center",color:"#94a3b8",padding:"16px 0",fontSize:13}}>Ni nalogov za ta filter.</div>
+              ):(
+                filtrirani.map(n=>(
+                  <button key={n.id} style={{width:"100%",background:"#fff",borderRadius:10,padding:"10px 12px",marginBottom:7,border:"1px solid #e2e8f0",cursor:"pointer",textAlign:"left",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}
+                    onClick={e=>{e.stopPropagation();onSelNalog(n);}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                      <span style={{padding:"2px 7px",borderRadius:20,fontSize:10,fontWeight:700,background:SC[n.status]?.bg,color:SC[n.status]?.color}}>{SC[n.status]?.label}</span>
+                      <span style={{fontSize:11,fontFamily:"monospace",color:"#2563eb",fontWeight:700}}>{n.stevilkaNaloga}</span>
+                      <span style={{fontSize:11,color:"#94a3b8",marginLeft:"auto"}}>{fmt(n.poslan)}</span>
+                    </div>
+                    <div style={{fontSize:14,fontWeight:700,color:"#0f2744"}}>{n.nakKraj} → {n.razKraj}</div>
+                    <div style={{fontSize:12,color:"#64748b"}}>{n.stranka}</div>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
         </div>
-        <div style={{display:"flex",borderTop:"1px solid #f1f5f9",paddingTop:10}}>
-          {[["Nalogov",vn.length],["Aktivnih",ak.length],["Zaključenih",vn.filter(n=>n.status==="zakljucen").length]].map(([l,val])=>(
-            <div key={l} style={{flex:1,textAlign:"center"}}><div style={{fontSize:18,fontWeight:800,color:"#0f2744"}}>{val}</div><div style={{fontSize:11,color:"#94a3b8"}}>{l}</div></div>
-          ))}
-        </div>
-      </div>);
+      );
     })}
   </div>);
 }
@@ -592,110 +542,48 @@ function ProstiCMRTab({st,upd,showToast}){
   </div>);
 }
 
-function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
-  const [korak, setKorak] = useState("vnos");
-  const [vnosText, setVnosText] = useState("");
-  const [priponka, setPriponka] = useState(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [form, setForm] = useState({});
-  const sf = (k,v) => setForm(f=>({...f,[k]:v}));
-
-  const loadPdfJs = () => new Promise(res => {
-    if (window.pdfjsLib) return res(window.pdfjsLib);
-    const s = document.createElement("script");
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-    s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; res(window.pdfjsLib); };
-    document.head.appendChild(s);
-  });
-
-  const naložiPriponko = async (e) => {
-    const file = e.target.files[0]; if (!file) return;
+function EmailNalogTab({upd,showToast,naloziPodatke,vozniki}){
+  const [korak,setKorak]=useState("vnos");
+  const [vnosText,setVnosText]=useState("");
+  const [priponka,setPriponka]=useState(null);
+  const [aiLoading,setAiLoading]=useState(false);
+  const [form,setForm]=useState({});
+  const sf=(k,v)=>setForm(f=>({...f,[k]:v}));
+  const loadPdfJs=()=>new Promise(res=>{if(window.pdfjsLib)return res(window.pdfjsLib);const sc=document.createElement("script");sc.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";sc.onload=()=>{window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";res(window.pdfjsLib);};document.head.appendChild(sc);});
+  const nalozPriponko=async(e)=>{
+    const file=e.target.files[0];if(!file)return;
     showToast(`⏳ Berem: ${file.name}...`);
-    try {
-      if (file.type === "application/pdf") {
-        const ab = await file.arrayBuffer();
-        const lib = await loadPdfJs();
-        const pdf = await lib.getDocument({data:ab}).promise;
-        let txt = "";
-        for (let i=1;i<=Math.min(pdf.numPages,5);i++) {
-          const p = await pdf.getPage(i);
-          const tc = await p.getTextContent();
-          txt += tc.items.map(x=>x.str).join(" ") + "\n";
-        }
-        setPriponka({ ime: file.name, vsebina: txt.trim(), tip: "pdf" });
-      } else {
-        const txt = await file.text();
-        setPriponka({ ime: file.name, vsebina: txt, tip: "text" });
-      }
+    try{
+      if(file.type==="application/pdf"){const ab=await file.arrayBuffer();const lib=await loadPdfJs();const pdf=await lib.getDocument({data:ab}).promise;let txt="";for(let i=1;i<=Math.min(pdf.numPages,5);i++){const p=await pdf.getPage(i);const tc=await p.getTextContent();txt+=tc.items.map(x=>x.str).join(" ")+"\n";}setPriponka({ime:file.name,vsebina:txt.trim(),tip:"pdf"});}
+      else{const txt=await file.text();setPriponka({ime:file.name,vsebina:txt,tip:"text"});}
       showToast(`✅ Priponka naložena: ${file.name}`);
-    } catch(err) {
-      showToast("❌ Napaka pri branju priponke.", true);
-    }
-    e.target.value = "";
+    }catch(err){showToast("❌ Napaka pri branju priponke.",true);}
+    e.target.value="";
   };
-
-  const razcleni = async () => {
-    const vir = priponka?.vsebina || vnosText;
-    if (!vir.trim()) return showToast("Vnesi besedilo emaila ali naloži priponko!", true);
-    setAiLoading(true);
-    showToast("⏳ AI razčlenjuje...");
-    try {
-      const { data, error } = await supabase.functions.invoke("ai-razcleni", {
-        body: { tekst: vir }
-      });
-      if (error) throw error;
-      const txt = data.content?.map(i=>i.text||"").join("").replace(/```json|```/g,"").trim();
-      const parsed = JSON.parse(txt);
-      setForm({...parsed, voznikId:""});
-      setKorak("forma");
-      showToast("✅ AI je razčlenil! Preveri in potrdi.");
-    } catch(err) {
-      showToast("❌ AI napaka — izpolni ročno.", true);
-      setForm({ stranka:"", nakKraj:"", razKraj:"", voznikId:"" });
-      setKorak("forma");
-    }
+  const razcleni=async()=>{
+    const vir=priponka?.vsebina||vnosText;
+    if(!vir.trim())return showToast("Vnesi besedilo emaila ali naloži priponko!",true);
+    setAiLoading(true);showToast("⏳ AI razčlenjuje...");
+    try{
+      const{data,error}=await supabase.functions.invoke("ai-razcleni",{body:{tekst:vir}});
+      if(error)throw error;
+      const txt=data.content?.map(i=>i.text||"").join("").replace(/```json|```/g,"").trim();
+      const parsed=JSON.parse(txt);
+      setForm({...parsed,voznikId:""});setKorak("forma");showToast("✅ AI je razčlenil! Preveri in potrdi.");
+    }catch(err){showToast("❌ AI napaka — izpolni ročno.",true);setForm({stranka:"",nakKraj:"",razKraj:"",voznikId:""});setKorak("forma");}
     setAiLoading(false);
   };
-
-  const ustvariNalog = async () => {
-    if (!form.stranka||!form.nakKraj||!form.razKraj) return showToast("Izpolni obvezna polja!", true);
-    try {
-      const { data, error } = await supabase.from('nalogi').insert([{
-        stevilka_naloga: '',
-        status: 'nov',
-        stranka: form.stranka,
-        blago: form.blago||"",
-        kolicina: form.kolicina||"",
-        teza: form.teza||"",
-        nak_firma: form.nakFirma||"",
-        nak_kraj: form.nakKraj,
-        nak_naslov: form.nakNaslov||"",
-        nak_referenca: form.nakReferenca||"",
-        nak_datum: form.nakDatum||null,
-        nak_cas: form.nakCas ? form.nakCas.slice(0,5) : null,
-        raz_firma: form.razFirma||"",
-        raz_kraj: form.razKraj,
-        raz_naslov: form.razNaslov||"",
-        raz_referenca: form.razReferenca||"",
-        raz_datum: form.razDatum||null,
-        raz_cas: form.razCas ? form.razCas.slice(0,5) : null,
-        navodila: form.navodila||"",
-        voznik_id: form.voznikId||null,
-      }]).select().single();
-      if (error) throw error;
-      await naložiPodatke();
+  const ustvariNalog=async()=>{
+    if(!form.stranka||!form.nakKraj||!form.razKraj)return showToast("Izpolni obvezna polja!",true);
+    try{
+      const{data,error}=await supabase.from('nalogi').insert([{stevilka_naloga:'',status:'nov',stranka:form.stranka,blago:form.blago||"",kolicina:form.kolicina||"",teza:form.teza||"",nak_firma:form.nakFirma||"",nak_kraj:form.nakKraj,nak_naslov:form.nakNaslov||"",nak_referenca:form.nakReferenca||"",nak_datum:form.nakDatum||null,nak_cas:form.nakCas?form.nakCas.slice(0,5):null,raz_firma:form.razFirma||"",raz_kraj:form.razKraj,raz_naslov:form.razNaslov||"",raz_referenca:form.razReferenca||"",raz_datum:form.razDatum||null,raz_cas:form.razCas?form.razCas.slice(0,5):null,navodila:form.navodila||"",voznik_id:form.voznikId||null}]).select().single();
+      if(error)throw error;
+      await naloziPodatke();
       showToast(`✅ Nalog ${data.stevilka_naloga} ustvarjen!`);
-      setKorak("vnos");
-      setVnosText("");
-      setPriponka(null);
-      setForm({});
-    } catch(err) {
-      showToast("❌ Napaka pri shranjevanju!", true);
-      console.error(err);
-    }
+      setKorak("vnos");setVnosText("");setPriponka(null);setForm({});
+    }catch(err){showToast("❌ Napaka pri shranjevanju!",true);console.error(err);}
   };
-
-  if (korak==="vnos") return (
+  if(korak==="vnos")return(
     <div>
       <div style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:14,padding:18,color:"#fff",marginBottom:14}}>
         <div style={{fontWeight:800,fontSize:16,marginBottom:6}}>🤖 Email → Nalog</div>
@@ -703,103 +591,59 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
       </div>
       <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
         <div style={{fontWeight:700,fontSize:14,color:"#0f2744",marginBottom:8}}>📎 Naloži priponko iz emaila</div>
-        {priponka ? (
+        {priponka?(
           <div style={{background:"#f0fdf4",borderRadius:10,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div><div style={{fontWeight:700,fontSize:13,color:"#16a34a"}}>📄 {priponka.ime}</div><div style={{fontSize:11,color:"#64748b"}}>{priponka.vsebina.slice(0,80)}...</div></div>
             <button style={{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:18}} onClick={()=>setPriponka(null)}>✕</button>
           </div>
-        ) : (
-          <div
-            onDragOver={e=>{e.preventDefault();e.currentTarget.style.borderColor="#1d4ed8";e.currentTarget.style.background="#eff6ff";}}
-            onDragLeave={e=>{e.currentTarget.style.borderColor="#cbd5e1";e.currentTarget.style.background="#f8fafc";}}
-            onDrop={async e=>{
-              e.preventDefault();
-              e.currentTarget.style.borderColor="#cbd5e1";
-              e.currentTarget.style.background="#f8fafc";
-              const file = e.dataTransfer.files[0];
-              if (file) {
-                const fakeEvent = { target: { files: [file], value: "" } };
-                await naložiPriponko(fakeEvent);
-              }
-            }}
-            style={{border:"2px dashed #cbd5e1",borderRadius:10,padding:"24px 16px",cursor:"pointer",textAlign:"center",background:"#f8fafc",transition:"all 0.2s"}}
-          >
+        ):(
+          <div onDragOver={e=>{e.preventDefault();e.currentTarget.style.borderColor="#1d4ed8";e.currentTarget.style.background="#eff6ff";}} onDragLeave={e=>{e.currentTarget.style.borderColor="#cbd5e1";e.currentTarget.style.background="#f8fafc";}} onDrop={async e=>{e.preventDefault();e.currentTarget.style.borderColor="#cbd5e1";e.currentTarget.style.background="#f8fafc";const file=e.dataTransfer.files[0];if(file){const fakeEvent={target:{files:[file],value:""}};await nalozPriponko(fakeEvent);}}} style={{border:"2px dashed #cbd5e1",borderRadius:10,padding:"24px 16px",cursor:"pointer",textAlign:"center",background:"#f8fafc",transition:"all 0.2s"}}>
             <div style={{fontSize:32,marginBottom:8}}>📂</div>
             <div style={{fontWeight:700,fontSize:14,color:"#0f2744",marginBottom:4}}>Povleci priponko sem</div>
             <div style={{fontSize:12,color:"#64748b",marginBottom:12}}>PDF · Word · TXT — povleci direktno iz Outlooka ali Gmaila</div>
-            <input type="file" id="email-pdf" accept=".pdf,.txt,.doc,.docx" style={{display:"none"}} onChange={naložiPriponko}/>
-            <label htmlFor="email-pdf" style={{background:"#0f2744",color:"#fff",padding:"8px 18px",borderRadius:10,fontWeight:700,fontSize:13,cursor:"pointer"}}>
-              📂 Ali izberi datoteko
-            </label>
+            <input type="file" id="email-pdf" accept=".pdf,.txt,.doc,.docx" style={{display:"none"}} onChange={nalozPriponko}/>
+            <label htmlFor="email-pdf" style={{background:"#0f2744",color:"#fff",padding:"8px 18px",borderRadius:10,fontWeight:700,fontSize:13,cursor:"pointer"}}>📂 Ali izberi datoteko</label>
           </div>
         )}
       </div>
       <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
         <div style={{fontWeight:700,fontSize:14,color:"#0f2744",marginBottom:8}}>📝 Ali prilepi besedilo emaila</div>
-        <textarea
-          style={{width:"100%",border:"1.5px solid #e2e8f0",borderRadius:10,padding:"10px 12px",fontSize:13,outline:"none",resize:"vertical",boxSizing:"border-box",minHeight:150,background:"#f8fafc"}}
-          placeholder="Prilepi besedilo emaila tukaj..."
-          value={vnosText}
-          onChange={e=>setVnosText(e.target.value)}
-        />
+        <textarea style={{width:"100%",border:"1.5px solid #e2e8f0",borderRadius:10,padding:"10px 12px",fontSize:13,outline:"none",resize:"vertical",boxSizing:"border-box",minHeight:150,background:"#f8fafc"}} placeholder="Prilepi besedilo emaila tukaj..." value={vnosText} onChange={e=>setVnosText(e.target.value)}/>
       </div>
-      <button style={{width:"100%",background:"linear-gradient(135deg,#0f2744,#1d4ed8)",color:"#fff",border:"none",borderRadius:12,padding:14,fontSize:15,fontWeight:700,cursor:"pointer",opacity:aiLoading?0.6:1}} onClick={razcleni} disabled={aiLoading}>
-        {aiLoading?"⏳ AI razčlenjuje...":"🤖 Razčleni z AI →"}
-      </button>
+      <button style={{width:"100%",background:"linear-gradient(135deg,#0f2744,#1d4ed8)",color:"#fff",border:"none",borderRadius:12,padding:14,fontSize:15,fontWeight:700,cursor:"pointer",opacity:aiLoading?0.6:1}} onClick={razcleni} disabled={aiLoading}>{aiLoading?"⏳ AI razčlenjuje...":"🤖 Razčleni z AI →"}</button>
     </div>
   );
-
-  if (korak==="forma") return (
+  if(korak==="forma")return(
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
         <div style={{fontWeight:700,fontSize:16,color:"#0f2744"}}>✅ Preveri in potrdi nalog</div>
         <button style={{background:"#f1f5f9",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:13,color:"#64748b"}} onClick={()=>setKorak("vnos")}>← Nazaj</button>
       </div>
-      <div style={{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#16a34a",fontWeight:600}}>
-        🤖 AI je izpolnil podatke — preveri in popravi po potrebi
-      </div>
+      <div style={{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#16a34a",fontWeight:600}}>🤖 AI je izpolnil podatke — preveri in popravi po potrebi</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px",marginBottom:14}}>
-        <div style={{gridColumn:"1/-1"}}>
-          <label style={s2.lbl}>Voznik</label>
-          <select style={s2.sel} value={form.voznikId||""} onChange={e=>sf("voznikId",e.target.value)}>
-            <option value="">– Dodeli pozneje –</option>
-            {vozniki.map(v=><option key={v.id} value={v.id}>{v.ime} · {v.vozilo}</option>)}
-          </select>
-        </div>
+        <div style={{gridColumn:"1/-1"}}><label style={s2.lbl}>Voznik</label><select style={s2.sel} value={form.voznikId||""} onChange={e=>sf("voznikId",e.target.value)}><option value="">– Dodeli pozneje –</option>{vozniki.map(v=><option key={v.id} value={v.id}>{v.ime} · {v.vozilo}</option>)}</select></div>
         <div style={{gridColumn:"1/-1"}}><Fi2 l="Stranka *" v={form.stranka} s={v=>sf("stranka",v)}/></div>
-        <Fi2 l="Blago" v={form.blago} s={v=>sf("blago",v)}/>
-        <Fi2 l="Količina" v={form.kolicina} s={v=>sf("kolicina",v)}/>
+        <Fi2 l="Blago" v={form.blago} s={v=>sf("blago",v)}/><Fi2 l="Količina" v={form.kolicina} s={v=>sf("kolicina",v)}/>
         <div style={{gridColumn:"1/-1",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",borderTop:"1px solid #f1f5f9",paddingTop:8}}>📍 Naklad</div>
-        <Fi2 l="Firma" v={form.nakFirma} s={v=>sf("nakFirma",v)}/>
-        <Fi2 l="Kraj *" v={form.nakKraj} s={v=>sf("nakKraj",v)}/>
+        <Fi2 l="Firma" v={form.nakFirma} s={v=>sf("nakFirma",v)}/><Fi2 l="Kraj *" v={form.nakKraj} s={v=>sf("nakKraj",v)}/>
         <div style={{gridColumn:"1/-1"}}><Fi2 l="Naslov" v={form.nakNaslov} s={v=>sf("nakNaslov",v)}/></div>
-        <Fi2 l="Referenca" v={form.nakReferenca} s={v=>sf("nakReferenca",v)}/>
-        <Fi2 l="Datum" v={form.nakDatum} s={v=>sf("nakDatum",v)} t="date"/>
-        <Fi2 l="Ura" v={form.nakCas} s={v=>sf("nakCas",v)} t="time"/>
+        <Fi2 l="Referenca" v={form.nakReferenca} s={v=>sf("nakReferenca",v)}/><Fi2 l="Datum" v={form.nakDatum} s={v=>sf("nakDatum",v)} t="date"/><Fi2 l="Ura" v={form.nakCas} s={v=>sf("nakCas",v)} t="time"/>
         <div style={{gridColumn:"1/-1",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",borderTop:"1px solid #f1f5f9",paddingTop:8}}>🏁 Razklad</div>
-        <Fi2 l="Firma" v={form.razFirma} s={v=>sf("razFirma",v)}/>
-        <Fi2 l="Kraj *" v={form.razKraj} s={v=>sf("razKraj",v)}/>
+        <Fi2 l="Firma" v={form.razFirma} s={v=>sf("razFirma",v)}/><Fi2 l="Kraj *" v={form.razKraj} s={v=>sf("razKraj",v)}/>
         <div style={{gridColumn:"1/-1"}}><Fi2 l="Naslov" v={form.razNaslov} s={v=>sf("razNaslov",v)}/></div>
-        <Fi2 l="Referenca" v={form.razReferenca} s={v=>sf("razReferenca",v)}/>
-        <Fi2 l="Datum" v={form.razDatum} s={v=>sf("razDatum",v)} t="date"/>
-        <Fi2 l="Ura" v={form.razCas} s={v=>sf("razCas",v)} t="time"/>
+        <Fi2 l="Referenca" v={form.razReferenca} s={v=>sf("razReferenca",v)}/><Fi2 l="Datum" v={form.razDatum} s={v=>sf("razDatum",v)} t="date"/><Fi2 l="Ura" v={form.razCas} s={v=>sf("razCas",v)} t="time"/>
         <div style={{gridColumn:"1/-1",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",borderTop:"1px solid #f1f5f9",paddingTop:8}}>💶 Kontakt za račun</div>
-        <Fi2 l="Email za račun" v={form.kontaktEmail} s={v=>sf("kontaktEmail",v)} ph="finance@podjetje.com"/>
-        <Fi2 l="Kontaktna oseba" v={form.kontaktIme} s={v=>sf("kontaktIme",v)}/>
+        <Fi2 l="Email za račun" v={form.kontaktEmail} s={v=>sf("kontaktEmail",v)} ph="finance@podjetje.com"/><Fi2 l="Kontaktna oseba" v={form.kontaktIme} s={v=>sf("kontaktIme",v)}/>
         <div style={{gridColumn:"1/-1"}}><label style={s2.lbl}>Navodila</label><textarea style={{...s2.inp,resize:"vertical",height:60}} value={form.navodila||""} onChange={e=>sf("navodila",e.target.value)}/></div>
       </div>
-      <button style={{width:"100%",background:"linear-gradient(135deg,#065f46,#16a34a)",color:"#fff",border:"none",borderRadius:12,padding:14,fontSize:15,fontWeight:700,cursor:"pointer"}} onClick={ustvariNalog}>
-        📋 Ustvari nalog v sistemu →
-      </button>
+      <button style={{width:"100%",background:"linear-gradient(135deg,#065f46,#16a34a)",color:"#fff",border:"none",borderRadius:12,padding:14,fontSize:15,fontWeight:700,cursor:"pointer"}} onClick={ustvariNalog}>📋 Ustvari nalog v sistemu →</button>
     </div>
   );
-
   return null;
 }
 
 const s2={lbl:{display:"block",fontSize:12,fontWeight:600,color:"#475569",marginBottom:4},inp:{width:"100%",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"9px 10px",fontSize:13,outline:"none",boxSizing:"border-box",background:"#f8fafc"},sel:{width:"100%",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"9px 10px",fontSize:13,outline:"none",background:"#f8fafc",boxSizing:"border-box"}};
 const Fi2=({l,v,s,ph,t="text"})=><div><label style={s2.lbl}>{l}</label><input style={s2.inp} type={t} value={v||""} onChange={e=>s(e.target.value)} placeholder={ph||""}/></div>;
-
 const NC=({n,onClick})=>{const sc=SC[n.status]||{};return(<button style={{width:"100%",background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:9,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:"none",cursor:"pointer",textAlign:"left"}} onClick={onClick}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}><span style={{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700,background:sc.bg,color:sc.color}}>{sc.label}</span><span style={{fontSize:11,fontFamily:"monospace",color:"#2563eb",fontWeight:700}}>{n.stevilkaNaloga}</span><span style={{fontSize:11,color:"#94a3b8",marginLeft:"auto"}}>{fmt(n.poslan)}</span></div><div style={{fontSize:16,fontWeight:800,color:"#0f2744",marginBottom:2}}>{n.nakKraj} → {n.razKraj}</div><div style={{fontSize:13,color:"#64748b"}}>{n.stranka} · {n.blago}</div></button>);};
 const OC=({o,onClick,vozniki:vl})=>{const v=(vl||VOZNIKI).find(x=>x.id===o.voznikId);const z=(o.km||0)*0.18+(o.stranke||0)*20+(o.stroski||[]).reduce((a,x)=>a+(parseFloat(x.znesek)||0),0);return(<button style={{width:"100%",background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:9,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:"none",cursor:"pointer",textAlign:"left"}} onClick={onClick}><div style={{display:"flex",justifyContent:"space-between"}}><div><div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{v?.ime}</div><div style={{fontSize:12,color:"#64748b"}}>{fmt(o.datZac+"T00:00:00")} – {fmt(o.datKon+"T00:00:00")} · {v?.vozilo}</div></div><div style={{fontWeight:800,fontSize:18,color:"#16a34a"}}>{z.toFixed(2)} €</div></div></button>);};
 const Sec=({title,children})=><div style={{background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:11,fontWeight:700,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}}>{title}</div>{children}</div>;
@@ -810,10 +654,8 @@ const Toast=({t})=><div style={{position:"fixed",top:20,right:20,color:"#fff",pa
 const s={
   wrap:{fontFamily:"'Segoe UI',system-ui,sans-serif",background:"#f1f5f9",minHeight:"100vh",maxWidth:900,margin:"0 auto",display:"flex",flexDirection:"column"},
   header:{background:"linear-gradient(135deg,#0f2744 0%,#1d4ed8 100%)",padding:"16px 20px 14px",color:"#fff"},
-  logo:{fontSize:22,fontWeight:800,letterSpacing:-0.5},
-  sub:{fontSize:12,opacity:0.65,marginTop:2},
-  htitle:{fontSize:18,fontWeight:800,marginTop:6},
-  hsub:{fontSize:12,opacity:0.75,marginTop:2},
+  logo:{fontSize:22,fontWeight:800,letterSpacing:-0.5},sub:{fontSize:12,opacity:0.65,marginTop:2},
+  htitle:{fontSize:18,fontWeight:800,marginTop:6},hsub:{fontSize:12,opacity:0.75,marginTop:2},
   backBtn:{background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",padding:"6px 14px",borderRadius:20,fontSize:13,cursor:"pointer",marginBottom:8,display:"block"},
   novBtn:{background:"#fff",color:"#0f2744",border:"none",borderRadius:10,padding:"9px 18px",fontWeight:800,fontSize:14,cursor:"pointer"},
   content:{flex:1,padding:"14px",overflowY:"auto"},
@@ -821,8 +663,7 @@ const s={
   tab:{padding:"7px 14px",borderRadius:20,border:"1.5px solid #e2e8f0",background:"#fff",fontSize:13,cursor:"pointer",fontWeight:500,color:"#475569",whiteSpace:"nowrap"},
   tabOn:{background:"#0f2744",color:"#fff",border:"1.5px solid #0f2744",fontWeight:700},
   drop:{border:"2px dashed #cbd5e1",borderRadius:14,padding:"18px",marginBottom:14,background:"#fff",cursor:"pointer"},
-  dropA:{border:"2px dashed #1d4ed8",background:"#eff6ff"},
-  dropP:{border:"2px dashed #d97706",background:"#fffbeb"},
+  dropA:{border:"2px dashed #1d4ed8",background:"#eff6ff"},dropP:{border:"2px dashed #d97706",background:"#fffbeb"},
   dropBtn:{background:"#f1f5f9",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"6px 14px",fontSize:13,fontWeight:600,color:"#0f2744",cursor:"pointer"},
   scCard:{borderRadius:12,padding:"10px 14px",marginBottom:12,border:"1.5px solid",display:"flex",flexWrap:"wrap",gap:8,alignItems:"center"},
   sPill:{padding:"4px 12px",borderRadius:20,fontSize:12,fontWeight:700},
@@ -838,8 +679,6 @@ const s={
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16},
   mbox:{background:"#fff",borderRadius:16,width:"100%",maxWidth:500,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"},
   mhead:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 18px 12px",borderBottom:"1px solid #e2e8f0",position:"sticky",top:0,background:"#fff"},
-  mtitle:{fontWeight:700,fontSize:16,color:"#0f2744"},
-  mcls:{background:"#f1f5f9",border:"none",borderRadius:"50%",width:30,height:30,fontSize:13,cursor:"pointer"},
-  mbody:{padding:"14px 18px 22px"},
-  empty:{textAlign:"center",color:"#94a3b8",padding:"40px 20px",fontSize:14},
+  mtitle:{fontWeight:700,fontSize:16,color:"#0f2744"},mcls:{background:"#f1f5f9",border:"none",borderRadius:"50%",width:30,height:30,fontSize:13,cursor:"pointer"},
+  mbody:{padding:"14px 18px 22px"},empty:{textAlign:"center",color:"#94a3b8",padding:"40px 20px",fontSize:14},
 };
