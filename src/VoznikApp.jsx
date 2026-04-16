@@ -37,11 +37,6 @@ const optimizejSliko = (dataUrl) => new Promise((resolve) => {
   img.src = dataUrl;
 });
 
-const DEMO_NALOGI = [
-  { id:"NAL-2025-0041", status:"nov", stevilkaNaloga:"NAL-2025-0041", stranka:"Müller GmbH", blago:"Avtomobilski deli", kolicina:"24 palet", teza:"18.500 kg", nakFirma:"Logistika d.o.o.", nakKraj:"Ljubljana", nakNaslov:"Dunajska cesta 5, 1000 Ljubljana", nakReferenca:"REF-NAK-88123", nakDatum:"2025-04-10", nakCas:"07:00", razFirma:"Müller GmbH", razKraj:"München", razNaslov:"Schillerstraße 12, 80336 München", razReferenca:"REF-RAZ-99541", razDatum:"2025-04-11", razCas:"14:00", navodila:"Blago krhko – previdno ravnanje!", poslan:new Date(Date.now()-3600000).toISOString(), sprejetCas:null, zakljucenCas:null, cmrSlike:[] },
-  { id:"NAL-2025-0042", status:"poslan", stevilkaNaloga:"NAL-2025-0042", stranka:"Kaufland Logistik", blago:"Živila – suho blago", kolicina:"33 palet", teza:"22.000 kg", nakFirma:"Koper Terminal d.d.", nakKraj:"Koper", nakNaslov:"Industrijska ulica 8, 6000 Koper", nakReferenca:"REF-NAK-77234", nakDatum:"2025-04-12", nakCas:"05:30", razFirma:"Kaufland Berlin", razKraj:"Berlin", razNaslov:"Frankfurter Allee 99, 10247 Berlin", razReferenca:"REF-RAZ-44871", razDatum:"2025-04-14", razCas:"09:00", navodila:"Dostava samo s predhodno najavo.", poslan:new Date(Date.now()-7200000).toISOString(), sprejetCas:null, zakljucenCas:null, cmrSlike:[] },
-];
-
 const initState = () => ({
   voznik: { ime: "Voznik", vozilo: "" },
   tarifa: { stranka: TARIFA_STR, km: TARIFA_KM },
@@ -59,14 +54,10 @@ export default function App({ voznikId:propVoznikId=null, voznikIme='', voznikVo
   const [form, setForm] = useState({});
   const [toast, setToast] = useState(null);
   const [selectedNalog, setSelectedNalog] = useState(null);
-
   const [voznikId, setVoznikId] = useState(null);
 
-  // Naloži naloge za tega voznika
   useEffect(() => {
-    if (propVoznikId) {
-      setVoznikId(propVoznikId);
-    }
+    if (propVoznikId) setVoznikId(propVoznikId);
   }, [propVoznikId]);
 
   useEffect(() => {
@@ -150,14 +141,14 @@ export default function App({ voznikId:propVoznikId=null, voznikIme='', voznikVo
 
   const odstraniSliko = (idx) => setForm(f=>({...f, slike:(f.slike||[]).filter((_,i)=>i!==idx)}));
 
- const potrdiZakljucitev = async () => {
+  const potrdiZakljucitev = async () => {
     const nalog = st.nalogi.find(n=>n.id===form.nalogId);
     const slike = (form.slike||[]).filter(Boolean);
     try {
       for (const sl of slike) {
-const base64 = sl.img.split(',')[1];
-const byteArr = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-const blob = new Blob([byteArr], { type: 'image/jpeg' });
+        const base64 = sl.img.split(',')[1];
+        const byteArr = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+        const blob = new Blob([byteArr], { type: 'image/jpeg' });
         const pot = `${nalog.id}/${Date.now()}-${sl.ime||'cmr.jpg'}`;
         const { error: upErr } = await supabase.storage
           .from('cmr-dokumenti').upload(pot, blob, { contentType:'image/jpeg', upsert:false });
@@ -176,11 +167,15 @@ const blob = new Blob([byteArr], { type: 'image/jpeg' });
       upd(s=>({...s, nalogi:s.nalogi.map(n=>n.id===nalog.id?{...n,status:"zakljucen",zakljucenCas:new Date().toISOString(),cmrSlike:slike}:n)}));
       closeModal(); setSelectedNalog(null);
       showToast("✅ Nalog zaključen! CMR shranjen.");
+    } catch(err) {
+      showToast("❌ Napaka pri zaključitvi!", true);
+      console.error(err);
+    }
+  };
 
   const novihNalogov = st.nalogi.filter(n=>n.status==="nov"||n.status==="poslan").length;
   const nepovezanihCMR = (st.prostiCMR||[]).filter(c=>!c.povezan).length;
 
-  // Prijava - handled by parent App.jsx
   if (!voznikId) return null;
 
   if (selectedNalog) {
@@ -424,7 +419,6 @@ function NalogDetail({ nalog, onBack, onSprejmi, onZakljuci, onDodajCMR }) {
         <Sec title="🏁 Razklad"><IR label="Firma" val={nalog.razFirma||"–"} bold/><IR label="Naslov" val={nalog.razNaslov}/><IR label="Referenca" val={nalog.razReferenca} mono/><IR label="Datum" val={`${fmt(nalog.razDatum)} ob ${nalog.razCas}`}/></Sec>
         {nalog.navodila && <Sec title="⚠️ Navodila"><div style={s.navodilaBox}>{nalog.navodila}</div></Sec>}
 
-        {/* CMR sekcija — dostopna tudi med nalogom */}
         <div style={{background:"#fff",borderRadius:14,padding:"14px 16px",marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:slike.length>0?12:0}}>
             <div style={{fontSize:13,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5}}>
@@ -439,7 +433,6 @@ function NalogDetail({ nalog, onBack, onSprejmi, onZakljuci, onDodajCMR }) {
               </div>
             )}
           </div>
-
           {slike.length===0 ? (
             <div>
               {nalog.status==="sprejet" ? (
@@ -462,11 +455,10 @@ function NalogDetail({ nalog, onBack, onSprejmi, onZakljuci, onDodajCMR }) {
               <div style={s.cmrGrid}>
                 {slike.map((sl,i)=>(
                   <div key={i} style={s.cmrThumbWrap}>
-                    <img src={sl.img} alt={`CMR ${i+1}`} style={s.cmrThumb}/>
+                    <img src={sl.img||sl.url} alt={`CMR ${i+1}`} style={s.cmrThumb}/>
                     <div style={s.cmrThumbLabel}>✅ Slika {i+1}</div>
                   </div>
                 ))}
-                {/* Dodaj še gumb */}
                 {nalog.status==="sprejet" && (
                   <div style={{...s.cmrThumbWrap}}>
                     <input type="file" accept="image/*" capture="environment" id="cmr-inline3" style={{display:"none"}} onChange={onDodajCMR}/>
@@ -486,7 +478,6 @@ function NalogDetail({ nalog, onBack, onSprejmi, onZakljuci, onDodajCMR }) {
             </div>
           )}
         </div>
-
         <div style={s.metaBox}>Poslan: {fmt(nalog.poslan)} ob {fmtT(nalog.poslan)}</div>
       </div>
       <div style={s.actionBar}>
@@ -537,9 +528,6 @@ function ZakljuciModal({ form, nalog, dodajSlikoCMR, odstraniSliko, onPotrdi, on
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// VOZNIK LOGIN
-// ═══════════════════════════════════════════════════════════════════════════
 function VoznikLogin({ onLogin }) {
   const [vozniki, setVozniki] = useState([]);
   const [loading, setLoading] = useState(true);
