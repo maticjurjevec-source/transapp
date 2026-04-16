@@ -155,7 +155,9 @@ export default function App({ voznikId:propVoznikId=null, voznikIme='', voznikVo
     const slike = (form.slike||[]).filter(Boolean);
     try {
       for (const sl of slike) {
-        const blob = await fetch(sl.img).then(r=>r.blob());
+const base64 = sl.img.split(',')[1];
+const byteArr = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+const blob = new Blob([byteArr], { type: 'image/jpeg' });
         const pot = `${nalog.id}/${Date.now()}-${sl.ime||'cmr.jpg'}`;
         const { error: upErr } = await supabase.storage
           .from('cmr-dokumenti').upload(pot, blob, { contentType:'image/jpeg', upsert:false });
