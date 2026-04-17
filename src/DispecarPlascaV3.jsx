@@ -114,20 +114,8 @@ const genPdfNalog=(nalog,racun)=>{
 };
 
 const genPdfCMR=(nalog,cmrSlike)=>{
-  const slikeHtml=cmrSlike.map((sl,i)=>`<div style="page-break-inside:avoid;margin-bottom:20px;text-align:center;"><div style="font-size:10px;color:#64748b;margin-bottom:6px;font-weight:600;">CMR slika ${i+1}</div><img src="${sl.url||sl.img}" style="max-width:100%;max-height:500px;object-fit:contain;border:1px solid #e2e8f0;border-radius:6px;" alt="CMR ${i+1}"/></div>`).join("");
-  return`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-  *{margin:0;padding:0;box-sizing:border-box;}
-  body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;padding:30px 40px;}
-  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #0f2744;}
-  .logo{height:70px;object-fit:contain;}
-  </style></head><body>
-  <div class="header"><img src="${LOGO_B64}" class="logo" alt="Logo"/>
-  <div style="text-align:right;font-size:10px;color:#444;line-height:1.7;"><strong style="font-size:12px;color:#0f2744;display:block;">${PODJETJE.ime}</strong>${PODJETJE.naslov} · ${PODJETJE.kraj}</div></div>
-  <div style="font-size:16px;font-weight:bold;color:#0f2744;margin-bottom:4px;">CMR Dokumenti – Priloga</div>
-  <div style="font-size:12px;color:#475569;margin-bottom:8px;">${nalog.stevilkaNaloga} · ${nalog.stranka}</div>
-  <div style="font-size:11px;color:#64748b;margin-bottom:24px;">Relacija: ${nalog.nakKraj} → ${nalog.razKraj} · Datum: ${fmt(nalog.razDatum+"T00:00:00")}</div>
-  ${cmrSlike.length===0?'<div style="text-align:center;color:#94a3b8;padding:40px;">Ni CMR dokumentov.</div>':slikeHtml}
-  </body></html>`;
+  const slikeHtml=cmrSlike.map((sl,i)=>`<div style="page-break-after:always;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;"><img src="${sl.url||sl.img}" style="width:100%;height:100%;object-fit:contain;" alt="CMR ${i+1}"/></div>`).join("");
+  return`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;}@page{margin:0;}</style></head><body>${cmrSlike.length===0?'<div style="text-align:center;color:#94a3b8;padding:40px;">Ni CMR dokumentov.</div>':slikeHtml}</body></html>`;
 };
 
 const odpriPdf=(html)=>{const win=window.open("","_blank");win.document.write(html);win.document.close();setTimeout(()=>win.print(),800);};
