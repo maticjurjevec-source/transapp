@@ -419,8 +419,9 @@ function NalogDetail({ nalog, onBack, onSprejmi, onZakljuci, onDodajCMR }) {
         <Sec title="🏁 Razklad"><IR label="Firma" val={nalog.razFirma||"–"} bold/><IR label="Naslov" val={nalog.razNaslov}/><IR label="Referenca" val={nalog.razReferenca} mono/><IR label="Datum" val={`${fmt(nalog.razDatum)} ob ${nalog.razCas}`}/></Sec>
         {nalog.navodila && <Sec title="⚠️ Navodila"><div style={s.navodilaBox}>{nalog.navodila}</div></Sec>}
 
+        {/* CMR sekcija - POPRAVEK: samo en gumb za slikanje */}
         <div style={{background:"#fff",borderRadius:14,padding:"14px 16px",marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:slike.length>0?12:0}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:slike.length>0?12:8}}>
             <div style={{fontSize:13,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5}}>
               📄 CMR dokumenti {slike.length>0&&<span style={{background:"#16a34a",color:"#fff",borderRadius:20,padding:"1px 8px",fontSize:11,marginLeft:4}}>{slike.length}</span>}
             </div>
@@ -433,22 +434,14 @@ function NalogDetail({ nalog, onBack, onSprejmi, onZakljuci, onDodajCMR }) {
               </div>
             )}
           </div>
+
           {slike.length===0 ? (
-            <div>
-              {nalog.status==="sprejet" ? (
-                <div style={{textAlign:"center",padding:"20px 0"}}>
-                  <div style={{fontSize:32,marginBottom:6}}>📄</div>
-                  <div style={{fontSize:13,color:"#64748b",marginBottom:12}}>Ni še priloženih CMR dokumentov</div>
-                  <input type="file" accept="image/*" capture="environment" id="cmr-inline2" style={{display:"none"}} onChange={onDodajCMR}/>
-                  <label htmlFor="cmr-inline2" style={{...s.cmrDodajBtn, display:"inline-block", width:"auto", padding:"10px 20px"}}>
-                    📷 Fotografiraj CMR
-                  </label>
-                </div>
-              ) : (
-                <div style={{fontSize:13,color:"#94a3b8",textAlign:"center",padding:"12px 0"}}>
-                  {nalog.status==="poslan"?"CMR bo mogoče slikati po sprejemu naloga.":"Ni CMR dokumentov."}
-                </div>
-              )}
+            <div style={{textAlign:"center",padding:"16px 0",color:"#94a3b8",fontSize:13}}>
+              {nalog.status==="sprejet"
+                ? "Pritisni Fotografiraj za dodajanje CMR slik."
+                : nalog.status==="poslan"
+                  ? "CMR bo mogoče slikati po sprejemu naloga."
+                  : "Ni CMR dokumentov."}
             </div>
           ) : (
             <div>
@@ -478,6 +471,7 @@ function NalogDetail({ nalog, onBack, onSprejmi, onZakljuci, onDodajCMR }) {
             </div>
           )}
         </div>
+
         <div style={s.metaBox}>Poslan: {fmt(nalog.poslan)} ob {fmtT(nalog.poslan)}</div>
       </div>
       <div style={s.actionBar}>
