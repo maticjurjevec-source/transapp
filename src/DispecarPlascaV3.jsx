@@ -303,6 +303,7 @@ export default function DispecarPlasca() {
             <select style={s.sel} value={izVoz} onChange={e=>setIzVoz(e.target.value)}><option value="">– Izberi voznika –</option>{vozniki.map(v=><option key={v.id} value={v.id}>{v.ime} · {v.vozilo}</option>)}</select>
             <button style={{...s.btnP,marginTop:10,opacity:izVoz?1:0.45}} onClick={()=>izVoz&&dodelijNalog(n.id,izVoz)}>📤 Pošlji vozniku</button>
           </div>}
+          {n.status!=="za_fakturo"&&n.status!=="fakturirano"&&<button style={{...s.btnP,background:"linear-gradient(135deg,#065f46,#16a34a)",marginTop:8}} onClick={()=>spremenStatus(n.id,"za_fakturo")}>💶 Zaključi → Za fakturo</button>}
           {(n.status==="nov"||n.status==="poslan")&&<button style={s.btnD} onClick={()=>izbrisiNalog(n.id)}>🗑️ Izbriši nalog</button>}
         </div>
       </div>
