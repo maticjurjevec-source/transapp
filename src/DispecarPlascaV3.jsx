@@ -13,8 +13,11 @@ const genPdfRacun=(racun,nalog)=>{
   const rokPlacila=new Date(new Date(datumRacuna).getTime()+PODJETJE.rokPlacila*86400000).toISOString().slice(0,10);
   const stevilkaRacuna=racun.id||"RAC-2026-001";
   const znesek=parseFloat(racun.znesek)||0;
+  const jeSI=racun.jeSlovenskaDDV||false;
+  const znesekBrezDDV=jeSI?(znesek/1.22):znesek;
+  const ddvZnesek=jeSI?(znesek-znesekBrezDDV):0;
   const relacija=nalog?`${nalog.nakKraj} – ${nalog.razKraj}`:"–";
-  return`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;padding:30px 40px;}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #0f2744;}.logo{height:70px;object-fit:contain;}.pi{text-align:right;font-size:10px;color:#444;line-height:1.7;}.pi strong{font-size:12px;color:#0f2744;display:block;margin-bottom:4px;}.mg{display:grid;grid-template-columns:1fr 1fr;gap:4px 30px;margin-bottom:20px;font-size:10.5px;}.mg .l{color:#64748b;}.mg .v{font-weight:600;}.rn{font-size:16px;font-weight:bold;color:#0f2744;margin-bottom:4px;}.rp{font-size:12px;color:#475569;margin-bottom:18px;}table{width:100%;border-collapse:collapse;margin-bottom:16px;}th{background:#0f2744;color:#fff;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;}td{padding:9px 10px;border-bottom:1px solid #e2e8f0;font-size:11px;}.zb{margin-left:auto;width:280px;}.zr{display:flex;justify-content:space-between;padding:5px 0;font-size:11px;color:#475569;}.zt{display:flex;justify-content:space-between;padding:10px 0;font-size:15px;font-weight:bold;color:#0f2744;border-top:2px solid #0f2744;margin-top:6px;}.op{font-size:9.5px;color:#64748b;margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;line-height:1.7;}.bb{margin-top:16px;background:#f8fafc;padding:12px 16px;border-radius:6px;font-size:10px;border-left:3px solid #0f2744;}.bb strong{display:block;margin-bottom:4px;color:#0f2744;}.ft{position:fixed;bottom:20px;left:40px;right:40px;display:flex;justify-content:space-between;font-size:9px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:6px;}</style></head><body><div class="header"><img src="${LOGO_B64}" class="logo" alt="Logo"/><div class="pi"><strong>${PODJETJE.ime}</strong>${PODJETJE.naslov}<br/>${PODJETJE.kraj}<br/>Tel: ${PODJETJE.tel} · GSM: ${PODJETJE.gsm}<br/>${PODJETJE.email}</div></div><div style="margin-bottom:20px;"><div style="font-weight:bold;font-size:13px;margin-bottom:4px;">${racun.stranka||"–"}</div>${racun.kontaktEmail?`<div style="font-size:10px;color:#64748b;">${racun.kontaktEmail}</div>`:""}</div><div class="mg"><span class="l">Rečica ob Savinji,</span><span class="v">${fmt(datumRacuna+"T00:00:00")}</span><span class="l">ID za DDV:</span><span class="v">${PODJETJE.idDDV}</span><span class="l">Rok plačila:</span><span class="v">${fmt(rokPlacila+"T00:00:00")}</span><span class="l">Datum storitve:</span><span class="v">${nalog?fmt(nalog.razDatum+"T00:00:00"):"–"}</span>${nalog?`<span class="l">Voznik:</span><span class="v">${nalog.voznikIme||"–"}</span>`:""} ${nalog?`<span class="l">Vozilo:</span><span class="v">${nalog.voznikVozilo||"–"}</span>`:""} ${nalog?`<span class="l">Datum naklada:</span><span class="v">${fmt(nalog.nakDatum+"T00:00:00")}</span>`:""} ${nalog?`<span class="l">Datum razklada:</span><span class="v">${fmt(nalog.razDatum+"T00:00:00")}</span>`:""}</div><div class="rn">Račun št: ${stevilkaRacuna}</div><div class="rp">Prevoz po relaciji: ${relacija}</div><table><tr><th>Kol.</th><th>Opis storitve</th><th style="text-align:right">Znesek brez DDV</th><th style="text-align:right">DDV %</th><th style="text-align:right">Znesek z DDV</th></tr><tr><td>1</td><td>${relacija}${nalog?.blago?` · ${nalog.blago}`:""}</td><td style="text-align:right">${znesek.toFixed(2)}</td><td style="text-align:right">0,00%</td><td style="text-align:right">${znesek.toFixed(2)}</td></tr></table><div class="zb"><div class="zr"><span>Znesek brez DDV:</span><span>${znesek.toFixed(2)} EUR</span></div><div class="zt"><span>Znesek za plačilo:</span><span>${znesek.toFixed(2)} EUR</span></div></div><div class="bb"><strong>Plačilni podatki:</strong>TRR: ${PODJETJE.trr1} — ${PODJETJE.banka1}<br/>TRR: ${PODJETJE.trr2} — ${PODJETJE.banka2}<br/>Sklic: ${stevilkaRacuna}</div><div class="op">DDV obrnjena davčna stopnja po 25/1 ZDDV-1<br/>Fakturiral/a: Matjaž Jurjevec</div><div class="ft"><span>TRR: ${PODJETJE.trr1}</span><span>ID št. za DDV: ${PODJETJE.idDDV}</span><span>Stran 1 od 1</span></div></body></html>`;
+  return`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;padding:30px 40px;}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #0f2744;}.logo{height:70px;object-fit:contain;}.pi{text-align:right;font-size:10px;color:#444;line-height:1.7;}.pi strong{font-size:12px;color:#0f2744;display:block;margin-bottom:4px;}.mg{display:grid;grid-template-columns:1fr 1fr;gap:4px 30px;margin-bottom:20px;font-size:10.5px;}.mg .l{color:#64748b;}.mg .v{font-weight:600;}.rn{font-size:16px;font-weight:bold;color:#0f2744;margin-bottom:4px;}.rp{font-size:12px;color:#475569;margin-bottom:18px;}table{width:100%;border-collapse:collapse;margin-bottom:16px;}th{background:#0f2744;color:#fff;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;}td{padding:9px 10px;border-bottom:1px solid #e2e8f0;font-size:11px;}.zb{margin-left:auto;width:280px;}.zr{display:flex;justify-content:space-between;padding:5px 0;font-size:11px;color:#475569;}.zt{display:flex;justify-content:space-between;padding:10px 0;font-size:15px;font-weight:bold;color:#0f2744;border-top:2px solid #0f2744;margin-top:6px;}.op{font-size:9.5px;color:#64748b;margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;line-height:1.7;}.bb{margin-top:16px;background:#f8fafc;padding:12px 16px;border-radius:6px;font-size:10px;border-left:3px solid #0f2744;}.bb strong{display:block;margin-bottom:4px;color:#0f2744;}.ft{position:fixed;bottom:20px;left:40px;right:40px;display:flex;justify-content:space-between;font-size:9px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:6px;}</style></head><body><div class="header"><img src="${LOGO_B64}" class="logo" alt="Logo"/><div class="pi"><strong>${PODJETJE.ime}</strong>${PODJETJE.naslov}<br/>${PODJETJE.kraj}<br/>Tel: ${PODJETJE.tel} · GSM: ${PODJETJE.gsm}<br/>${PODJETJE.email}</div></div><div style="margin-bottom:20px;"><div style="font-weight:bold;font-size:13px;margin-bottom:4px;">${racun.stranka||"–"}</div>${racun.kontaktEmail?`<div style="font-size:10px;color:#64748b;">${racun.kontaktEmail}</div>`:""}</div><div class="mg"><span class="l">Rečica ob Savinji,</span><span class="v">${fmt(datumRacuna+"T00:00:00")}</span><span class="l">ID za DDV:</span><span class="v">${PODJETJE.idDDV}</span><span class="l">Rok plačila:</span><span class="v">${fmt(rokPlacila+"T00:00:00")}</span><span class="l">Datum storitve:</span><span class="v">${nalog?fmt(nalog.razDatum+"T00:00:00"):"–"}</span>${nalog?`<span class="l">Voznik:</span><span class="v">${nalog.voznikIme||"–"}</span>`:""} ${nalog?`<span class="l">Vozilo:</span><span class="v">${nalog.voznikVozilo||"–"}</span>`:""} ${nalog?`<span class="l">Datum naklada:</span><span class="v">${fmt(nalog.nakDatum+"T00:00:00")}</span>`:""} ${nalog?`<span class="l">Datum razklada:</span><span class="v">${fmt(nalog.razDatum+"T00:00:00")}</span>`:""}</div><div class="rn">Račun št: ${stevilkaRacuna}</div><div class="rp">Prevoz po relaciji: ${relacija}</div><table><tr><th>Kol.</th><th>Opis storitve</th><th style="text-align:right">Znesek brez DDV</th><th style="text-align:right">DDV %</th><th style="text-align:right">Znesek z DDV</th></tr><tr><td>1</td><td>${relacija}${nalog?.blago?` · ${nalog.blago}`:""}</td><td style="text-align:right">${znesekBrezDDV.toFixed(2)}</td><td style="text-align:right">${jeSI?"22,00%":"0,00%"}</td><td style="text-align:right">${znesek.toFixed(2)}</td></tr></table><div class="zb"><div class="zr"><span>Znesek brez DDV:</span><span>${znesekBrezDDV.toFixed(2)} EUR</span></div>${jeSI?`<div class="zr"><span>DDV 22%:</span><span>${ddvZnesek.toFixed(2)} EUR</span></div>`:""}<div class="zt"><span>Znesek za plačilo:</span><span>${znesek.toFixed(2)} EUR</span></div></div><div class="bb"><strong>Plačilni podatki:</strong>TRR: ${PODJETJE.trr1} — ${PODJETJE.banka1}<br/>TRR: ${PODJETJE.trr2} — ${PODJETJE.banka2}<br/>Sklic: ${stevilkaRacuna}</div><div class="op">${jeSI?"DDV 22% obračunan po ZDDV-1":"DDV obrnjena davčna stopnja po 25/1 ZDDV-1"}<br/>Fakturiral/a: Matjaž Jurjevec</div><div class="ft"><span>TRR: ${PODJETJE.trr1}</span><span>ID št. za DDV: ${PODJETJE.idDDV}</span><span>Stran 1 od 1</span></div></body></html>`;
 };
 
 const genPdfNalog=(nalog,racun)=>{
@@ -50,8 +53,8 @@ const SC={nov:{label:"Nov",color:"#64748b",bg:"#f8fafc",icon:"🔘"},poslan:{lab
 const SRed=["nov","poslan","sprejet","zakljucen","za_fakturo","fakturirano"];
 
 const DEMO=[
-  {id:"NAL-2025-0041",stevilkaNaloga:"NAL-2025-0041",voznikId:"V003",status:"sprejet",stranka:"Müller GmbH",blago:"Avtomobilski deli",kolicina:"24 palet",teza:"18.500 kg",nakFirma:"Logistika d.o.o.",nakKraj:"Ljubljana",nakNaslov:"Dunajska cesta 5",nakReferenca:"REF-NAK-88123",nakDatum:"2025-04-10",nakCas:"07:00",razFirma:"Müller GmbH",razKraj:"München",razNaslov:"Schillerstraße 12",razReferenca:"REF-RAZ-99541",razDatum:"2025-04-11",razCas:"14:00",navodila:"Blago krhko!",poslan:new Date(Date.now()-7200000).toISOString(),cmrSlike:[],kontaktEmail:"finance@muller-gmbh.de",originalPdfUrl:null},
-  {id:"NAL-2025-0042",stevilkaNaloga:"NAL-2025-0042",voznikId:"V002",status:"poslan",stranka:"Kaufland Logistik",blago:"Živila",kolicina:"33 palet",teza:"22.000 kg",nakFirma:"Koper Terminal",nakKraj:"Koper",nakNaslov:"Industrijska 8",nakReferenca:"REF-77234",nakDatum:"2025-04-12",nakCas:"05:30",razFirma:"Kaufland Berlin",razKraj:"Berlin",razNaslov:"Frankfurter Allee 99",razReferenca:"REF-44871",razDatum:"2025-04-14",razCas:"09:00",navodila:"",poslan:new Date(Date.now()-3600000).toISOString(),cmrSlike:[],kontaktEmail:"ap@kaufland.de",originalPdfUrl:null},
+  {id:"NAL-2025-0041",stevilkaNaloga:"NAL-2025-0041",voznikId:"V003",status:"sprejet",stranka:"Müller GmbH",blago:"Avtomobilski deli",kolicina:"24 palet",teza:"18.500 kg",nakFirma:"Logistika d.o.o.",nakKraj:"Ljubljana",nakNaslov:"Dunajska cesta 5",nakReferenca:"REF-NAK-88123",nakDatum:"2025-04-10",nakCas:"07:00",razFirma:"Müller GmbH",razKraj:"München",razNaslov:"Schillerstraße 12",razReferenca:"REF-RAZ-99541",razDatum:"2025-04-11",razCas:"14:00",navodila:"Blago krhko!",poslan:new Date(Date.now()-7200000).toISOString(),cmrSlike:[],kontaktEmail:"finance@muller-gmbh.de",originalPdfUrl:null,znesekOriginal:null,jeSlovenskaDDV:false},
+  {id:"NAL-2025-0042",stevilkaNaloga:"NAL-2025-0042",voznikId:"V002",status:"poslan",stranka:"Kaufland Logistik",blago:"Živila",kolicina:"33 palet",teza:"22.000 kg",nakFirma:"Koper Terminal",nakKraj:"Koper",nakNaslov:"Industrijska 8",nakReferenca:"REF-77234",nakDatum:"2025-04-12",nakCas:"05:30",razFirma:"Kaufland Berlin",razKraj:"Berlin",razNaslov:"Frankfurter Allee 99",razReferenca:"REF-44871",razDatum:"2025-04-14",razCas:"09:00",navodila:"",poslan:new Date(Date.now()-3600000).toISOString(),cmrSlike:[],kontaktEmail:"ap@kaufland.de",originalPdfUrl:null,znesekOriginal:null,jeSlovenskaDDV:false},
 ];
 
 const LS="dispecar_v2";
@@ -85,8 +88,8 @@ export default function DispecarPlasca(){
         supabase.from('racuni').select('*').order('created_at',{ascending:false}),
       ]);
       if(sbVozniki){setVozniki(sbVozniki.map(v=>({id:v.id,ime:`${v.ime} ${v.priimek}`,vozilo:v.vozilo||"",tel:v.tel||""})));}
-      const mapNalog=(n)=>({...n,id:n.id,stevilkaNaloga:n.stevilka_naloga,stranka:n.stranka,blago:n.blago,kolicina:n.kolicina,teza:n.teza,nakFirma:n.nak_firma,nakKraj:n.nak_kraj,nakNaslov:n.nak_naslov,nakReferenca:n.nak_referenca,nakDatum:n.nak_datum,nakCas:n.nak_cas,razFirma:n.raz_firma,razKraj:n.raz_kraj,razNaslov:n.raz_naslov,razReferenca:n.raz_referenca,razDatum:n.raz_datum,razCas:n.raz_cas,navodila:n.navodila,voznikId:n.voznik_id,voznikIme:n.vozniki?`${n.vozniki.ime} ${n.vozniki.priimek}`:"",voznikVozilo:n.vozniki?.vozilo||"",poslan:n.poslan_cas||n.created_at,sprejetCas:n.sprejet_cas,zakljucenCas:n.zakljucen_cas,originalPdfUrl:n.original_pdf_url||null,cmrSlike:[]});
-      setSt(s=>({...s,nalogi:nalogi?nalogi.map(mapNalog):s.nalogi,obracuni:obracuni?obracuni.map(o=>({...o,voznikId:o.voznik_id,datZac:o.dat_zac,datKon:o.dat_kon,zakljucen:o.zakljucen,zakljucenCas:o.zakljucen_cas})):s.obracuni,racuni:racuni?racuni.map(r=>({...r,nalogId:r.nalog_id,datum:r.datum_izdaje,rok:r.datum_rok})):s.racuni}));
+      const mapNalog=(n)=>({...n,id:n.id,stevilkaNaloga:n.stevilka_naloga,stranka:n.stranka,blago:n.blago,kolicina:n.kolicina,teza:n.teza,nakFirma:n.nak_firma,nakKraj:n.nak_kraj,nakNaslov:n.nak_naslov,nakReferenca:n.nak_referenca,nakDatum:n.nak_datum,nakCas:n.nak_cas,razFirma:n.raz_firma,razKraj:n.raz_kraj,razNaslov:n.raz_naslov,razReferenca:n.raz_referenca,razDatum:n.raz_datum,razCas:n.raz_cas,navodila:n.navodila,voznikId:n.voznik_id,voznikIme:n.vozniki?`${n.vozniki.ime} ${n.vozniki.priimek}`:"",voznikVozilo:n.vozniki?.vozilo||"",poslan:n.poslan_cas||n.created_at,sprejetCas:n.sprejet_cas,zakljucenCas:n.zakljucen_cas,originalPdfUrl:n.original_pdf_url||null,znesekOriginal:n.znesek_original||null,jeSlovenskaDDV:n.je_slovenska_ddv||false,cmrSlike:[]});
+      setSt(s=>({...s,nalogi:nalogi?nalogi.map(mapNalog):s.nalogi,obracuni:obracuni?obracuni.map(o=>({...o,voznikId:o.voznik_id,datZac:o.dat_zac,datKon:o.dat_kon,zakljucen:o.zakljucen,zakljucenCas:o.zakljucen_cas})):s.obracuni,racuni:racuni?racuni.map(r=>({...r,nalogId:r.nalog_id,datum:r.datum_izdaje,rok:r.datum_rok,jeSlovenskaDDV:r.je_slovenska_ddv||false})):s.racuni}));
     }catch(err){console.error('Supabase napaka:',err);}
     setLoading(false);
   };
@@ -161,7 +164,7 @@ export default function DispecarPlasca(){
         }catch(e){txt="";}
       }
       if(!txt)txt=await file.text().catch(()=>file.name);
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:`Iz tega dokumenta izvleci podatke za transportni nalog. Vrni SAMO JSON:\n{"stranka":"","blago":"","kolicina":"","teza":"","nakFirma":"","nakKraj":"","nakNaslov":"","nakReferenca":"","nakDatum":"","nakCas":"","razFirma":"","razKraj":"","razNaslov":"","razReferenca":"","razDatum":"","razCas":"","navodila":"","kontaktEmail":""}\nDatumi: YYYY-MM-DD, casi: HH:MM.\n\nDokument:\n${txt}`}]})});
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:`Iz tega transportnega naloga izvleci podatke. Vrni SAMO JSON brez dodatnega besedila:\n{"stranka":"","blago":"","kolicina":"","teza":"","nakFirma":"","nakKraj":"","nakNaslov":"","nakReferenca":"","nakDatum":"","nakCas":"","razFirma":"","razKraj":"","razNaslov":"","razReferenca":"","razDatum":"","razCas":"","navodila":"","kontaktEmail":"","znesek":"","jeSlovenskaDDV":false}\n\nNavodila:\n- stranka: ime podjetja ki je izdalo nalog (pošiljatelj/naročnik)\n- kontaktEmail: email kontaktne osebe ki je podpisala nalog\n- znesek: samo številka brez valute (išči: 'Cena prevoza', 'Transportni stroški', 'Der Betrag lautet', 'all in', 'EUR')\n- jeSlovenskaDDV: true SAMO če ima stranka DDV številko ki se začne z SI (npr. SI62102095)\n- Datumi: YYYY-MM-DD, časi: HH:MM\n\nDokument:\n${txt}`}]})});
       const data=await res.json();
       const parsed=JSON.parse(data.content?.map(i=>i.text||"").join("").replace(/```json|```/g,"").trim());
       setForm(f=>({...f,...parsed}));setModal("nalog");showToast("✅ AI izpolnil nalog!");
@@ -203,6 +206,7 @@ export default function DispecarPlasca(){
           <Sec title="🏁 Razklad"><R label="Firma" val={n.razFirma} bold/><R label="Kraj" val={n.razKraj}/><R label="Naslov" val={n.razNaslov}/><R label="Referenca" val={n.razReferenca} mono/><R label="Datum" val={`${fmt(n.razDatum)} ob ${n.razCas}`}/></Sec>
           {n.navodila&&<Sec title="⚠️ Navodila"><div style={{fontSize:13,background:"#fffbeb",borderRadius:8,padding:"10px 12px",border:"1px solid #fde68a"}}>{n.navodila}</div></Sec>}
           {n.kontaktEmail&&<Sec title="💶 Kontakt za račun"><R label="Email" val={n.kontaktEmail} mono/></Sec>}
+          {n.znesekOriginal&&<Sec title="💰 Cena iz naloga"><R label="Dogovorjena cena" val={`${parseFloat(n.znesekOriginal).toFixed(2)} €`}/><R label="DDV" val={n.jeSlovenskaDDV?"22% (slovensko)":"Obrnjena davčna obveznost"}/></Sec>}
           <Sec title="📄 CMR dokumenti">
             {cmrSlike.length>0?(
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
@@ -218,8 +222,7 @@ export default function DispecarPlasca(){
             <button style={{...s.btnP,marginTop:10,opacity:izVoz?1:0.45}} onClick={()=>izVoz&&dodelijNalog(n.id,izVoz)}>📤 Pošlji vozniku</button>
           </div>}
           {(n.status==="sprejet"||n.status==="zakljucen")&&<button style={{...s.btnP,background:"linear-gradient(135deg,#065f46,#16a34a)",marginTop:8}} onClick={()=>spremenStatus(n.id,"za_fakturo")}>💶 Zaključi → Za fakturo</button>}
-{(n.status==="sprejet"||n.status==="zakljucen")&&<button style={{...s.btnP,background:"linear-gradient(135deg,#065f46,#16a34a)",marginTop:8}} onClick={()=>spremenStatus(n.id,"za_fakturo")}>💶 Zaključi → Za fakturo</button>}
-{(n.status==="nov"||n.status==="poslan")&&<button style={s.btnD} onClick={()=>izbrisiNalog(n.id)}>🗑️ Izbriši nalog</button>}
+          {(n.status==="nov"||n.status==="poslan")&&<button style={s.btnD} onClick={()=>izbrisiNalog(n.id)}>🗑️ Izbriši nalog</button>}
         </div>
       </div>
     );
@@ -431,11 +434,17 @@ function FinanceTab({st,upd,showToast,nalozi_cmr}){
   const zaF=st.nalogi.filter(n=>n.status==="za_fakturo");
   const list=racuni.filter(r=>f==="vsi"||r.status===f);
   const rSC={osnutek:{label:"Osnutek",color:"#64748b",bg:"#f8fafc"},poslan:{label:"Poslan",color:"#2563eb",bg:"#eff6ff"},placano:{label:"Plačano",color:"#16a34a",bg:"#f0fdf4"},zapadlo:{label:"Zapadlo",color:"#dc2626",bg:"#fef2f2"}};
+
   const novRacun=(n)=>{
     const datumDanes=new Date().toISOString().slice(0,10);
     const rokDatum=new Date(Date.now()+PODJETJE.rokPlacila*86400000).toISOString().slice(0,10);
-    setForm({nalogId:n?.id||"",stranka:n?.stranka||"",znesek:"",datum:datumDanes,rok:rokDatum,kontaktEmail:n?.kontaktEmail||"",opombe:""});setModal("racun");
+    const jeSI=n?.jeSlovenskaDDV||false;
+    const znesekBrez=n?.znesekOriginal?parseFloat(n.znesekOriginal):0;
+    const znesekZDDV=jeSI?(znesekBrez*1.22):znesekBrez;
+    setForm({nalogId:n?.id||"",stranka:n?.stranka||"",znesek:znesekZDDV>0?znesekZDDV.toFixed(2):"",datum:datumDanes,rok:rokDatum,kontaktEmail:n?.kontaktEmail||"",jeSlovenskaDDV:jeSI,opombe:""});
+    setModal("racun");
   };
+
   const submitRacun=()=>{
     if(!form.stranka||!form.znesek)return showToast("Izpolni stranko in znesek!",true);
     const id="RAC-"+new Date().getFullYear()+"-"+String((racuni.length+1)).padStart(3,"0");
@@ -465,7 +474,11 @@ function FinanceTab({st,upd,showToast,nalozi_cmr}){
     {zaF.length>0&&<div style={{background:"#fffbeb",border:"1.5px solid #fde68a",borderRadius:12,padding:14,marginBottom:14}}>
       <div style={{fontWeight:700,fontSize:14,color:"#92400e",marginBottom:10}}>💶 Za fakturo ({zaF.length})</div>
       {zaF.map(n=><div key={n.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #fef3c7"}}>
-        <div><div style={{fontWeight:700,fontSize:14}}>{n.stranka}</div><div style={{fontSize:12,color:"#64748b"}}>{n.stevilkaNaloga} · {n.nakKraj} → {n.razKraj}</div></div>
+        <div>
+          <div style={{fontWeight:700,fontSize:14}}>{n.stranka}</div>
+          <div style={{fontSize:12,color:"#64748b"}}>{n.stevilkaNaloga} · {n.nakKraj} → {n.razKraj}</div>
+          {n.znesekOriginal&&<div style={{fontSize:12,color:"#16a34a",fontWeight:600}}>💰 {parseFloat(n.znesekOriginal).toFixed(2)} € {n.jeSlovenskaDDV?"+ 22% DDV":"(brez DDV)"}</div>}
+        </div>
         <button style={s.btnSm} onClick={()=>novRacun(n)}>Ustvari račun</button>
       </div>)}
     </div>}
@@ -487,7 +500,11 @@ function FinanceTab({st,upd,showToast,nalozi_cmr}){
         <div key={r.id} style={{background:"#fff",borderRadius:12,padding:"14px 16px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
             <div>
-              <div style={{display:"flex",gap:8,marginBottom:3}}><span style={{fontSize:12,fontFamily:"monospace",fontWeight:700,color:"#2563eb"}}>{r.id}</span><span style={{...s.fBtn,padding:"2px 8px",background:zap?"#fef2f2":sc.bg,color:zap?"#dc2626":sc.color,border:"none",cursor:"default"}}>{zap?"⚠️ Zapadlo":sc.label}</span></div>
+              <div style={{display:"flex",gap:8,marginBottom:3,flexWrap:"wrap"}}>
+                <span style={{fontSize:12,fontFamily:"monospace",fontWeight:700,color:"#2563eb"}}>{r.id}</span>
+                <span style={{...s.fBtn,padding:"2px 8px",background:zap?"#fef2f2":sc.bg,color:zap?"#dc2626":sc.color,border:"none",cursor:"default"}}>{zap?"⚠️ Zapadlo":sc.label}</span>
+                {r.jeSlovenskaDDV&&<span style={{...s.fBtn,padding:"2px 8px",background:"#faf5ff",color:"#9333ea",border:"none",cursor:"default"}}>22% DDV</span>}
+              </div>
               <div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{r.stranka}</div>
               {r.kontaktEmail&&<div style={{fontSize:12,color:"#64748b"}}>✉️ {r.kontaktEmail}</div>}
               <div style={{fontSize:12,color:"#64748b"}}>Rok: {fmt(r.rok+"T00:00:00")}</div>
@@ -511,12 +528,14 @@ function FinanceTab({st,upd,showToast,nalozi_cmr}){
     {modal==="racun"&&<div style={s.overlay}><div style={s.mbox}><div style={s.mhead}><span style={s.mtitle}>Nov račun</span><button style={s.mcls} onClick={()=>{setModal(null);setForm({});}}>✕</button></div>
       <div style={s.mbody}>
         {form.nalogId&&<div style={{background:"#eff6ff",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:13,color:"#1d4ed8",fontWeight:600}}>📋 {form.nalogId}</div>}
+        {form.jeSlovenskaDDV&&<div style={{background:"#faf5ff",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:13,color:"#9333ea",fontWeight:600}}>⚠️ Slovenska stranka — znesek vključuje 22% DDV</div>}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px",marginBottom:12}}>
           <div style={{gridColumn:"1/-1"}}><label style={s.lbl}>Stranka *</label><input style={s.inp} value={form.stranka||""} onChange={e=>setForm(f=>({...f,stranka:e.target.value}))}/></div>
           <div><label style={s.lbl}>Znesek (€) *</label><input style={s.inp} type="number" value={form.znesek||""} onChange={e=>setForm(f=>({...f,znesek:e.target.value}))}/></div>
           <div><label style={s.lbl}>Datum</label><input style={s.inp} type="date" value={form.datum||""} onChange={e=>setForm(f=>({...f,datum:e.target.value}))}/></div>
           <div><label style={s.lbl}>Plačilni rok (60 dni)</label><input style={s.inp} type="date" value={form.rok||""} onChange={e=>setForm(f=>({...f,rok:e.target.value}))}/></div>
           <div style={{gridColumn:"1/-1"}}><label style={s.lbl}>💶 Email za račun</label><input style={s.inp} value={form.kontaktEmail||""} onChange={e=>setForm(f=>({...f,kontaktEmail:e.target.value}))} placeholder="finance@podjetje.com"/></div>
+          <div style={{gridColumn:"1/-1",display:"flex",alignItems:"center",gap:8}}><input type="checkbox" id="ddv" checked={form.jeSlovenskaDDV||false} onChange={e=>setForm(f=>({...f,jeSlovenskaDDV:e.target.checked}))}/><label htmlFor="ddv" style={{fontSize:13,color:"#475569",cursor:"pointer"}}>Slovenska stranka (22% DDV)</label></div>
         </div>
         <button style={s.btnP} onClick={submitRacun}>Ustvari račun</button>
       </div></div></div>}
@@ -582,14 +601,15 @@ function EmailNalogTab({upd,showToast,naloziPodatke,vozniki}){
       if(error)throw error;
       const txt=data.content?.map(i=>i.text||"").join("").replace(/```json|```/g,"").trim();
       const parsed=JSON.parse(txt);
-      setForm({...parsed,voznikId:""});setKorak("forma");showToast("✅ AI je razčlenil! Preveri in potrdi.");
+      setForm({...parsed,voznikId:"",znesek:parsed.znesek||"",jeSlovenskaDDV:parsed.jeSlovenskaDDV||false});
+      setKorak("forma");showToast("✅ AI je razčlenil! Preveri in potrdi.");
     }catch(err){showToast("❌ AI napaka — izpolni ročno.",true);setForm({stranka:"",nakKraj:"",razKraj:"",voznikId:""});setKorak("forma");}
     setAiLoading(false);
   };
   const ustvariNalog=async()=>{
     if(!form.stranka||!form.nakKraj||!form.razKraj)return showToast("Izpolni obvezna polja!",true);
     try{
-      const{data,error}=await supabase.from('nalogi').insert([{stevilka_naloga:'',status:'nov',stranka:form.stranka,blago:form.blago||"",kolicina:form.kolicina||"",teza:form.teza||"",nak_firma:form.nakFirma||"",nak_kraj:form.nakKraj,nak_naslov:form.nakNaslov||"",nak_referenca:form.nakReferenca||"",nak_datum:form.nakDatum||null,nak_cas:form.nakCas?form.nakCas.slice(0,5):null,raz_firma:form.razFirma||"",raz_kraj:form.razKraj,raz_naslov:form.razNaslov||"",raz_referenca:form.razReferenca||"",raz_datum:form.razDatum||null,raz_cas:form.razCas?form.razCas.slice(0,5):null,navodila:form.navodila||"",voznik_id:form.voznikId||null}]).select().single();
+      const{data,error}=await supabase.from('nalogi').insert([{stevilka_naloga:'',status:'nov',stranka:form.stranka,blago:form.blago||"",kolicina:form.kolicina||"",teza:form.teza||"",nak_firma:form.nakFirma||"",nak_kraj:form.nakKraj,nak_naslov:form.nakNaslov||"",nak_referenca:form.nakReferenca||"",nak_datum:form.nakDatum||null,nak_cas:form.nakCas?form.nakCas.slice(0,5):null,raz_firma:form.razFirma||"",raz_kraj:form.razKraj,raz_naslov:form.razNaslov||"",raz_referenca:form.razReferenca||"",raz_datum:form.razDatum||null,raz_cas:form.razCas?form.razCas.slice(0,5):null,navodila:form.navodila||"",voznik_id:form.voznikId||null,znesek_original:form.znesek||null,je_slovenska_ddv:form.jeSlovenskaDDV||false}]).select().single();
       if(error)throw error;
       if(priponka?.file&&priponka.tip==="pdf"){
         try{
@@ -640,6 +660,7 @@ function EmailNalogTab({upd,showToast,naloziPodatke,vozniki}){
         <button style={{background:"#f1f5f9",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:13,color:"#64748b"}} onClick={()=>setKorak("vnos")}>← Nazaj</button>
       </div>
       <div style={{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#16a34a",fontWeight:600}}>🤖 AI je izpolnil podatke — preveri in popravi po potrebi</div>
+      {form.znesek&&<div style={{background:"#fffbeb",border:"1.5px solid #fde68a",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:"#92400e",fontWeight:600}}>💰 Dogovorjena cena: {form.znesek} € · {form.jeSlovenskaDDV?"+ 22% DDV (SI stranka)":"Obrnjena davčna obveznost"}</div>}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px",marginBottom:14}}>
         <div style={{gridColumn:"1/-1"}}><label style={s2.lbl}>Voznik</label><select style={s2.sel} value={form.voznikId||""} onChange={e=>sf("voznikId",e.target.value)}><option value="">– Dodeli pozneje –</option>{vozniki.map(v=><option key={v.id} value={v.id}>{v.ime} · {v.vozilo}</option>)}</select></div>
         <div style={{gridColumn:"1/-1"}}><Fi2 l="Stranka *" v={form.stranka} s={v=>sf("stranka",v)}/></div>
@@ -652,8 +673,10 @@ function EmailNalogTab({upd,showToast,naloziPodatke,vozniki}){
         <Fi2 l="Firma" v={form.razFirma} s={v=>sf("razFirma",v)}/><Fi2 l="Kraj *" v={form.razKraj} s={v=>sf("razKraj",v)}/>
         <div style={{gridColumn:"1/-1"}}><Fi2 l="Naslov" v={form.razNaslov} s={v=>sf("razNaslov",v)}/></div>
         <Fi2 l="Referenca" v={form.razReferenca} s={v=>sf("razReferenca",v)}/><Fi2 l="Datum" v={form.razDatum} s={v=>sf("razDatum",v)} t="date"/><Fi2 l="Ura" v={form.razCas} s={v=>sf("razCas",v)} t="time"/>
-        <div style={{gridColumn:"1/-1",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",borderTop:"1px solid #f1f5f9",paddingTop:8}}>💶 Kontakt</div>
+        <div style={{gridColumn:"1/-1",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",borderTop:"1px solid #f1f5f9",paddingTop:8}}>💶 Kontakt & Finance</div>
         <Fi2 l="Email za račun" v={form.kontaktEmail} s={v=>sf("kontaktEmail",v)} ph="finance@podjetje.com"/><Fi2 l="Kontaktna oseba" v={form.kontaktIme} s={v=>sf("kontaktIme",v)}/>
+        <Fi2 l="Dogovorjena cena (€)" v={form.znesek} s={v=>sf("znesek",v)} ph="1100"/>
+        <div style={{display:"flex",alignItems:"center",gap:8,paddingTop:20}}><input type="checkbox" id="ddvCheck" checked={form.jeSlovenskaDDV||false} onChange={e=>sf("jeSlovenskaDDV",e.target.checked)}/><label htmlFor="ddvCheck" style={{fontSize:13,color:"#475569",cursor:"pointer"}}>SI stranka (+22% DDV)</label></div>
         <div style={{gridColumn:"1/-1"}}><label style={s2.lbl}>Navodila</label><textarea style={{...s2.inp,resize:"vertical",height:60}} value={form.navodila||""} onChange={e=>sf("navodila",e.target.value)}/></div>
       </div>
       <button style={{width:"100%",background:"linear-gradient(135deg,#065f46,#16a34a)",color:"#fff",border:"none",borderRadius:12,padding:14,fontSize:15,fontWeight:700,cursor:"pointer"}} onClick={ustvariNalog}>📋 Ustvari nalog v sistemu →</button>
