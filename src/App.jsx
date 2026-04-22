@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from './supabase';
 import DispecarPlasca from './DispecarPlascaV3';
 import VoznikApp from './VoznikApp';
+import FinanceApp from './FinanceApp';
 
 const LS_SESSION = "transapp_session_v2";
 const getSession = () => { try { return JSON.parse(localStorage.getItem(LS_SESSION)); } catch { return null; } };
@@ -42,6 +43,11 @@ export default function App() {
     setSel("");
     setVloga("");
   };
+
+  // Finance app (ločen URL za Bernardo)
+  if (window.location.pathname === "/finance") {
+    return <FinanceApp />;
+  }
 
   // Prijavljen kot dispečer
   if (session?.vloga === "dispecer") {

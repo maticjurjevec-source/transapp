@@ -484,22 +484,134 @@ function ObracuniTab({obracuni,onSelect}){
   </div>);
 }
 
-function FinanceTab({st,upd,showToast}){
+// ===== KONSTANTE (prilagodi po potrebi) =====
+const CMR_BUCKET = "cmr_dokumenti"; // ime Supabase Storage bucket-a
+const ORIGINAL_BUCKET = "nalogi_original"; // bucket za original PDF-je (če obstaja)
+
+// ===== HELPER FUNKCIJE (dodaj ven iz FinanceTab, na vrh datoteke poleg fmt) =====
+
+// Regex za izvlečenje emaila iz teksta (npr. iz navodil)
+function izvleciEmail(text){
+  if(!text) return "";
+  const match = text.match(/[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  return match ? match[0] : "";
+}
+
+// Parser za znesek iz niza: "€850", "850.00 EUR", "1.200,50 EUR", "1200", itd.
+function parseZnesek(str){
+  if(!str) return 0;
+  if(typeof str === "number") return str;
+  // Poišči prvi sklop številk + decimalka
+  const cleaned = String(str).replace(/[^\d,.\s]/g, " ").trim();
+  // Odstrani tisočice (pike/presledke pred 3 števkami), obdrži decimalko
+  let num = cleaned.replace(/\s/g,"").replace(/\.(?=\d{3}(\D|$))/g,"").replace(",",".");
+  const parsed = parseFloat(num);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+// Pridobi public URL za Supabase Storage datoteko
+function getStorageUrl(supabase, bucket, path){
+  if(!path) return null;
+  // Če je že celi URL, ga vrni direktno
+  if(path.startsWith("http")) return path;
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return data?.publicUrl || null;
+}
+
+
+// ===== FINANCE TAB =====
+function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
   const [f,setF]=useState("vsi");
   const [modal,setModal]=useState(null);
   const [form,setForm]=useState({});
+  const [detail,setDetail]=useState(null);
+  const [editMode,setEditMode]=useState(false);
+  const [confirmDel,setConfirmDel]=useState(false);
+  const [cmrList,setCmrList]=useState([]);
+  const [cmrLoading,setCmrLoading]=useState(false);
+  const [imgPreview,setImgPreview]=useState(null);
+  const [search,setSearch]=useState("");
+  
   const racuni=st.racuni||[];
   const zaF=st.nalogi.filter(n=>n.status==="za_fakturo");
-  const list=racuni.filter(r=>f==="vsi"||r.status===f);
+  const list=racuni.filter(r=>{
+    const statusOk=f==="vsi"||r.status===f;
+    if(!statusOk)return false;
+    if(!search.trim())return true;
+    const q=search.toLowerCase().trim();
+    return(r.id||"").toLowerCase().includes(q)||(r.stranka||"").toLowerCase().includes(q)||(r.kontaktEmail||"").toLowerCase().includes(q)||(r.opombe||"").toLowerCase().includes(q)||String(r.znesek||"").includes(q);
+  });
   const rSC={osnutek:{label:"Osnutek",color:"#64748b",bg:"#f8fafc"},poslan:{label:"Poslan",color:"#2563eb",bg:"#eff6ff"},placano:{label:"Plačano",color:"#16a34a",bg:"#f0fdf4"},zapadlo:{label:"Zapadlo",color:"#dc2626",bg:"#fef2f2"}};
-  const novRacun=(n)=>{setForm({nalogId:n?.id||"",stranka:n?.stranka||"",znesek:"",datum:new Date().toISOString().slice(0,10),rok:new Date(Date.now()+30*86400000).toISOString().slice(0,10),kontaktEmail:n?.kontaktEmail||"",opombe:""});setModal("racun");};
+
+  const povezanNalog=detail?.nalogId?st.nalogi.find(n=>n.id===detail.nalogId):null;
+
+  // Helperji za snake_case / camelCase kompatibilnost
+  const getZnesekOriginal=(n)=>n?.znesek_original||n?.znesekOriginal||null;
+  const getRef=(n)=>n?.nak_referenca||n?.nakReferenca||null;
+  const getOriginalUrl=(n)=>n?.original_pdf_url||n?.originalPdfUrl||null;
+  const getKontaktEmail=(n)=>n?.kontaktEmail||n?.kontakt_email||(n?.navodila?izvleciEmail(n.navodila):"")||(n?.navodila_text?izvleciEmail(n.navodila_text):"");
+
+  useEffect(()=>{
+    if(!povezanNalog?.id||!supabase){setCmrList([]);return;}
+    setCmrLoading(true);
+    supabase.from("cmr_dokumenti").select("*").eq("nalog_id",povezanNalog.id).order("created_at",{ascending:false}).then(({data,error})=>{
+      if(!error && data) setCmrList(data);
+      setCmrLoading(false);
+    });
+  },[povezanNalog?.id,supabase]);
+
+  const novRacun=(n)=>{
+    const kontaktEmail=getKontaktEmail(n);
+    const znesekRaw=getZnesekOriginal(n);
+    const reverseCharge=n?.je_slovenska_ddv===false;
+    // Če je slovenski naročnik, dodaj 22% DDV na ceno iz naloga
+    const osnovaCena=znesekRaw?parseZnesek(znesekRaw):0;
+    const znesek=znesekRaw?(reverseCharge?osnovaCena:(osnovaCena*1.22)).toFixed(2):"";
+    const ref=getRef(n);
+    setForm({
+      nalogId:n?.id||"",
+      stranka:n?.stranka||"",
+      znesek,
+      datum:new Date().toISOString().slice(0,10),
+      rok:new Date(Date.now()+30*86400000).toISOString().slice(0,10),
+      kontaktEmail,
+      opombe:ref?`Ref: ${ref}`:"",
+      reverseCharge,
+      originalPdfUrl:getOriginalUrl(n)||"",
+      navodila:n?.navodila||"",
+      nakKraj:n?.nak_kraj||n?.nakKraj||"",
+      razKraj:n?.raz_kraj||n?.razKraj||"",
+      nakFirma:n?.nak_firma||n?.nakFirma||"",
+      razFirma:n?.raz_firma||n?.razFirma||"",
+    });
+    setModal("racun");
+  };
+
   const submitRacun=()=>{
     if(!form.stranka||!form.znesek)return showToast("Izpolni stranko in znesek!",true);
     const id="RAC-"+new Date().getFullYear()+"-"+String((racuni.length+1)).padStart(3,"0");
     upd(s=>({...s,racuni:[...(s.racuni||[]),{...form,id,znesek:parseFloat(form.znesek),status:"osnutek"}],nalogi:form.nalogId?s.nalogi.map(n=>n.id===form.nalogId?{...n,status:"fakturirano"}:n):s.nalogi}));
     setModal(null);setForm({});showToast(`✅ Račun ${id} ustvarjen!`);
   };
-  const sprSt=(id,status)=>{upd(s=>({...s,racuni:(s.racuni||[]).map(r=>r.id===id?{...r,status}:r)}));showToast("✅ Status posodobljen.");};
+
+  const sprSt=(id,status)=>{
+    upd(s=>({...s,racuni:(s.racuni||[]).map(r=>r.id===id?{...r,status,...(status==="placano"?{datumPlacila:new Date().toISOString().slice(0,10)}:{})}:r)}));
+    showToast("✅ Status posodobljen.");
+    if(detail&&detail.id===id)setDetail(d=>({...d,status,...(status==="placano"?{datumPlacila:new Date().toISOString().slice(0,10)}:{})}));
+  };
+  const shraniEdit=(updated)=>{upd(s=>({...s,racuni:(s.racuni||[]).map(r=>r.id===updated.id?updated:r)}));setDetail(updated);setEditMode(false);showToast("✅ Račun posodobljen.");};
+  const izbrisiRacun=(id)=>{upd(s=>({...s,racuni:(s.racuni||[]).filter(r=>r.id!==id)}));setDetail(null);setConfirmDel(false);showToast("🗑️ Račun izbrisan.");};
+  
+  const odpriNalog=(nalogId)=>{
+    setDetail(null);
+    if(setActiveTab){setActiveTab("nalogi");}
+    window.dispatchEvent(new CustomEvent("openNalog",{detail:nalogId}));
+    showToast("📋 Odpiram nalog "+nalogId);
+  };
+
+  const dniDoRoka=(rok,status)=>{if(!rok||status==="placano")return null;return Math.ceil((new Date(rok+"T00:00:00")-new Date())/86400000);};
+  const ddvIzracun=(znesek,reverseCharge)=>{const osnova=reverseCharge?znesek:znesek/1.22;const ddv=reverseCharge?0:znesek-osnova;return{osnova,ddv,skupaj:znesek};};
+
   return(<div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
       {[["💶","Skupaj",racuni.reduce((a,r)=>a+r.znesek,0).toFixed(0)+" €","#0891b2"],["⏳","Odprto",racuni.filter(r=>r.status==="poslan").reduce((a,r)=>a+r.znesek,0).toFixed(0)+" €","#d97706"],["✅","Prejeto",racuni.filter(r=>r.status==="placano").reduce((a,r)=>a+r.znesek,0).toFixed(0)+" €","#16a34a"]].map(([ic,lb,vl,cl])=>(
@@ -508,14 +620,30 @@ function FinanceTab({st,upd,showToast}){
     </div>
     {zaF.length>0&&<div style={{background:"#fffbeb",border:"1.5px solid #fde68a",borderRadius:12,padding:14,marginBottom:14}}>
       <div style={{fontWeight:700,fontSize:14,color:"#92400e",marginBottom:10}}>💶 Za fakturo ({zaF.length})</div>
-      {zaF.map(n=><div key={n.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #fef3c7"}}>
-        <div><div style={{fontWeight:700,fontSize:14}}>{n.stranka}</div><div style={{fontSize:12,color:"#64748b"}}>{n.stevilkaNaloga} · {n.nakKraj} → {n.razKraj}</div></div>
-        <button style={s.btnSm} onClick={()=>novRacun(n)}>Ustvari račun</button>
-      </div>)}
+      {zaF.map(n=>{const zOrig=getZnesekOriginal(n);const ref=getRef(n);const kEmail=getKontaktEmail(n);const jeSloDdv=n?.je_slovenska_ddv!==false;const osnovaCena=zOrig?parseZnesek(zOrig):0;const skupajCena=jeSloDdv?osnovaCena*1.22:osnovaCena;return(
+        <div key={n.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #fef3c7"}}>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700,fontSize:14}}>{n.stranka}</div>
+            <div style={{fontSize:12,color:"#64748b"}}>{n.stevilkaNaloga||n.stevilka_naloga} · {n.nakKraj||n.nak_kraj} → {n.razKraj||n.raz_kraj}</div>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:3}}>
+              {zOrig&&<div style={{fontSize:12,color:"#16a34a",fontWeight:700}}>💶 {skupajCena.toFixed(2)} € {jeSloDdv?"(z DDV 22%)":"(reverse charge)"}</div>}
+              {ref&&<div style={{fontSize:11,color:"#64748b"}}>📋 Ref: <span style={{fontFamily:"monospace",fontWeight:600,color:"#2563eb"}}>{ref}</span></div>}
+              {kEmail&&<div style={{fontSize:11,color:"#64748b"}}>✉️ {kEmail}</div>}
+            </div>
+          </div>
+          <button style={s.btnSm} onClick={()=>novRacun(n)}>Ustvari račun</button>
+        </div>);
+      })}
     </div>}
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
       <div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>Računi</div>
       <button style={s.btnSm} onClick={()=>novRacun(null)}>+ Nov</button>
+    </div>
+    <div style={{position:"relative",marginBottom:10}}>
+      <input style={{...s.inp,paddingLeft:34,paddingRight:search?34:12}} placeholder="Išči po stranki, številki, emailu, znesku..." value={search} onChange={e=>setSearch(e.target.value)}/>
+      <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:14,color:"#94a3b8",pointerEvents:"none"}}>🔍</span>
+      {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"#e2e8f0",border:"none",borderRadius:"50%",width:22,height:22,fontSize:12,cursor:"pointer",color:"#64748b",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>}
+      {search&&<div style={{fontSize:11,color:"#64748b",marginTop:4}}>{list.length} {list.length===1?"rezultat":"rezultatov"} za "{search}"</div>}
     </div>
     <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
       {[["vsi","Vsi"],["osnutek","Osnutki"],["poslan","Poslani"],["placano","Plačani"],["zapadlo","Zapadli"]].map(([v,l])=>(
@@ -524,7 +652,7 @@ function FinanceTab({st,upd,showToast}){
     </div>
     {list.length===0&&<div style={s.empty}>Ni računov.</div>}
     {list.map(r=>{const sc=rSC[r.status]||rSC.osnutek;const zap=r.status==="poslan"&&new Date(r.rok)<new Date();return(
-      <div key={r.id} style={{background:"#fff",borderRadius:12,padding:"14px 16px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+      <div key={r.id} onClick={()=>setDetail(r)} style={{background:"#fff",borderRadius:12,padding:"14px 16px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",cursor:"pointer",transition:"all 0.15s",border:"1px solid transparent"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.1)";e.currentTarget.style.borderColor="#cbd5e1";}} onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,0.06)";e.currentTarget.style.borderColor="transparent";}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
           <div><div style={{display:"flex",gap:8,marginBottom:3}}><span style={{fontSize:12,fontFamily:"monospace",fontWeight:700,color:"#2563eb"}}>{r.id}</span><span style={{...s.fBtn,padding:"2px 8px",background:zap?"#fef2f2":sc.bg,color:zap?"#dc2626":sc.color,border:"none",cursor:"default"}}>{zap?"⚠️ Zapadlo":sc.label}</span></div>
           <div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{r.stranka}</div>
@@ -532,27 +660,274 @@ function FinanceTab({st,upd,showToast}){
           <div style={{fontSize:12,color:"#64748b"}}>Rok: {fmt(r.rok+"T00:00:00")}</div></div>
           <div style={{fontWeight:800,fontSize:20,color:"#0f2744"}}>{r.znesek.toFixed(2)} €</div>
         </div>
-        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
           {r.status==="osnutek"&&<button style={s.rBtn} onClick={()=>sprSt(r.id,"poslan")}>📤 Poslan</button>}
           {r.status==="poslan"&&<button style={s.rBtn} onClick={()=>sprSt(r.id,"placano")}>✅ Plačan</button>}
           {(r.status==="poslan"||zap)&&<button style={{...s.rBtn,color:"#dc2626"}} onClick={()=>sprSt(r.id,"zapadlo")}>⚠️ Zapadlo</button>}
+          <button style={{...s.rBtn,marginLeft:"auto",color:"#2563eb"}} onClick={()=>setDetail(r)}>👁️ Podrobnosti</button>
         </div>
       </div>
     );})}
-    {modal==="racun"&&<div style={s.overlay}><div style={s.mbox}><div style={s.mhead}><span style={s.mtitle}>Nov račun</span><button style={s.mcls} onClick={()=>{setModal(null);setForm({});}}>✕</button></div>
+    
+    {/* MODAL: Nov račun */}
+    {modal==="racun"&&<div style={s.overlay}><div style={{...s.mbox,maxWidth:900,maxHeight:"95vh",overflowY:"auto"}}><div style={s.mhead}><span style={s.mtitle}>Nov račun</span><button style={s.mcls} onClick={()=>{setModal(null);setForm({});}}>✕</button></div>
       <div style={s.mbody}>
-        {form.nalogId&&<div style={{background:"#eff6ff",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:13,color:"#1d4ed8",fontWeight:600}}>📋 {form.nalogId}</div>}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px",marginBottom:12}}>
-          <div style={{gridColumn:"1/-1"}}><label style={s.lbl}>Stranka *</label><input style={s.inp} value={form.stranka||""} onChange={e=>setForm(f=>({...f,stranka:e.target.value}))}/></div>
-          <div><label style={s.lbl}>Znesek (€) *</label><input style={s.inp} type="number" value={form.znesek||""} onChange={e=>setForm(f=>({...f,znesek:e.target.value}))}/></div>
-          <div><label style={s.lbl}>Datum</label><input style={s.inp} type="date" value={form.datum||""} onChange={e=>setForm(f=>({...f,datum:e.target.value}))}/></div>
-          <div><label style={s.lbl}>Plačilni rok</label><input style={s.inp} type="date" value={form.rok||""} onChange={e=>setForm(f=>({...f,rok:e.target.value}))}/></div>
-          <div style={{gridColumn:"1/-1"}}><label style={s.lbl}>💶 Email za račun</label><input style={s.inp} value={form.kontaktEmail||""} onChange={e=>setForm(f=>({...f,kontaktEmail:e.target.value}))} placeholder="finance@podjetje.com"/></div>
+        {form.nalogId&&<div style={{background:"#eff6ff",borderRadius:8,padding:"10px 12px",marginBottom:12,fontSize:13,color:"#1d4ed8"}}>
+          <div style={{fontWeight:700,marginBottom:3}}>📋 {form.nalogId}</div>
+          <div style={{fontSize:11,color:"#3b82f6"}}>Podatki so avtomatsko preneseni iz naloga</div>
+        </div>}
+        
+        <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+          {/* LEVA STRAN: Forma */}
+          <div style={{flex:"1 1 300px",minWidth:280}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px",marginBottom:12}}>
+              <div style={{gridColumn:"1/-1"}}><label style={s.lbl}>Stranka *</label><input style={s.inp} value={form.stranka||""} onChange={e=>setForm(f=>({...f,stranka:e.target.value}))}/></div>
+              <div><label style={s.lbl}>Znesek (€) *</label><input style={s.inp} type="number" step="0.01" value={form.znesek||""} onChange={e=>setForm(f=>({...f,znesek:e.target.value}))}/></div>
+              <div><label style={s.lbl}>Datum</label><input style={s.inp} type="date" value={form.datum||""} onChange={e=>setForm(f=>({...f,datum:e.target.value}))}/></div>
+              <div><label style={s.lbl}>Plačilni rok</label><input style={s.inp} type="date" value={form.rok||""} onChange={e=>setForm(f=>({...f,rok:e.target.value}))}/></div>
+              <div style={{gridColumn:"1/-1"}}><label style={s.lbl}>✉️ Email za pošiljanje računa</label><input style={s.inp} value={form.kontaktEmail||""} onChange={e=>setForm(f=>({...f,kontaktEmail:e.target.value}))} placeholder="finance@podjetje.com"/></div>
+              <div style={{gridColumn:"1/-1"}}><label style={s.lbl}>📝 Opombe</label><input style={s.inp} value={form.opombe||""} onChange={e=>setForm(f=>({...f,opombe:e.target.value}))} placeholder="Ref. št., posebnosti..."/></div>
+              <div style={{gridColumn:"1/-1"}}>
+                <label style={{...s.lbl,display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}>
+                  <input type="checkbox" checked={!!form.reverseCharge} onChange={e=>setForm(f=>({...f,reverseCharge:e.target.checked}))}/>
+                  Reverse charge (tuje podjetje, brez 22% DDV)
+                </label>
+              </div>
+            </div>
+            
+            {/* Povzetek rute */}
+            {(form.nakKraj||form.razKraj)&&<div style={{background:"#f8fafc",borderRadius:8,padding:10,marginBottom:12,fontSize:12,color:"#64748b"}}>
+              <div style={{fontWeight:700,color:"#0f2744",marginBottom:4}}>🚚 Ruta</div>
+              {form.nakFirma&&<div>{form.nakFirma}</div>}
+              <div>📍 {form.nakKraj} → {form.razKraj}</div>
+              {form.razFirma&&<div>{form.razFirma}</div>}
+            </div>}
+            
+            {/* Navodila iz naloga */}
+            {form.navodila&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,padding:10,marginBottom:12}}>
+              <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#92400e",marginBottom:4,fontWeight:700}}>⚠️ Navodila iz naloga</div>
+              <div style={{fontSize:12,color:"#78350f",whiteSpace:"pre-wrap",lineHeight:1.4}}>{form.navodila}</div>
+            </div>}
+            
+            <button style={s.btnP} onClick={submitRacun}>Ustvari račun</button>
+          </div>
+          
+          {/* DESNA STRAN: PDF predogled */}
+          {form.originalPdfUrl&&<div style={{flex:"1 1 320px",minWidth:300}}>
+            <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:6,fontWeight:700}}>📄 Original nalog</div>
+            <div style={{border:"1px solid #e2e8f0",borderRadius:8,overflow:"hidden",background:"#f1f5f9"}}>
+              <iframe 
+                src={form.originalPdfUrl} 
+                style={{width:"100%",height:500,border:"none"}} 
+                title="Original nalog PDF"
+              />
+              <a href={form.originalPdfUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",padding:"8px 12px",fontSize:11,color:"#2563eb",textAlign:"center",borderTop:"1px solid #e2e8f0",textDecoration:"none",background:"#fff"}}>
+                Odpri v novem zavihku ↗
+              </a>
+            </div>
+          </div>}
         </div>
-        <button style={s.btnP} onClick={submitRacun}>Ustvari račun</button>
       </div></div></div>}
+    
+    {/* MODAL: Detajl računa */}
+    {detail&&(()=>{
+      const sc=rSC[detail.status]||rSC.osnutek;
+      const zap=detail.status==="poslan"&&new Date(detail.rok)<new Date();
+      const dni=dniDoRoka(detail.rok,detail.status);
+      const {osnova,ddv,skupaj}=ddvIzracun(detail.znesek,detail.reverseCharge);
+      const originalUrl=povezanNalog?getOriginalUrl(povezanNalog):null;
+      const refPosiljatelja=povezanNalog?getRef(povezanNalog):null;
+      return(<div style={s.overlay} onClick={()=>{if(!editMode&&!confirmDel&&!imgPreview){setDetail(null);}}}>
+        <div style={{...s.mbox,maxWidth:680,maxHeight:"92vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+          <div style={{...s.mhead,background:"linear-gradient(135deg, #0f2744 0%, #1e3a5f 100%)",color:"#fff",padding:"18px 20px",position:"sticky",top:0,zIndex:2}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:2}}>Račun</div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:20,fontWeight:800,fontFamily:"monospace"}}>{detail.id}</span>
+                <button style={{background:"rgba(255,255,255,0.1)",border:"none",color:"#fff",borderRadius:6,padding:"4px 8px",fontSize:11,cursor:"pointer"}} onClick={()=>{navigator.clipboard.writeText(detail.id);showToast("📋 Kopirano");}}>📋</button>
+              </div>
+              {refPosiljatelja&&<div style={{marginTop:6,fontSize:11,color:"#94a3b8"}}>📋 Ref. pošiljatelja: <span style={{color:"#fbbf24",fontWeight:700,fontFamily:"monospace"}}>{refPosiljatelja}</span></div>}
+              <div style={{marginTop:6}}>
+                <span style={{...s.fBtn,padding:"3px 10px",background:zap?"#fef2f2":sc.bg,color:zap?"#dc2626":sc.color,border:"none",cursor:"default",fontSize:11}}>{zap?"⚠️ Zapadlo":sc.label}</span>
+              </div>
+            </div>
+            <button style={{...s.mcls,color:"#fff"}} onClick={()=>setDetail(null)}>✕</button>
+          </div>
+          
+          <div style={{...s.mbody,padding:"18px 20px"}}>
+            {/* Znesek */}
+            <div style={{background:"linear-gradient(135deg, #f8fafc 0%, #fff 100%)",border:"1px solid #e2e8f0",borderRadius:12,padding:16,marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
+              <div>
+                <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:4}}>Za plačilo</div>
+                <div style={{fontSize:28,fontWeight:800,color:"#0f2744"}}>{detail.znesek.toFixed(2)} €</div>
+              </div>
+              {detail.rok&&<div style={{textAlign:"right"}}>
+                <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:4}}>Rok plačila</div>
+                <div style={{fontSize:13,fontWeight:700,color:zap?"#dc2626":"#0f2744"}}>{fmt(detail.rok+"T00:00:00")}</div>
+                {dni!==null&&<div style={{fontSize:11,marginTop:2,color:zap?"#dc2626":dni<=7?"#d97706":"#64748b",fontWeight:zap?700:500}}>
+                  {zap?`Zapadel pred ${Math.abs(dni)} dni`:dni===0?"Zapade danes":dni<0?`Zapadel pred ${Math.abs(dni)} dni`:`Še ${dni} dni`}
+                </div>}
+              </div>}
+            </div>
+            
+            {/* Stranka */}
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:6,fontWeight:700}}>🏢 Stranka</div>
+              {editMode?<input style={s.inp} value={detail.stranka||""} onChange={e=>setDetail(d=>({...d,stranka:e.target.value}))}/>:
+                <div style={{background:"#f8fafc",borderRadius:8,padding:12}}>
+                  <div style={{fontWeight:700,fontSize:14,color:"#0f2744"}}>{detail.stranka}</div>
+                  {detail.kontaktEmail&&<div style={{fontSize:12,color:"#64748b",marginTop:3}}>✉️ {detail.kontaktEmail}</div>}
+                  {detail.reverseCharge&&<div style={{display:"inline-block",marginTop:6,fontSize:10,background:"#fef3c7",color:"#92400e",padding:"2px 8px",borderRadius:4,fontWeight:600}}>Reverse charge</div>}
+                </div>}
+            </div>
+            
+            {/* Povezan nalog */}
+            {povezanNalog&&<div style={{marginBottom:16}}>
+              <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:6,fontWeight:700}}>🚚 Povezan nalog</div>
+              <div onClick={()=>odpriNalog(povezanNalog.id)} style={{background:"#f8fafc",borderRadius:8,padding:12,cursor:"pointer",transition:"all 0.15s",border:"1px solid transparent"}} onMouseEnter={e=>{e.currentTarget.style.background="#eff6ff";e.currentTarget.style.borderColor="#bfdbfe";}} onMouseLeave={e=>{e.currentTarget.style.background="#f8fafc";e.currentTarget.style.borderColor="transparent";}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{fontFamily:"monospace",fontWeight:700,fontSize:13,color:"#2563eb"}}>{povezanNalog.stevilka_naloga||povezanNalog.stevilkaNaloga||povezanNalog.id}</div>
+                    {(povezanNalog.nak_kraj||povezanNalog.nakKraj)&&<div style={{fontSize:12,color:"#64748b",marginTop:3}}>📍 {povezanNalog.nak_kraj||povezanNalog.nakKraj} → {povezanNalog.raz_kraj||povezanNalog.razKraj}</div>}
+                    {povezanNalog.voznik_id&&<div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>Voznik: {st.vozniki?.find(v=>v.id===povezanNalog.voznik_id)?.ime||povezanNalog.voznik_id}</div>}
+                  </div>
+                  <span style={{color:"#94a3b8",fontSize:14}}>↗ Odpri</span>
+                </div>
+              </div>
+            </div>}
+            
+            {/* CMR */}
+            {povezanNalog&&<div style={{marginBottom:16}}>
+              <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:6,fontWeight:700,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span>📎 CMR dokumenti {cmrList.length>0&&`(${cmrList.length})`}</span>
+              </div>
+              {cmrLoading?<div style={{background:"#f8fafc",borderRadius:8,padding:20,textAlign:"center",fontSize:12,color:"#94a3b8"}}>Nalagam CMR...</div>:
+                cmrList.length===0?<div style={{background:"#fefce8",border:"1px dashed #fde68a",borderRadius:8,padding:12,fontSize:12,color:"#a16207",textAlign:"center"}}>
+                  ⚠️ Za ta nalog ni naloženih CMR dokumentov
+                </div>:
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(100px,1fr))",gap:8}}>
+                  {cmrList.map(cmr=>{
+                    const url=getStorageUrl(supabase,CMR_BUCKET,cmr.storage_pot);
+                    const isImage=/\.(jpg|jpeg|png|webp|gif)$/i.test(cmr.ime_datoteke||"");
+                    return(<div key={cmr.id} onClick={()=>{if(isImage&&url){setImgPreview(url);}else if(url){window.open(url,"_blank");}}} style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:6,cursor:"pointer",transition:"all 0.15s",textAlign:"center"}} onMouseEnter={e=>{e.currentTarget.style.borderColor="#2563eb";e.currentTarget.style.transform="translateY(-2px)";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#e2e8f0";e.currentTarget.style.transform="translateY(0)";}}>
+                      {isImage&&url?
+                        <img src={url} alt={cmr.ime_datoteke} style={{width:"100%",height:80,objectFit:"cover",borderRadius:4,display:"block"}} onError={e=>{e.target.style.display="none";e.target.nextSibling.style.display="flex";}}/>:null}
+                      <div style={{display:isImage&&url?"none":"flex",width:"100%",height:80,borderRadius:4,background:"#e2e8f0",alignItems:"center",justifyContent:"center",fontSize:24}}>📄</div>
+                      <div style={{fontSize:10,color:"#64748b",marginTop:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={cmr.ime_datoteke}>{cmr.ime_datoteke}</div>
+                    </div>);
+                  })}
+                </div>}
+            </div>}
+            
+            {/* ORIGINAL NALOG PDF */}
+            {originalUrl&&<div style={{marginBottom:16}}>
+              <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:6,fontWeight:700}}>📄 Original nalog (od stranke)</div>
+              <a href={originalUrl} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:12,background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:12,textDecoration:"none",color:"inherit",transition:"all 0.15s"}} onMouseEnter={e=>{e.currentTarget.style.background="#eff6ff";e.currentTarget.style.borderColor="#bfdbfe";}} onMouseLeave={e=>{e.currentTarget.style.background="#f8fafc";e.currentTarget.style.borderColor="#e2e8f0";}}>
+                <div style={{width:40,height:40,borderRadius:6,background:"#fef2f2",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>📄</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:600,fontSize:13,color:"#0f2744"}}>{decodeURIComponent(originalUrl.split("/").pop()||"Originalni nalog.pdf")}</div>
+                  <div style={{fontSize:11,color:"#64748b",marginTop:2}}>Odpri v novem zavihku ↗</div>
+                </div>
+                {getZnesekOriginal(povezanNalog)&&<div style={{textAlign:"right"}}>
+                  <div style={{fontSize:10,color:"#94a3b8"}}>Znesek iz naloga</div>
+                  <div style={{fontSize:14,fontWeight:700,color:"#16a34a"}}>{parseZnesek(getZnesekOriginal(povezanNalog)).toFixed(2)} €</div>
+                </div>}
+              </a>
+            </div>}
+            
+            {/* Razčlenitev */}
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:6,fontWeight:700}}>💶 Razčlenitev</div>
+              <div style={{border:"1px solid #e2e8f0",borderRadius:8,overflow:"hidden"}}>
+                <div style={{padding:"10px 12px",background:"#f8fafc",fontSize:13,display:"flex",justifyContent:"space-between"}}>
+                  <span style={{color:"#475569"}}>Prevoz blaga{povezanNalog?` (${povezanNalog.nak_kraj||povezanNalog.nakKraj} → ${povezanNalog.raz_kraj||povezanNalog.razKraj})`:""}{refPosiljatelja?` · Ref: ${refPosiljatelja}`:""}</span>
+                  <span style={{fontWeight:600,color:"#0f2744"}}>{osnova.toFixed(2)} €</span>
+                </div>
+                <div style={{padding:"8px 12px",fontSize:12,display:"flex",justifyContent:"space-between",borderTop:"1px solid #e2e8f0"}}>
+                  <span style={{color:"#64748b"}}>Osnova:</span>
+                  <span style={{fontWeight:600,color:"#0f2744"}}>{osnova.toFixed(2)} €</span>
+                </div>
+                <div style={{padding:"8px 12px",fontSize:12,display:"flex",justifyContent:"space-between",borderTop:"1px solid #e2e8f0"}}>
+                  <span style={{color:"#64748b"}}>DDV {detail.reverseCharge?"(reverse charge)":"(22%)"}:</span>
+                  <span style={{fontWeight:600,color:"#0f2744"}}>{ddv.toFixed(2)} €</span>
+                </div>
+                <div style={{padding:"10px 12px",fontSize:14,display:"flex",justifyContent:"space-between",borderTop:"2px solid #cbd5e1",background:"#f8fafc"}}>
+                  <span style={{fontWeight:700,color:"#0f2744"}}>Skupaj:</span>
+                  <span style={{fontWeight:800,color:"#0f2744"}}>{skupaj.toFixed(2)} €</span>
+                </div>
+              </div>
+              <label style={{display:"flex",alignItems:"center",gap:6,marginTop:8,fontSize:12,color:"#64748b",cursor:editMode?"pointer":"default"}}>
+                <input type="checkbox" checked={!!detail.reverseCharge} onChange={e=>{if(editMode)setDetail(d=>({...d,reverseCharge:e.target.checked}));}} disabled={!editMode}/>
+                Reverse charge (za tuje stranke)
+              </label>
+            </div>
+            
+            {/* Meta */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+              <div style={{background:"#f8fafc",borderRadius:8,padding:10}}>
+                <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:3}}>📅 Izdan</div>
+                <div style={{fontSize:13,fontWeight:600,color:"#0f2744"}}>{detail.datum?fmt(detail.datum+"T00:00:00"):"—"}</div>
+              </div>
+              {detail.datumPlacila?<div style={{background:"#f0fdf4",borderRadius:8,padding:10}}>
+                <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#16a34a",marginBottom:3}}>✅ Plačano</div>
+                <div style={{fontSize:13,fontWeight:600,color:"#166534"}}>{fmt(detail.datumPlacila+"T00:00:00")}</div>
+              </div>:<div style={{background:"#f8fafc",borderRadius:8,padding:10}}>
+                <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:3}}>⏳ Status plačila</div>
+                <div style={{fontSize:13,fontWeight:600,color:"#64748b"}}>Neplačano</div>
+              </div>}
+            </div>
+            
+            {/* Opombe */}
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:6,fontWeight:700}}>📝 Opombe</div>
+              {editMode?<textarea style={{...s.inp,minHeight:60,resize:"vertical"}} value={detail.opombe||""} onChange={e=>setDetail(d=>({...d,opombe:e.target.value}))}/>:
+                <div style={{background:"#f8fafc",borderRadius:8,padding:10,fontSize:13,color:detail.opombe?"#0f2744":"#94a3b8",fontStyle:detail.opombe?"normal":"italic"}}>
+                  {detail.opombe||"Brez opomb"}
+                </div>}
+            </div>
+            
+            {/* Akcije */}
+            {confirmDel?<div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:8,padding:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:13,fontWeight:600,color:"#991b1b"}}>Res želiš izbrisati?</span>
+              <div style={{display:"flex",gap:6}}>
+                <button style={{...s.rBtn,background:"#fff"}} onClick={()=>setConfirmDel(false)}>Prekliči</button>
+                <button style={{...s.rBtn,background:"#dc2626",color:"#fff",border:"none"}} onClick={()=>izbrisiRacun(detail.id)}>Da, izbriši</button>
+              </div>
+            </div>:editMode?<div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
+              <button style={s.rBtn} onClick={()=>{setDetail(racuni.find(r=>r.id===detail.id));setEditMode(false);}}>Prekliči</button>
+              <button style={{...s.btnP,padding:"8px 16px",fontSize:13}} onClick={()=>shraniEdit(detail)}>💾 Shrani</button>
+            </div>:<div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"space-between"}}>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {detail.status==="osnutek"&&<button style={{...s.rBtn,background:"#2563eb",color:"#fff",border:"none"}} onClick={()=>sprSt(detail.id,"poslan")}>📤 Označi poslan</button>}
+                {detail.status!=="placano"&&<button style={{...s.rBtn,background:"#16a34a",color:"#fff",border:"none"}} onClick={()=>sprSt(detail.id,"placano")}>✅ Plačano</button>}
+                {detail.status==="placano"&&<button style={s.rBtn} onClick={()=>sprSt(detail.id,"poslan")}>↩️ Razveljavi plačilo</button>}
+              </div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                <button style={s.rBtn} onClick={()=>window.print()}>📄 PDF</button>
+                <button style={s.rBtn} onClick={()=>{const subj=`Račun ${detail.id}`;const body=`Spoštovani,\n\nV priponki pošiljamo račun ${detail.id} v znesku ${detail.znesek.toFixed(2)} € z rokom plačila ${fmt(detail.rok+"T00:00:00")}.\n\nLep pozdrav,\nMATJAŽ JURJEVEC, s.p.\nSI76353362`;window.location.href=`mailto:${detail.kontaktEmail||""}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;}}>✉️ Pošlji</button>
+                <button style={s.rBtn} onClick={()=>setEditMode(true)}>✏️ Uredi</button>
+                {detail.status==="osnutek"&&<button style={{...s.rBtn,color:"#dc2626"}} onClick={()=>setConfirmDel(true)}>🗑️ Izbriši</button>}
+              </div>
+            </div>}
+          </div>
+        </div>
+      </div>);
+    })()}
+    
+    {/* Lightbox */}
+    {imgPreview&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,cursor:"pointer"}} onClick={()=>setImgPreview(null)}>
+      <img src={imgPreview} alt="CMR preview" style={{maxWidth:"95%",maxHeight:"95vh",objectFit:"contain",borderRadius:8,boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}/>
+      <button style={{position:"absolute",top:20,right:20,background:"rgba(255,255,255,0.2)",border:"none",color:"#fff",width:40,height:40,borderRadius:20,fontSize:20,cursor:"pointer"}} onClick={()=>setImgPreview(null)}>✕</button>
+    </div>}
   </div>);
 }
+
+
+
+
+
+
+
 
 function ProstiCMRTab({st,upd,showToast}){
   const nepov=(st.prostiCMR||[]).filter(c=>!c.povezan);
