@@ -6,121 +6,66 @@ const supabase = createClient(
   "sb_publishable_MK8IOnYCZKYC_gggJCZjFw_ypRV5wWm"
 );
 
-// ─── Helpers ───
 function fmt(d){if(!d)return"—";try{return new Date(d).toLocaleDateString("sl-SI",{day:"2-digit",month:"2-digit",year:"numeric"})}catch{return"—"}}
-function parseZnesek(s){if(!s)return 0;if(typeof s==="number")return s;const c=String(s).replace(/[^\d,.\s]/g," ").trim();let n=c.replace(/\s/g,"").replace(/\.(?=\d{3}(\D|$))/g,"").replace(",",".");return parseFloat(n)||0}
+function parseZnesek(s){if(!s)return 0;if(typeof s==="number")return s;let n=String(s).replace(/[^\d,.\s]/g," ").trim().replace(/\s/g,"").replace(/\.(?=\d{3}(\D|$))/g,"").replace(",",".");return parseFloat(n)||0}
 function izvleciEmail(t){if(!t)return"";const m=t.match(/[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);return m?m[0]:""}
 
 export default function FinanceApp(){
-  // Data
-  const [racuni,setRacuni]=useState([]);
   const [nalogi,setNalogi]=useState([]);
   const [cmrDocs,setCmrDocs]=useState({});
   const [loading,setLoading]=useState(true);
-  
-  // UI
   const [search,setSearch]=useState("");
-  const [statusFilter,setStatusFilter]=useState("vsi");
+  const [tab,setTab]=useState("za_fakturo");
   const [detail,setDetail]=useState(null);
   const [imgPreview,setImgPreview]=useState(null);
-  const [sortBy,setSortBy]=useState("datum_desc");
+  const [cmrLoading,setCmrLoading]=useState(false);
 
-  // ─── Fetch data ───
   useEffect(()=>{
     async function load(){
       setLoading(true);
-      const [r,n]=await Promise.all([
-        supabase.from("racuni").select("*").order("created_at",{ascending:false}),
-        supabase.from("nalogi").select("*")
-      ]);
-      if(r.data)setRacuni(r.data);
-      if(n.data)setNalogi(n.data);
+      const{data}=await supabase.from("nalogi").select("*").in("status",["za_fakturo","fakturirano"]).order("created_at",{ascending:false});
+      if(data)setNalogi(data);
       setLoading(false);
     }
     load();
   },[]);
 
-  // Fetch CMR za odprt detail
   useEffect(()=>{
-    if(!detail?.nalog_id&&!detail?.nalogId)return;
-    const nId=detail.nalog_id||detail.nalogId;
-    if(cmrDocs[nId])return;
-    supabase.from("cmr_dokumenti").select("*").eq("nalog_id",nId).order("created_at",{ascending:false}).then(({data})=>{
-      if(data)setCmrDocs(prev=>({...prev,[nId]:data}));
+    if(!detail?.id)return;
+    if(cmrDocs[detail.id])return;
+    setCmrLoading(true);
+    supabase.from("cmr_dokumenti").select("*").eq("nalog_id",detail.id).order("created_at",{ascending:false}).then(({data})=>{
+      if(data)setCmrDocs(prev=>({...prev,[detail.id]:data}));
+      setCmrLoading(false);
     });
-  },[detail]);
+  },[detail?.id]);
 
-  // ─── Computed ───
-  const povezanNalog=useMemo(()=>{
-    if(!detail)return null;
-    const nId=detail.nalog_id||detail.nalogId;
-    return nId?nalogi.find(n=>n.id===nId):null;
-  },[detail,nalogi]);
-
-  const cmrList=useMemo(()=>{
-    const nId=detail?.nalog_id||detail?.nalogId;
-    return nId?cmrDocs[nId]||[]:[];
-  },[detail,cmrDocs]);
-
+  const cmrList=useMemo(()=>detail?.id?cmrDocs[detail.id]||[]:[], [detail?.id,cmrDocs]);
   const zaFakturo=useMemo(()=>nalogi.filter(n=>n.status==="za_fakturo"),[nalogi]);
+  const fakturirano=useMemo(()=>nalogi.filter(n=>n.status==="fakturirano"),[nalogi]);
 
   const filtered=useMemo(()=>{
-    let items=racuni;
-    if(statusFilter!=="vsi")items=items.filter(r=>r.status===statusFilter);
-    if(search.trim()){
-      const q=search.toLowerCase().trim();
-      items=items.filter(r=>
-        (r.id||"").toLowerCase().includes(q)||
-        (r.stranka||"").toLowerCase().includes(q)||
-        (r.kontaktEmail||r.kontakt_email||"").toLowerCase().includes(q)||
-        String(r.znesek||"").includes(q)||
-        (r.opombe||"").toLowerCase().includes(q)
-      );
-    }
-    // Sort
-    items=[...items].sort((a,b)=>{
-      if(sortBy==="datum_desc")return new Date(b.created_at||b.datum||0)-new Date(a.created_at||a.datum||0);
-      if(sortBy==="datum_asc")return new Date(a.created_at||a.datum||0)-new Date(b.created_at||b.datum||0);
-      if(sortBy==="znesek_desc")return(b.znesek||0)-(a.znesek||0);
-      if(sortBy==="znesek_asc")return(a.znesek||0)-(b.znesek||0);
-      if(sortBy==="stranka")return(a.stranka||"").localeCompare(b.stranka||"");
-      return 0;
-    });
-    return items;
-  },[racuni,statusFilter,search,sortBy]);
+    const items=tab==="za_fakturo"?zaFakturo:fakturirano;
+    if(!search.trim())return items;
+    const q=search.toLowerCase().trim();
+    return items.filter(n=>
+      (n.stranka||"").toLowerCase().includes(q)||
+      (n.stevilka_naloga||"").toLowerCase().includes(q)||
+      (n.nak_referenca||"").toLowerCase().includes(q)||
+      (n.nak_kraj||"").toLowerCase().includes(q)||
+      (n.raz_kraj||"").toLowerCase().includes(q)
+    );
+  },[tab,zaFakturo,fakturirano,search]);
 
-  const stats=useMemo(()=>({
-    skupaj:racuni.reduce((a,r)=>a+(r.znesek||0),0),
-    odprto:racuni.filter(r=>r.status==="poslan").reduce((a,r)=>a+(r.znesek||0),0),
-    placano:racuni.filter(r=>r.status==="placano").reduce((a,r)=>a+(r.znesek||0),0),
-    zapadlo:racuni.filter(r=>{
-      if(r.status!=="poslan")return false;
-      return r.rok&&new Date(r.rok)<new Date();
-    }).reduce((a,r)=>a+(r.znesek||0),0),
-    count:racuni.length,
-  }),[racuni]);
-
-  // ─── Actions ───
-  async function oznacPlacano(id){
-    const{error}=await supabase.from("racuni").update({status:"placano",datum_placila:new Date().toISOString().slice(0,10)}).eq("id",id);
-    if(!error){
-      setRacuni(prev=>prev.map(r=>r.id===id?{...r,status:"placano",datum_placila:new Date().toISOString().slice(0,10)}:r));
-      if(detail?.id===id)setDetail(d=>({...d,status:"placano",datum_placila:new Date().toISOString().slice(0,10)}));
-    }
+  async function oznaciFakturirano(id){
+    const{error}=await supabase.from("nalogi").update({status:"fakturirano"}).eq("id",id);
+    if(!error){setNalogi(prev=>prev.map(n=>n.id===id?{...n,status:"fakturirano"}:n));setDetail(null);}
   }
 
-  async function oznacPoslan(id){
-    const{error}=await supabase.from("racuni").update({status:"poslan"}).eq("id",id);
-    if(!error){
-      setRacuni(prev=>prev.map(r=>r.id===id?{...r,status:"poslan",datum_placila:null}:r));
-      if(detail?.id===id)setDetail(d=>({...d,status:"poslan",datum_placila:null}));
-    }
+  async function vrniNaZaFakturo(id){
+    const{error}=await supabase.from("nalogi").update({status:"za_fakturo"}).eq("id",id);
+    if(!error){setNalogi(prev=>prev.map(n=>n.id===id?{...n,status:"za_fakturo"}:n));setDetail(null);}
   }
-
-  // ─── Helpers za polja ───
-  const getOriginalUrl=(n)=>n?.original_pdf_url||n?.originalPdfUrl||null;
-  const getRef=(n)=>n?.nak_referenca||n?.nakReferenca||null;
-  const getZnesekOriginal=(n)=>n?.znesek_original||n?.znesekOriginal||null;
 
   function getCmrUrl(cmr){
     if(!cmr?.storage_pot)return null;
@@ -129,147 +74,89 @@ export default function FinanceApp(){
     return data?.publicUrl||null;
   }
 
-  function dniDoRoka(r){
-    if(!r.rok||r.status==="placano")return null;
-    return Math.ceil((new Date(r.rok+"T00:00:00")-new Date())/86400000);
-  }
-
-  // ─── Styles ───
-  const c={
-    bg:"#f0f2f5",card:"#fff",primary:"#1e3a5f",accent:"#2563eb",
-    green:"#16a34a",red:"#dc2626",orange:"#d97706",muted:"#64748b",light:"#94a3b8",
-    border:"#e2e8f0",bgSoft:"#f8fafc",
-  };
-  const statusCfg={
-    osnutek:{label:"Osnutek",color:c.muted,bg:"#f8fafc"},
-    poslan:{label:"Poslan",color:c.accent,bg:"#eff6ff"},
-    placano:{label:"Plačano",color:c.green,bg:"#f0fdf4"},
-    zapadlo:{label:"Zapadlo",color:c.red,bg:"#fef2f2"},
-  };
-
   if(loading)return(
-    <div style={{minHeight:"100vh",background:c.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
+    <div style={{minHeight:"100vh",background:"#f0f2f5",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       <div style={{textAlign:"center"}}>
-        <div style={{fontSize:32,marginBottom:12}}>📊</div>
-        <div style={{fontSize:15,color:c.muted}}>Nalagam finančne podatke...</div>
+        <div style={{fontSize:32,marginBottom:12}}>📋</div>
+        <div style={{fontSize:15,color:"#64748b"}}>Nalagam podatke...</div>
       </div>
     </div>
   );
 
   return(
-    <div style={{minHeight:"100vh",background:c.bg,fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
+    <div style={{minHeight:"100vh",background:"#f0f2f5",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       {/* HEADER */}
-      <div style={{background:`linear-gradient(135deg, ${c.primary} 0%, #0f2744 100%)`,color:"#fff",padding:"20px 24px"}}>
-        <div style={{maxWidth:1100,margin:"0 auto"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
-            <div>
-              <div style={{fontSize:22,fontWeight:800,letterSpacing:-0.5}}>💰 Finance</div>
-              <div style={{fontSize:12,color:"#94a3b8",marginTop:2}}>MATJAŽ JURJEVEC, s.p. · Pregled računov</div>
-            </div>
-            <div style={{fontSize:11,color:"#94a3b8",textAlign:"right"}}>
-              <div>Prijava: Bernarda Jurjevec</div>
-              <div>{fmt(new Date().toISOString())}</div>
-            </div>
+      <div style={{background:"linear-gradient(135deg, #1e3a5f 0%, #0f2744 100%)",color:"#fff",padding:"16px 24px"}}>
+        <div style={{maxWidth:900,margin:"0 auto",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:20,fontWeight:800}}>📋 Dokumenti za fakturiranje</div>
+            <div style={{fontSize:12,color:"#94a3b8",marginTop:2}}>MATJAŽ JURJEVEC, s.p.</div>
+          </div>
+          <div style={{fontSize:11,color:"#94a3b8",textAlign:"right"}}>
+            <div>Bernarda Jurjevec</div>
+            <div>{fmt(new Date().toISOString())}</div>
           </div>
         </div>
       </div>
 
-      <div style={{maxWidth:1100,margin:"0 auto",padding:"20px 16px"}}>
-        {/* STATS */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12,marginBottom:20}}>
-          {[
-            ["💶","Skupaj",stats.skupaj,c.accent],
-            ["⏳","Odprto",stats.odprto,c.orange],
-            ["✅","Plačano",stats.placano,c.green],
-            ["⚠️","Zapadlo",stats.zapadlo,c.red],
-          ].map(([ic,lb,vl,cl])=>(
-            <div key={lb} style={{background:c.card,borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:20}}>{ic}</span>
-                <span style={{fontSize:10,color:c.light,textTransform:"uppercase",letterSpacing:1}}>{lb}</span>
-              </div>
-              <div style={{fontSize:22,fontWeight:800,color:cl,marginTop:6}}>{vl.toFixed(0)} €</div>
-            </div>
-          ))}
+      <div style={{maxWidth:900,margin:"0 auto",padding:"20px 16px"}}>
+        {/* ŠTEVEC */}
+        <div style={{display:"flex",gap:12,marginBottom:20}}>
+          <div style={{flex:1,background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",textAlign:"center"}}>
+            <div style={{fontSize:24,fontWeight:800,color:"#d97706"}}>{zaFakturo.length}</div>
+            <div style={{fontSize:11,color:"#94a3b8"}}>Za fakturiranje</div>
+          </div>
+          <div style={{flex:1,background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",textAlign:"center"}}>
+            <div style={{fontSize:24,fontWeight:800,color:"#16a34a"}}>{fakturirano.length}</div>
+            <div style={{fontSize:11,color:"#94a3b8"}}>Fakturirano</div>
+          </div>
         </div>
 
-        {/* ZA FAKTURO */}
-        {zaFakturo.length>0&&<div style={{background:"#fffbeb",border:"1.5px solid #fde68a",borderRadius:12,padding:16,marginBottom:20}}>
-          <div style={{fontWeight:700,fontSize:14,color:"#92400e",marginBottom:10}}>💶 Čaka na fakturo ({zaFakturo.length})</div>
-          {zaFakturo.map(n=>{
-            const zOrig=getZnesekOriginal(n);const ref=getRef(n);
-            const jeSloDdv=n?.je_slovenska_ddv!==false;
-            const osnova=zOrig?parseZnesek(zOrig):0;
-            const skupaj=jeSloDdv?osnova*1.22:osnova;
-            return(
-              <div key={n.id} style={{padding:"8px 0",borderBottom:"1px solid #fef3c7",fontSize:13}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div>
-                    <span style={{fontWeight:700}}>{n.stranka}</span>
-                    <span style={{color:c.muted,marginLeft:8}}>{n.stevilka_naloga} · {n.nak_kraj} → {n.raz_kraj}</span>
-                  </div>
-                  {zOrig&&<div style={{fontWeight:700,color:c.green}}>{skupaj.toFixed(2)} € {jeSloDdv?"(+22% DDV)":"(RC)"}</div>}
-                </div>
-                {ref&&<div style={{fontSize:11,color:c.muted,marginTop:2}}>Ref: <span style={{fontFamily:"monospace",color:c.accent}}>{ref}</span></div>}
-              </div>
-            );
-          })}
-        </div>}
-
-        {/* ISKALNIK + FILTRI */}
-        <div style={{background:c.card,borderRadius:12,padding:16,marginBottom:16,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
-          <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center",marginBottom:12}}>
-            <div style={{flex:"1 1 250px",position:"relative"}}>
-              <input 
-                value={search} onChange={e=>setSearch(e.target.value)}
-                placeholder="🔍 Išči po stranki, številki, emailu, znesku..."
-                style={{width:"100%",padding:"10px 12px 10px 12px",border:`1px solid ${c.border}`,borderRadius:8,fontSize:13,outline:"none",boxSizing:"border-box"}}
-              />
-              {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:c.border,border:"none",borderRadius:"50%",width:20,height:20,fontSize:11,cursor:"pointer",color:c.muted}}>✕</button>}
-            </div>
-            <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{padding:"10px 12px",border:`1px solid ${c.border}`,borderRadius:8,fontSize:12,background:"#fff",color:c.primary,cursor:"pointer"}}>
-              <option value="datum_desc">Najnovejši</option>
-              <option value="datum_asc">Najstarejši</option>
-              <option value="znesek_desc">Največji znesek</option>
-              <option value="znesek_asc">Najmanjši znesek</option>
-              <option value="stranka">Stranka A→Z</option>
-            </select>
-          </div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            {[["vsi","Vsi ("+racuni.length+")"],["osnutek","Osnutki"],["poslan","Poslani"],["placano","Plačani"],["zapadlo","Zapadli"]].map(([v,l])=>(
-              <button key={v} onClick={()=>setStatusFilter(v)} style={{padding:"6px 14px",borderRadius:20,border:`1px solid ${statusFilter===v?c.accent:c.border}`,background:statusFilter===v?c.accent:"#fff",color:statusFilter===v?"#fff":c.muted,fontSize:12,fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}>{l}</button>
-            ))}
-          </div>
-          {search&&<div style={{fontSize:11,color:c.muted,marginTop:8}}>{filtered.length} {filtered.length===1?"rezultat":"rezultatov"} za "{search}"</div>}
+        {/* TABS */}
+        <div style={{display:"flex",gap:8,marginBottom:16}}>
+          <button onClick={()=>setTab("za_fakturo")} style={{padding:"10px 20px",borderRadius:10,border:"none",background:tab==="za_fakturo"?"#d97706":"#fff",color:tab==="za_fakturo"?"#fff":"#64748b",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+            📋 Za fakturiranje ({zaFakturo.length})
+          </button>
+          <button onClick={()=>setTab("fakturirano")} style={{padding:"10px 20px",borderRadius:10,border:"none",background:tab==="fakturirano"?"#16a34a":"#fff",color:tab==="fakturirano"?"#fff":"#64748b",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+            ✅ Fakturirano ({fakturirano.length})
+          </button>
         </div>
 
-        {/* SEZNAM RAČUNOV */}
-        {filtered.length===0&&<div style={{textAlign:"center",padding:40,color:c.light}}>Ni računov.</div>}
+        {/* ISKALNIK */}
+        <div style={{position:"relative",marginBottom:16}}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Išči po stranki, številki naloga, referenci, kraju..." style={{width:"100%",padding:"10px 14px",border:"1px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",boxSizing:"border-box",background:"#fff"}}/>
+          {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"#e2e8f0",border:"none",borderRadius:"50%",width:20,height:20,fontSize:11,cursor:"pointer",color:"#64748b"}}>✕</button>}
+        </div>
+
+        {/* SEZNAM */}
+        {filtered.length===0&&<div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>{tab==="za_fakturo"?"Vse fakturirano! 🎉":"Ni fakturiranih nalogov."}</div>}
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {filtered.map(r=>{
-            const sc=statusCfg[r.status]||statusCfg.osnutek;
-            const zap=r.status==="poslan"&&r.rok&&new Date(r.rok)<new Date();
-            const dni=dniDoRoka(r);
-            const effSc=zap?statusCfg.zapadlo:sc;
+          {filtered.map(n=>{
+            const zOrig=n.znesek_original?parseZnesek(n.znesek_original):null;
+            const ref=n.nak_referenca||null;
+            const email=n.navodila?izvleciEmail(n.navodila):"";
+            const jeSloDdv=n.je_slovenska_ddv!==false;
             return(
-              <div key={r.id} onClick={()=>setDetail(r)} style={{background:c.card,borderRadius:10,padding:"14px 18px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",cursor:"pointer",transition:"all 0.15s",border:"1.5px solid transparent",borderLeftColor:effSc.color,borderLeftWidth:4}} onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,0.1)";}} onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,0.06)";}}>
+              <div key={n.id} onClick={()=>setDetail(n)} style={{background:"#fff",borderRadius:12,padding:"14px 18px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",cursor:"pointer",transition:"all 0.15s",borderLeft:`4px solid ${tab==="za_fakturo"?"#d97706":"#16a34a"}`}} onMouseEnter={e=>e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,0.1)"} onMouseLeave={e=>e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,0.06)"}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:4}}>
-                      <span style={{fontSize:12,fontFamily:"monospace",fontWeight:700,color:c.accent}}>{r.id}</span>
-                      <span style={{padding:"2px 8px",borderRadius:10,background:effSc.bg,color:effSc.color,fontSize:10,fontWeight:700}}>{zap?"⚠️ Zapadlo":sc.label}</span>
-                      {dni!==null&&!zap&&dni<=7&&<span style={{fontSize:10,color:c.orange,fontWeight:600}}>Še {dni} dni</span>}
-                      {zap&&<span style={{fontSize:10,color:c.red,fontWeight:600}}>Zapadel pred {Math.abs(dni)} dni</span>}
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{n.stranka}</div>
+                    <div style={{fontSize:12,color:"#64748b",marginTop:3}}>
+                      <span style={{fontFamily:"monospace",fontWeight:600,color:"#2563eb"}}>{n.stevilka_naloga}</span>
+                      <span style={{margin:"0 6px"}}>·</span>
+                      {n.nak_kraj} → {n.raz_kraj}
                     </div>
-                    <div style={{fontWeight:700,fontSize:15,color:c.primary}}>{r.stranka}</div>
-                    <div style={{display:"flex",gap:12,marginTop:3,flexWrap:"wrap"}}>
-                      {(r.kontaktEmail||r.kontakt_email)&&<span style={{fontSize:11,color:c.muted}}>✉️ {r.kontaktEmail||r.kontakt_email}</span>}
-                      <span style={{fontSize:11,color:c.muted}}>📅 Rok: {fmt(r.rok)}</span>
+                    <div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:5}}>
+                      {ref&&<span style={{fontSize:11,color:"#64748b"}}>📋 Ref: <span style={{fontFamily:"monospace",fontWeight:600,color:"#2563eb"}}>{ref}</span></span>}
+                      {email&&<span style={{fontSize:11,color:"#64748b"}}>✉️ {email}</span>}
+                      {n.original_pdf_url&&<span style={{fontSize:11,color:"#16a34a",fontWeight:600}}>📄 PDF</span>}
                     </div>
                   </div>
                   <div style={{textAlign:"right",flexShrink:0}}>
-                    <div style={{fontSize:20,fontWeight:800,color:c.primary}}>{(r.znesek||0).toFixed(2)} €</div>
-                    {r.datum&&<div style={{fontSize:10,color:c.light,marginTop:2}}>Izdan: {fmt(r.datum)}</div>}
+                    {zOrig&&<div style={{fontSize:18,fontWeight:800,color:"#0f2744"}}>{zOrig.toFixed(2)} €</div>}
+                    {zOrig&&jeSloDdv&&<div style={{fontSize:10,color:"#d97706"}}>+ 22% DDV</div>}
+                    {zOrig&&!jeSloDdv&&<div style={{fontSize:10,color:"#64748b"}}>reverse charge</div>}
+                    <div style={{fontSize:10,color:"#94a3b8",marginTop:4}}>{fmt(n.created_at)}</div>
                   </div>
                 </div>
               </div>
@@ -280,127 +167,100 @@ export default function FinanceApp(){
 
       {/* DETAIL MODAL */}
       {detail&&(()=>{
-        const sc=statusCfg[detail.status]||statusCfg.osnutek;
-        const zap=detail.status==="poslan"&&detail.rok&&new Date(detail.rok)<new Date();
-        const dni=dniDoRoka(detail);
-        const effSc=zap?statusCfg.zapadlo:sc;
-        const originalUrl=povezanNalog?getOriginalUrl(povezanNalog):null;
-        const refP=povezanNalog?getRef(povezanNalog):null;
-        const znesekOrig=povezanNalog?getZnesekOriginal(povezanNalog):null;
-        const reverseCharge=detail.reverseCharge||detail.reverse_charge;
-        const osnova=reverseCharge?(detail.znesek||0):(detail.znesek||0)/1.22;
-        const ddv=reverseCharge?0:(detail.znesek||0)-osnova;
+        const ref=detail.nak_referenca||null;
+        const email=detail.navodila?izvleciEmail(detail.navodila):"";
+        const zOrig=detail.znesek_original?parseZnesek(detail.znesek_original):null;
+        const jeSloDdv=detail.je_slovenska_ddv!==false;
+        const originalUrl=detail.original_pdf_url||null;
 
-        return(<div style={{position:"fixed",inset:0,zIndex:100,background:"rgba(0,0,0,0.5)",display:"flex",justifyContent:"center",alignItems:"flex-start",padding:"30px 16px",overflowY:"auto"}} onClick={()=>setDetail(null)}>
-          <div style={{background:c.card,borderRadius:16,maxWidth:700,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.2)",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+        return(<div style={{position:"fixed",inset:0,zIndex:100,background:"rgba(0,0,0,0.5)",display:"flex",justifyContent:"center",alignItems:"flex-start",padding:"24px 16px",overflowY:"auto"}} onClick={()=>setDetail(null)}>
+          <div style={{background:"#fff",borderRadius:16,maxWidth:800,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.2)",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+            
             {/* Header */}
-            <div style={{background:`linear-gradient(135deg, ${c.primary} 0%, #0f2744 100%)`,color:"#fff",padding:"20px 24px"}}>
+            <div style={{background:"linear-gradient(135deg, #1e3a5f 0%, #0f2744 100%)",color:"#fff",padding:"20px 24px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                 <div>
-                  <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:c.light}}>Račun</div>
-                  <div style={{fontSize:22,fontWeight:800,fontFamily:"monospace",marginTop:2}}>{detail.id}</div>
-                  {refP&&<div style={{marginTop:6,fontSize:11,color:c.light}}>📋 Ref: <span style={{color:"#fbbf24",fontWeight:700,fontFamily:"monospace"}}>{refP}</span></div>}
-                  <div style={{marginTop:6}}><span style={{padding:"3px 10px",borderRadius:10,background:effSc.bg,color:effSc.color,fontSize:11,fontWeight:700}}>{zap?"⚠️ Zapadlo":sc.label}</span></div>
+                  <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8"}}>Nalog za fakturiranje</div>
+                  <div style={{fontSize:20,fontWeight:800,marginTop:2}}>{detail.stranka}</div>
+                  <div style={{fontSize:13,color:"#94a3b8",marginTop:4,fontFamily:"monospace"}}>{detail.stevilka_naloga}</div>
+                  {ref&&<div style={{marginTop:4,fontSize:12,color:"#94a3b8"}}>📋 Ref: <span style={{color:"#fbbf24",fontWeight:700}}>{ref}</span></div>}
                 </div>
                 <button onClick={()=>setDetail(null)} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",width:32,height:32,borderRadius:8,fontSize:16,cursor:"pointer"}}>✕</button>
               </div>
             </div>
 
             <div style={{padding:"20px 24px"}}>
-              {/* Znesek */}
-              <div style={{background:c.bgSoft,border:`1px solid ${c.border}`,borderRadius:12,padding:16,marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
-                <div>
-                  <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:c.light}}>Za plačilo</div>
-                  <div style={{fontSize:30,fontWeight:800,color:c.primary}}>{(detail.znesek||0).toFixed(2)} €</div>
-                </div>
-                {detail.rok&&<div style={{textAlign:"right"}}>
-                  <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:c.light}}>Rok plačila</div>
-                  <div style={{fontSize:14,fontWeight:700,color:zap?c.red:c.primary}}>{fmt(detail.rok)}</div>
-                  {dni!==null&&<div style={{fontSize:11,marginTop:2,color:zap?c.red:dni<=7?c.orange:c.muted,fontWeight:zap?700:500}}>
-                    {zap?`Zapadel pred ${Math.abs(dni)} dni`:dni===0?"Zapade danes":`Še ${dni} dni`}
-                  </div>}
-                </div>}
+              {/* NAKLAD / RAZKLAD */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
+                <InfoCard label="📍 Naklad" value={`${detail.nak_firma||""}\n${detail.nak_naslov||""}\n${detail.nak_kraj||""}`} sub={`Datum: ${fmt(detail.nak_datum)}`}/>
+                <InfoCard label="📍 Razklad" value={`${detail.raz_firma||""}\n${detail.raz_naslov||""}\n${detail.raz_kraj||""}`} sub={`Datum: ${fmt(detail.raz_datum)}`}/>
               </div>
 
-              {/* Stranka */}
-              <Section title="🏢 Stranka">
-                <div style={{fontWeight:700,fontSize:14,color:c.primary}}>{detail.stranka}</div>
-                {(detail.kontaktEmail||detail.kontakt_email)&&<div style={{fontSize:12,color:c.muted,marginTop:3}}>✉️ {detail.kontaktEmail||detail.kontakt_email}</div>}
-                {reverseCharge&&<span style={{display:"inline-block",marginTop:6,fontSize:10,background:"#fef3c7",color:"#92400e",padding:"2px 8px",borderRadius:4,fontWeight:600}}>Reverse charge</span>}
-              </Section>
+              {/* BLAGO + CENA */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
+                <InfoCard label="📦 Blago" value={detail.blago||"—"} sub={`Količina: ${detail.kolicina||"—"} · Teža: ${detail.teza||"—"} kg`}/>
+                <div style={{background:"#f8fafc",borderRadius:10,padding:14}}>
+                  <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:6}}>💶 Cena iz naloga</div>
+                  {zOrig?<>
+                    <div style={{fontSize:24,fontWeight:800,color:"#0f2744"}}>{zOrig.toFixed(2)} €</div>
+                    <div style={{fontSize:12,color:jeSloDdv?"#d97706":"#64748b",fontWeight:600,marginTop:2}}>
+                      {jeSloDdv?`+ 22% DDV = ${(zOrig*1.22).toFixed(2)} €`:"Reverse charge (brez DDV)"}
+                    </div>
+                  </>:<div style={{fontSize:14,color:"#94a3b8",fontStyle:"italic"}}>Ni cene v nalogu</div>}
+                </div>
+              </div>
 
-              {/* Povezan nalog */}
-              {povezanNalog&&<Section title="🚚 Povezan nalog">
-                <div style={{fontFamily:"monospace",fontWeight:700,fontSize:13,color:c.accent}}>{povezanNalog.stevilka_naloga||povezanNalog.id}</div>
-                <div style={{fontSize:12,color:c.muted,marginTop:3}}>📍 {povezanNalog.nak_kraj} → {povezanNalog.raz_kraj}</div>
-                {povezanNalog.blago&&<div style={{fontSize:11,color:c.light,marginTop:2}}>Blago: {povezanNalog.blago}</div>}
-              </Section>}
+              {/* NAVODILA */}
+              {(email||detail.navodila)&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:14,marginBottom:20}}>
+                <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#92400e",marginBottom:6,fontWeight:700}}>⚠️ Navodila za fakturiranje</div>
+                {email&&<div style={{fontSize:13,color:"#0f2744",fontWeight:700,marginBottom:4}}>✉️ Račun pošlji na: <span style={{color:"#2563eb"}}>{email}</span></div>}
+                {detail.navodila&&<div style={{fontSize:12,color:"#78350f",whiteSpace:"pre-wrap",lineHeight:1.5}}>{detail.navodila}</div>}
+              </div>}
+
+              {/* DOKUMENTI */}
+              <div style={{fontSize:14,fontWeight:700,color:"#0f2744",marginBottom:12,paddingBottom:8,borderBottom:"2px solid #e2e8f0"}}>📎 Dokumenti</div>
+
+              {/* Original PDF */}
+              {originalUrl?<a href={originalUrl} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:14,background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,padding:14,textDecoration:"none",color:"inherit",marginBottom:10,transition:"all 0.15s"}} onMouseEnter={e=>{e.currentTarget.style.background="#eff6ff";e.currentTarget.style.borderColor="#2563eb";}} onMouseLeave={e=>{e.currentTarget.style.background="#f8fafc";e.currentTarget.style.borderColor="#e2e8f0";}}>
+                <div style={{width:44,height:44,borderRadius:8,background:"#fef2f2",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>📄</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:13,color:"#0f2744"}}>Original nalog (PDF)</div>
+                  <div style={{fontSize:11,color:"#64748b",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{decodeURIComponent(originalUrl.split("/").pop()||"nalog.pdf")}</div>
+                </div>
+                <div style={{fontSize:12,color:"#2563eb",fontWeight:600,flexShrink:0}}>Odpri ↗</div>
+              </a>:
+              <div style={{background:"#fef2f2",border:"1px dashed #fecaca",borderRadius:10,padding:14,marginBottom:10,textAlign:"center",fontSize:12,color:"#dc2626"}}>
+                ⚠️ Original nalog ni naložen
+              </div>}
 
               {/* CMR */}
-              {povezanNalog&&<Section title={`📎 CMR dokumenti ${cmrList.length>0?`(${cmrList.length})`:""}`}>
-                {cmrList.length===0?
-                  <div style={{color:c.orange,fontSize:12,textAlign:"center",padding:8}}>⚠️ Ni CMR dokumentov</div>:
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(90px,1fr))",gap:8}}>
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:12,fontWeight:700,color:"#64748b",marginBottom:8}}>CMR dokumenti {cmrList.length>0&&`(${cmrList.length})`}</div>
+                {cmrLoading?<div style={{textAlign:"center",padding:16,color:"#94a3b8",fontSize:12}}>Nalagam CMR...</div>:
+                  cmrList.length===0?<div style={{background:"#fef2f2",border:"1px dashed #fecaca",borderRadius:10,padding:14,textAlign:"center",fontSize:12,color:"#dc2626"}}>
+                    ⚠️ Šofer še ni naložil CMR dokumenta
+                  </div>:
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:8}}>
                     {cmrList.map(cmr=>{
                       const url=getCmrUrl(cmr);
                       const isImg=/\.(jpg|jpeg|png|webp|gif)$/i.test(cmr.ime_datoteke||"");
-                      return(<div key={cmr.id} onClick={()=>{if(isImg&&url)setImgPreview(url);else if(url)window.open(url,"_blank");}} style={{background:c.bgSoft,border:`1px solid ${c.border}`,borderRadius:8,padding:4,cursor:"pointer",textAlign:"center",transition:"all 0.15s"}} onMouseEnter={e=>e.currentTarget.style.borderColor=c.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=c.border}>
-                        {isImg&&url?<img src={url} alt="" style={{width:"100%",height:70,objectFit:"cover",borderRadius:4}} onError={e=>{e.target.style.display="none"}}/>:
-                          <div style={{height:70,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>📄</div>}
-                        <div style={{fontSize:9,color:c.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:3}}>{cmr.ime_datoteke}</div>
+                      return(<div key={cmr.id} onClick={()=>{if(isImg&&url)setImgPreview(url);else if(url)window.open(url,"_blank");}} style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:6,cursor:"pointer",textAlign:"center",transition:"all 0.15s"}} onMouseEnter={e=>e.currentTarget.style.borderColor="#2563eb"} onMouseLeave={e=>e.currentTarget.style.borderColor="#e2e8f0"}>
+                        {isImg&&url?<img src={url} alt="" style={{width:"100%",height:80,objectFit:"cover",borderRadius:4}} onError={e=>{e.target.style.display="none"}}/>:
+                          <div style={{height:80,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>📄</div>}
+                        <div style={{fontSize:9,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:3}}>{cmr.ime_datoteke}</div>
                       </div>);
                     })}
                   </div>}
-              </Section>}
-
-              {/* Original nalog PDF */}
-              {originalUrl&&<Section title="📄 Original nalog">
-                <a href={originalUrl} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:12,background:c.bgSoft,border:`1px solid ${c.border}`,borderRadius:8,padding:12,textDecoration:"none",color:"inherit",transition:"all 0.15s"}} onMouseEnter={e=>e.currentTarget.style.borderColor=c.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=c.border}>
-                  <div style={{width:36,height:36,borderRadius:6,background:"#fef2f2",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>📄</div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontWeight:600,fontSize:13,color:c.primary}}>{decodeURIComponent(originalUrl.split("/").pop()||"nalog.pdf")}</div>
-                    <div style={{fontSize:11,color:c.muted}}>Odpri ↗</div>
-                  </div>
-                  {znesekOrig&&<div style={{textAlign:"right"}}>
-                    <div style={{fontSize:10,color:c.light}}>Cena iz naloga</div>
-                    <div style={{fontSize:14,fontWeight:700,color:c.green}}>{parseZnesek(znesekOrig).toFixed(2)} €</div>
-                  </div>}
-                </a>
-              </Section>}
-
-              {/* Razčlenitev */}
-              <Section title="💶 Razčlenitev">
-                <div style={{border:`1px solid ${c.border}`,borderRadius:8,overflow:"hidden",fontSize:13}}>
-                  <Row label={`Prevoz${povezanNalog?` (${povezanNalog.nak_kraj} → ${povezanNalog.raz_kraj})`:""}`} value={`${osnova.toFixed(2)} €`}/>
-                  <Row label="Osnova" value={`${osnova.toFixed(2)} €`} light/>
-                  <Row label={`DDV ${reverseCharge?"(reverse charge)":"(22%)"}`} value={`${ddv.toFixed(2)} €`} light/>
-                  <Row label="Skupaj" value={`${(detail.znesek||0).toFixed(2)} €`} bold/>
-                </div>
-              </Section>
-
-              {/* Meta */}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-                <MiniCard label="📅 Izdan" value={fmt(detail.datum||detail.created_at)}/>
-                {detail.datum_placila||detail.datumPlacila?
-                  <MiniCard label="✅ Plačano" value={fmt(detail.datum_placila||detail.datumPlacila)} green/>:
-                  <MiniCard label="⏳ Status" value="Neplačano"/>}
               </div>
 
-              {/* Opombe */}
-              {(detail.opombe)&&<Section title="📝 Opombe">
-                <div style={{fontSize:13,color:c.primary}}>{detail.opombe}</div>
-              </Section>}
-
-              {/* Akcije */}
-              <div style={{display:"flex",gap:8,flexWrap:"wrap",paddingTop:8,borderTop:`1px solid ${c.border}`}}>
-                {detail.status!=="placano"&&<Btn color={c.green} white label="✅ Označi plačano" onClick={()=>oznacPlacano(detail.id)}/>}
-                {detail.status==="placano"&&<Btn color="#e2e8f0" label="↩️ Razveljavi" onClick={()=>oznacPoslan(detail.id)}/>}
-                <Btn color="#e2e8f0" label="📄 Natisni" onClick={()=>window.print()}/>
-                <Btn color="#e2e8f0" label={"✉️ Pošlji"} onClick={()=>{
-                  const subj=`Račun ${detail.id}`;
-                  const body=`Spoštovani,\n\nV priponki pošiljamo račun ${detail.id} v znesku ${(detail.znesek||0).toFixed(2)} € z rokom plačila ${fmt(detail.rok)}.\n\nLep pozdrav,\nMATJAŽ JURJEVEC, s.p.\nSI76353362`;
-                  window.location.href=`mailto:${detail.kontaktEmail||detail.kontakt_email||""}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;
-                }}/>
+              {/* GUMB */}
+              <div style={{display:"flex",gap:8,paddingTop:16,borderTop:"1px solid #e2e8f0"}}>
+                {detail.status==="za_fakturo"&&<button onClick={()=>oznaciFakturirano(detail.id)} style={{flex:1,padding:"12px 20px",borderRadius:10,border:"none",background:"#16a34a",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",transition:"all 0.15s"}} onMouseEnter={e=>e.currentTarget.style.background="#15803d"} onMouseLeave={e=>e.currentTarget.style.background="#16a34a"}>
+                  ✅ Račun napisan — označi kot fakturirano
+                </button>}
+                {detail.status==="fakturirano"&&<button onClick={()=>vrniNaZaFakturo(detail.id)} style={{flex:1,padding:"12px 20px",borderRadius:10,border:"1px solid #e2e8f0",background:"#fff",color:"#64748b",fontSize:14,fontWeight:600,cursor:"pointer"}}>
+                  ↩️ Vrni nazaj na "za fakturiranje"
+                </button>}
               </div>
             </div>
           </div>
@@ -416,28 +276,10 @@ export default function FinanceApp(){
   );
 }
 
-// ─── Mini komponente ───
-function Section({title,children}){
-  return(<div style={{marginBottom:16}}>
-    <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:6,fontWeight:700}}>{title}</div>
-    <div style={{background:"#f8fafc",borderRadius:8,padding:12}}>{children}</div>
+function InfoCard({label,value,sub}){
+  return(<div style={{background:"#f8fafc",borderRadius:10,padding:14}}>
+    <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:6}}>{label}</div>
+    <div style={{fontSize:13,color:"#0f2744",whiteSpace:"pre-wrap",lineHeight:1.4}}>{value}</div>
+    {sub&&<div style={{fontSize:11,color:"#64748b",marginTop:4}}>{sub}</div>}
   </div>);
-}
-
-function Row({label,value,light,bold}){
-  return(<div style={{padding:bold?"10px 12px":"8px 12px",display:"flex",justifyContent:"space-between",borderTop:light||bold?"1px solid #e2e8f0":"none",background:bold?"#f8fafc":"transparent",borderTopWidth:bold?2:1}}>
-    <span style={{color:bold?"#0f2744":"#64748b",fontWeight:bold?700:400,fontSize:bold?14:12}}>{label}</span>
-    <span style={{color:"#0f2744",fontWeight:bold?800:600,fontSize:bold?14:12}}>{value}</span>
-  </div>);
-}
-
-function MiniCard({label,value,green}){
-  return(<div style={{background:green?"#f0fdf4":"#f8fafc",borderRadius:8,padding:10}}>
-    <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:green?"#16a34a":"#94a3b8",marginBottom:3}}>{label}</div>
-    <div style={{fontSize:13,fontWeight:600,color:green?"#166534":"#0f2744"}}>{value}</div>
-  </div>);
-}
-
-function Btn({color,white,label,onClick}){
-  return(<button onClick={onClick} style={{padding:"8px 16px",borderRadius:8,border:"none",background:color,color:white?"#fff":"#334155",fontSize:12,fontWeight:600,cursor:"pointer",transition:"all 0.15s"}} onMouseEnter={e=>e.currentTarget.style.opacity="0.85"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>{label}</button>);
 }
