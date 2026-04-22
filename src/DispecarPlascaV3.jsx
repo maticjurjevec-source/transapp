@@ -57,7 +57,6 @@ export default function DispecarPlasca() {
   const [selNalog,setSelNalog]=useState(null);
   const [selObracun,setSelObracun]=useState(null);
   const [selRacun,setSelRacun]=useState(null);
-  const [selRacun,setSelRacun]=useState(null);
   const [dragOver,setDragOver]=useState(false);
   const [vozniki,setVozniki]=useState(VOZNIKI);
   const [loading,setLoading]=useState(false);
