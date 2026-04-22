@@ -494,13 +494,25 @@ function FinanceTab({st,upd,showToast}){
   const list=racuni.filter(r=>f==="vsi"||r.status===f);
   const rSC={osnutek:{label:"Osnutek",color:"#64748b",bg:"#f8fafc"},poslan:{label:"Poslan",color:"#2563eb",bg:"#eff6ff"},placano:{label:"Plačano",color:"#16a34a",bg:"#f0fdf4"},zapadlo:{label:"Zapadlo",color:"#dc2626",bg:"#fef2f2"}};
   const novRacun=(n)=>{setForm({nalogId:n?.id||"",stranka:n?.stranka||"",znesek:"",datum:new Date().toISOString().slice(0,10),rok:new Date(Date.now()+30*86400000).toISOString().slice(0,10),kontaktEmail:n?.kontaktEmail||"",opombe:""});setModal("racun");};
-  const submitRacun=()=>{
+  const submitRacun=async()=>{
     if(!form.stranka||!form.znesek)return showToast("Izpolni stranko in znesek!",true);
-    const id="RAC-"+new Date().getFullYear()+"-"+String((racuni.length+1)).padStart(3,"0");
-    upd(s=>({...s,racuni:[...(s.racuni||[]),{...form,id,znesek:parseFloat(form.znesek),status:"osnutek"}],nalogi:form.nalogId?s.nalogi.map(n=>n.id===form.nalogId?{...n,status:"fakturirano"}:n):s.nalogi}));
-    setModal(null);setForm({});showToast(`✅ Račun ${id} ustvarjen!`);
+    const stRac="RAC-"+new Date().getFullYear()+"-"+String((racuni.length+1)).padStart(4,"0");
+    try{
+      const{data,error}=await supabase.from('racuni').insert([{stevilka_racuna:stRac,nalog_id:form.nalogId||null,stranka:form.stranka,znesek:parseFloat(form.znesek),datum_izdaje:form.datum,datum_rok:form.rok,status:"osnutek",kontakt_email:form.kontaktEmail||"",je_slovenska_ddv:form.jeSlovenskaDDV||false,opombe:form.opombe||""}]).select().single();
+      if(error)throw error;
+      if(form.nalogId){await supabase.from('nalogi').update({status:'fakturirano'}).eq('id',form.nalogId);}
+      upd(s=>({...s,racuni:[...(s.racuni||[]),{id:data.id,stevilkaRacuna:data.stevilka_racuna,nalogId:data.nalog_id,stranka:data.stranka,znesek:data.znesek,datum:data.datum_izdaje,rok:data.datum_rok,status:data.status,kontaktEmail:data.kontakt_email,jeSlovenskaDDV:data.je_slovenska_ddv,opombe:data.opombe}],nalogi:form.nalogId?s.nalogi.map(n=>n.id===form.nalogId?{...n,status:"fakturirano"}:n):s.nalogi}));
+      setModal(null);setForm({});showToast(`✅ Račun ${stRac} shranjen v Supabase!`);
+    }catch(err){console.error(err);showToast("❌ Napaka pri shranjevanju računa!",true);}
   };
-  const sprSt=(id,status)=>{upd(s=>({...s,racuni:(s.racuni||[]).map(r=>r.id===id?{...r,status}:r)}));showToast("✅ Status posodobljen.");};
+  const sprSt=async(id,status)=>{
+    try{
+      const{error}=await supabase.from('racuni').update({status}).eq('id',id);
+      if(error)throw error;
+      upd(s=>({...s,racuni:(s.racuni||[]).map(r=>r.id===id?{...r,status}:r)}));
+      showToast("✅ Status posodobljen.");
+    }catch(err){showToast("❌ Napaka pri posodobitvi!",true);}
+  };
   return(<div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
       {[["💶","Skupaj",racuni.reduce((a,r)=>a+r.znesek,0).toFixed(0)+" €","#0891b2"],["⏳","Odprto",racuni.filter(r=>r.status==="poslan").reduce((a,r)=>a+r.znesek,0).toFixed(0)+" €","#d97706"],["✅","Prejeto",racuni.filter(r=>r.status==="placano").reduce((a,r)=>a+r.znesek,0).toFixed(0)+" €","#16a34a"]].map(([ic,lb,vl,cl])=>(
