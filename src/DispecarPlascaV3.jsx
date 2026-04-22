@@ -547,6 +547,7 @@ function FinanceTab({st,upd,showToast}){
         </div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
           {r.status==="osnutek"&&<button style={s.rBtn} onClick={()=>sprSt(r.id,"poslan")}>📤 Poslan</button>}
+{r.kontaktEmail&&<a href={`mailto:${r.kontaktEmail}?subject=Račun ${r.stevilkaRacuna||r.id} - Jurjevec Transport&body=Spoštovani,%0D%0A%0D%0AV prilogi vam pošiljamo račun ${r.stevilkaRacuna||r.id} v znesku ${r.znesek?.toFixed(2)} EUR.%0D%0A%0D%0ARok plačila: ${fmt(r.rok+"T00:00:00")}%0D%0A%0D%0ATRR: SI56024260018413171 (NLB)%0D%0Aali: SI56040000278272377 (OTP)%0D%0ASklic: ${r.stevilkaRacuna||r.id}%0D%0A%0D%0ALep pozdrav,%0D%0AMatjaž Jurjevec`} style={{...s.rBtn,background:"#f0fdf4",color:"#16a34a",border:"1.5px solid #bbf7d0",textDecoration:"none",display:"inline-flex",alignItems:"center"}}>✉️ Pošlji email</a>}
           {r.status==="poslan"&&<button style={s.rBtn} onClick={()=>sprSt(r.id,"placano")}>✅ Plačan</button>}
           {(r.status==="poslan"||zap)&&<button style={{...s.rBtn,color:"#dc2626"}} onClick={()=>sprSt(r.id,"zapadlo")}>⚠️ Zapadlo</button>}
         </div>
