@@ -570,7 +570,7 @@ const [selObracun,setSelObracun]=useState(null);
     {list.length===0&&<div style={s.empty}>Ni računov.</div>}
     {r.status==="osnutek"&&<button style={s.rBtn} onClick={()=>sprSt(r.id,"poslan")}>📤 Poslan</button>}
 {list.map(r=>{const sc=rSC[r.status]||rSC.osnutek;const zap=r.status==="poslan"&&new Date(r.rok)<new Date();return(
-      <div key={r.id} style={{background:"#fff",borderRadius:12,padding:"14px 16px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",cursor:"pointer"}} onClick={()=>onSelRacun(r)}>
+      <div key={r.id} style={{background:"#fff",borderRadius:12,padding:"14px 16px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",cursor:"pointer"}} onClick={()=>setSelRacun(r)}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
           <div><div style={{display:"flex",gap:8,marginBottom:3}}><span style={{fontSize:12,fontFamily:"monospace",fontWeight:700,color:"#2563eb"}}>{r.id}</span><span style={{...s.fBtn,padding:"2px 8px",background:zap?"#fef2f2":sc.bg,color:zap?"#dc2626":sc.color,border:"none",cursor:"default"}}>{zap?"⚠️ Zapadlo":sc.label}</span></div>
           <div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{r.stranka}</div>
