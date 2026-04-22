@@ -56,6 +56,8 @@ export default function DispecarPlasca() {
   const [toast,setToast]=useState(null);
   const [selNalog,setSelNalog]=useState(null);
   const [selObracun,setSelObracun]=useState(null);
+  const [selRacun,setSelRacun]=useState(null);
+  const [selRacun,setSelRacun]=useState(null);
   const [dragOver,setDragOver]=useState(false);
   const [vozniki,setVozniki]=useState(VOZNIKI);
   const [loading,setLoading]=useState(false);
@@ -311,6 +313,36 @@ export default function DispecarPlasca() {
   }
 
   // Obracun detail
+  if(selRacun){
+    const r=selRacun;
+    const nalog=r.nalogId?st.nalogi.find(n=>n.id===r.nalogId):null;
+    const rSC2={osnutek:{label:"Osnutek",color:"#64748b"},poslan:{label:"Poslan",color:"#2563eb"},placano:{label:"Placano",color:"#16a34a"},zapadlo:{label:"Zapadlo",color:"#dc2626"}};
+    const sc2=rSC2[r.status]||rSC2.osnutek;
+    const sprStR=async(status)=>{try{await supabase.from('racuni').update({status}).eq('id',r.id);upd(s=>({...s,racuni:s.racuni.map(x=>x.id===r.id?{...x,status}:x)}));setSelRacun(prev=>({...prev,status}));showToast("Status posodobljen.");}catch{showToast("Napaka!",true);}};
+    return(
+      <div style={s.wrap}>
+        <div style={s.header}><button style={s.backBtn} onClick={()=>setSelRacun(null)}>← Nazaj</button><div style={s.htitle}>Racun – {r.stranka}</div><div style={s.hsub}>{r.stevilkaRacuna||r.id}</div></div>
+        {toast&&<Toast t={toast}/>}
+        <div style={s.content}>
+          <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}>
+              <span style={{padding:"4px 12px",borderRadius:20,fontSize:13,fontWeight:700,background:sc2.color+"22",color:sc2.color}}>{sc2.label}</span>
+              <span style={{fontWeight:800,fontSize:22,color:"#0f2744"}}>{(r.znesek||0).toFixed(2)} €</span>
+            </div>
+            <Sec title="Podatki"><R label="Stevilka" val={r.stevilkaRacuna||r.id} mono/><R label="Stranka" val={r.stranka}/><R label="Datum" val={fmt((r.datum||"")+"T00:00:00")}/><R label="Rok placila" val={fmt((r.rok||"")+"T00:00:00")}/>{r.kontaktEmail&&<R label="Email" val={r.kontaktEmail} mono/>}</Sec>
+            {nalog&&<Sec title="Povezan nalog"><R label="Nalog" val={nalog.stevilkaNaloga} mono/><R label="Relacija" val={`${nalog.nakKraj} → ${nalog.razKraj}`}/><R label="Blago" val={nalog.blago}/><button style={{...s.btnSm,marginTop:8,width:"100%"}} onClick={()=>{setSelRacun(null);odpriNalog(nalog);}}>Odpri nalog →</button></Sec>}
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
+              {r.status==="osnutek"&&<button style={s.rBtn} onClick={()=>sprStR("poslan")}>Poslan</button>}
+              {r.status==="poslan"&&<button style={s.rBtn} onClick={()=>sprStR("placano")}>Placano</button>}
+              {(r.status==="poslan"||r.status==="osnutek")&&<button style={{...s.rBtn,color:"#dc2626"}} onClick={()=>sprStR("zapadlo")}>Zapadlo</button>}
+            </div>
+            {r.kontaktEmail&&<a href={`mailto:${r.kontaktEmail}?subject=Racun ${r.stevilkaRacuna||r.id}&body=Spotovani,%0D%0AV prilogi racun ${r.stevilkaRacuna||r.id} v znesku ${(r.znesek||0).toFixed(2)} EUR.%0D%0ALep pozdrav,%0D%0AMatjaz Jurjevec`} style={{...s.btnP,background:"#16a34a",textDecoration:"none",display:"block",textAlign:"center",marginBottom:8}}>Posli email</a>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if(selObracun){
     const ob=selObracun;const v=voz(ob.voznikId);
     const zaslKm=(ob.km||0)*0.18,zaslStr=(ob.stranke||0)*20,ost=(ob.stroski||[]).reduce((a,x)=>a+(parseFloat(x.znesek)||0),0);
@@ -365,7 +397,7 @@ export default function DispecarPlasca() {
         {tab==="nalogi"&&<NalogiTab nalogi={st.nalogi} onSelect={odpriNalog} openNovNalog={openNovNalog}/>}
         {tab==="vozniki"&&<VoznikiTab nalogi={st.nalogi} vozniki={vozniki}/>}
         {tab==="obracuni"&&<ObracuniTab obracuni={st.obracuni} onSelect={setSelObracun}/>}
-        {tab==="finance"&&<FinanceTab st={st} upd={upd} showToast={showToast}/>}
+        {tab==="finance"&&<FinanceTab st={st} upd={upd} showToast={showToast} onSelRacun={setSelRacun}/>}
         {tab==="prosticmr"&&<ProstiCMRTab st={st} upd={upd} showToast={showToast}/>}
         {tab==="email"&&<EmailNalogTab upd={upd} showToast={showToast} naložiPodatke={naložiPodatke} vozniki={vozniki}/>}
       </div>
@@ -485,7 +517,8 @@ function ObracuniTab({obracuni,onSelect}){
   </div>);
 }
 
-function FinanceTab({st,upd,showToast}){
+const [selObracun,setSelObracun]=useState(null);
+  const [selRacun,setSelRacun]=useState(null);
   const [f,setF]=useState("vsi");
   const [modal,setModal]=useState(null);
   const [form,setForm]=useState({});
@@ -536,8 +569,9 @@ function FinanceTab({st,upd,showToast}){
       ))}
     </div>
     {list.length===0&&<div style={s.empty}>Ni računov.</div>}
-    {list.map(r=>{const sc=rSC[r.status]||rSC.osnutek;const zap=r.status==="poslan"&&new Date(r.rok)<new Date();return(
-      <div key={r.id} style={{background:"#fff",borderRadius:12,padding:"14px 16px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+    {r.status==="osnutek"&&<button style={s.rBtn} onClick={()=>sprSt(r.id,"poslan")}>📤 Poslan</button>}
+{list.map(r=>{const sc=rSC[r.status]||rSC.osnutek;const zap=r.status==="poslan"&&new Date(r.rok)<new Date();return(
+      <div key={r.id} style={{background:"#fff",borderRadius:12,padding:"14px 16px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",cursor:"pointer"}} onClick={()=>setSelRacun(r)}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
           <div><div style={{display:"flex",gap:8,marginBottom:3}}><span style={{fontSize:12,fontFamily:"monospace",fontWeight:700,color:"#2563eb"}}>{r.id}</span><span style={{...s.fBtn,padding:"2px 8px",background:zap?"#fef2f2":sc.bg,color:zap?"#dc2626":sc.color,border:"none",cursor:"default"}}>{zap?"⚠️ Zapadlo":sc.label}</span></div>
           <div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{r.stranka}</div>
