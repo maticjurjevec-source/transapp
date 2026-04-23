@@ -47,6 +47,19 @@ const LS="dispecar_v2";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
+async function uploadOriginalPdf(file){
+  try{
+    const uuid=crypto.randomUUID();
+    const fileName=`${uuid}/${Date.now()}-${file.name}`;
+    const{data,error}=await supabase.storage.from("originalni-nalogi").upload(fileName,file,{cacheControl:"3600",upsert:false});
+    if(error)throw error;
+    const{data:urlData}=supabase.storage.from("originalni-nalogi").getPublicUrl(fileName);
+    return urlData?.publicUrl||null;
+  }catch(err){
+    console.error("Upload PDF napaka:",err);
+    return null;
+  }
+}
 
 export default function DispecarPlasca() {
   const [st,setSt]=useState(initState);
@@ -171,6 +184,9 @@ export default function DispecarPlasca() {
         raz_cas: form.razCas ? form.razCas.slice(0,5) : null,
         navodila: form.navodila,
         voznik_id: form.voznikId||null,
+        original_pdf_url: form.originalPdfUrl||null,
+znesek_original: form.znesek||null,
+je_slovenska_ddv: form.jeSlovenskaDdv!==undefined?form.jeSlovenskaDdv:null,
       }]).select().single();
       if(error) throw error;
       await naložiPodatke();
@@ -218,11 +234,15 @@ export default function DispecarPlasca() {
     }
   };
 
-  const handleDrop=async(e)=>{
+const handleDrop=async(e)=>{
     e.preventDefault();setDragOver(false);
     const file=e.dataTransfer?.files?.[0]||e.target?.files?.[0];
     if(!file)return;
     setAiParsing(true);showToast("⏳ AI bere dokument...");
+    let pdfUrl=null;
+    if(file.type==="application/pdf"){
+      pdfUrl=await uploadOriginalPdf(file);
+    }
     try{
       let txt="";
       if(file.type==="application/pdf"){
@@ -234,11 +254,11 @@ export default function DispecarPlasca() {
         }catch(e){txt="";}
       }
       if(!txt)txt=await file.text().catch(()=>file.name);
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:`Iz tega dokumenta izvleci podatke za transportni nalog. Vrni SAMO JSON:\n{"stranka":"","blago":"","kolicina":"","teza":"","nakFirma":"","nakKraj":"","nakNaslov":"","nakReferenca":"","nakDatum":"","nakCas":"","razFirma":"","razKraj":"","razNaslov":"","razReferenca":"","razDatum":"","razCas":"","navodila":"","kontaktEmail":""}\nDatumi: YYYY-MM-DD, casi: HH:MM.\n\nDokument:\n${txt}`}]})});
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:`Iz tega dokumenta izvleci podatke za transportni nalog. Vrni SAMO JSON:\n{"stranka":"","blago":"","kolicina":"","teza":"","nakFirma":"","nakKraj":"","nakNaslov":"","nakReferenca":"","nakDatum":"","nakCas":"","razFirma":"","razKraj":"","razNaslov":"","razReferenca":"","razDatum":"","razCas":"","navodila":"","kontaktEmail":"","znesek":"","jeSlovenskaDdv":true}\n\nPolja:\n- znesek: cena prevoza v EUR (samo število, npr "850.00"). Poišči v dokumentu besede kot price, rate, freight, Preis, cena.\n- jeSlovenskaDdv: true če je naročnik iz Slovenije, false če je tuj (glede na državo naročnika).\n- kontaktEmail: email za pošiljanje računa (poišči besede invoice, Rechnung, račun, faktura).\n- navodila: vse posebne zahteve in navodila iz dokumenta.\nDatumi: YYYY-MM-DD, casi: HH:MM.\n\nDokument:\n${txt}`}]})});
       const data=await res.json();
       const parsed=JSON.parse(data.content?.map(i=>i.text||"").join("").replace(/```json|```/g,"").trim());
-      setForm(f=>({...f,...parsed}));setModal("nalog");showToast("✅ AI izpolnil nalog!");
-    }catch(err){setModal("nalog");showToast("⚠️ AI ni mogel prebrati – izpolni ročno.",true);}
+      setForm(f=>({...f,...parsed,originalPdfUrl:pdfUrl||""}));setModal("nalog");showToast("✅ AI izpolnil nalog!");
+    }catch(err){setForm({originalPdfUrl:pdfUrl||""});setModal("nalog");showToast("⚠️ AI ni mogel prebrati – izpolni ročno.",true);}
     setAiParsing(false);
   };
 
