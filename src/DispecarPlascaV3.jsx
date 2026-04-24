@@ -254,7 +254,7 @@ const handleDrop=async(e)=>{
         }catch(e){txt="";}
       }
       if(!txt)txt=await file.text().catch(()=>file.name);
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:`Iz tega dokumenta izvleci podatke za transportni nalog. Vrni SAMO JSON:\n{"stranka":"","blago":"","kolicina":"","teza":"","nakFirma":"","nakKraj":"","nakNaslov":"","nakReferenca":"","nakDatum":"","nakCas":"","razFirma":"","razKraj":"","razNaslov":"","razReferenca":"","razDatum":"","razCas":"","navodila":"","kontaktEmail":"","znesek":"","jeSlovenskaDdv":true}\n\nPolja:\n- znesek: cena prevoza v EUR (samo število, npr "850.00"). Poišči v dokumentu besede kot price, rate, freight, Preis, cena.\n- jeSlovenskaDdv: true če je naročnik iz Slovenije, false če je tuj (glede na državo naročnika).\n- kontaktEmail: email za pošiljanje računa (poišči besede invoice, Rechnung, račun, faktura).\n- navodila: vse posebne zahteve in navodila iz dokumenta.\nDatumi: YYYY-MM-DD, casi: HH:MM.\n\nDokument:\n${txt}`}]})});
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:`Iz tega transportnega naloga izvleci podatke. POZOR za polje "stranka": stranka je ŠPEDICIJA ali LOGISTIČNO PODJETJE ki je poslalo ta nalog (npr. Cargo Partner, DHL, Rooskens, ROCS Trading, Fersped ipd.) — torej tisti ki naroča prevoz. NI nakladna firma, NI razkladna firma, NI prevoznik (JURJEVEC). Poišči logo, glavo dokumenta ali polje "ordered by/Auftraggeber/naročnik" da najdeš pravo stranko. Poišči tudi ceno prevoza (price/rate/freight/Preis/Fracht) in jo vpiši v polje znesek kot število. Vrni SAMO JSON:\n{"stranka":"","blago":"","kolicina":"","teza":"","nakFirma":"","nakKraj":"","nakNaslov":"","nakReferenca":"","nakDatum":"","nakCas":"","razFirma":"","razKraj":"","razNaslov":"","razReferenca":"","razDatum":"","razCas":"","navodila":"","kontaktEmail":"","znesek":"","jeSlovenskaDdv":true}\n\nPolja:\n- znesek: cena prevoza v EUR (samo število, npr "850.00"). Poišči v dokumentu besede kot price, rate, freight, Preis, cena.\n- jeSlovenskaDdv: true če je naročnik iz Slovenije, false če je tuj (glede na državo naročnika).\n- kontaktEmail: email za pošiljanje računa (poišči besede invoice, Rechnung, račun, faktura).\n- navodila: vse posebne zahteve in navodila iz dokumenta.\nDatumi: YYYY-MM-DD, casi: HH:MM.\n\nDokument:\n${txt}`}]})});
       const data=await res.json();
       const parsed=JSON.parse(data.content?.map(i=>i.text||"").join("").replace(/```json|```/g,"").trim());
       setForm(f=>({...f,...parsed,originalPdfUrl:pdfUrl||""}));setModal("nalog");showToast("✅ AI izpolnil nalog!");
@@ -303,6 +303,7 @@ const handleDrop=async(e)=>{
           {n.navodila&&<Sec title="⚠️ Navodila"><div style={{fontSize:13,background:"#fffbeb",borderRadius:8,padding:"10px 12px",border:"1px solid #fde68a"}}>{n.navodila}</div></Sec>}
           {n.kontaktEmail&&<Sec title="💶 Kontakt za račun"><R label="Email" val={n.kontaktEmail} mono/></Sec>}
           {/* CMR sekcija - vedno vidna za zaključene naloge */}
+          <Sec title="📄 Original nalog od naročnika">{(n.original_pdf_url||n.originalPdfUrl)?<div><iframe src={n.original_pdf_url||n.originalPdfUrl} style={{width:"100%",height:500,border:"none",borderRadius:8}} title="Original nalog"/><a href={n.original_pdf_url||n.originalPdfUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",textAlign:"center",padding:8,fontSize:12,color:"#2563eb",fontWeight:600}}>Odpri v novem zavihku ↗</a></div>:<div><div style={{fontSize:13,color:"#94a3b8",marginBottom:8}}>Ni naložen.</div><input type="file" id={`pdf-${n.id}`} accept=".pdf" style={{display:"none"}} onChange={async(e)=>{const file=e.target.files?.[0];if(!file)return;showToast("⏳ Nalagam PDF...");const url=await uploadOriginalPdf(file);if(url){await supabase.from('nalogi').update({original_pdf_url:url}).eq('id',n.id);await naložiPodatke();odpriNalog({...n,original_pdf_url:url});showToast("✅ PDF naložen!");}else{showToast("❌ Napaka pri uploadu!",true);}}}/><label htmlFor={`pdf-${n.id}`} style={{background:"#2563eb",color:"#fff",padding:"8px 16px",borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer"}}>📂 Naloži original PDF</label></div>}</Sec>
           <Sec title="📄 CMR dokumenti">
             {cmrSlike.length > 0 ? (
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
@@ -991,6 +992,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
   const [korak, setKorak] = useState("vnos");
   const [vnosText, setVnosText] = useState("");
   const [priponka, setPriponka] = useState(null);
+  const [priponkaFile, setPriponkaFile] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [form, setForm] = useState({});
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
@@ -1017,6 +1019,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
           const tc = await p.getTextContent();
           txt += tc.items.map(x=>x.str).join(" ") + "\n";
         }
+        setPriponkaFile(file);
         setPriponka({ ime: file.name, vsebina: txt.trim(), tip: "pdf" });
       } else {
         const txt = await file.text();
@@ -1055,6 +1058,11 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
   const ustvariNalog = async () => {
     if (!form.stranka||!form.nakKraj||!form.razKraj) return showToast("Izpolni obvezna polja!", true);
     try {
+      let pdfUrl=null;
+      if(priponkaFile){
+        showToast("⏳ Nalagam PDF...");
+        pdfUrl=await uploadOriginalPdf(priponkaFile);
+      }
       const { data, error } = await supabase.from('nalogi').insert([{
         stevilka_naloga: '',
         status: 'nov',
@@ -1076,6 +1084,9 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
         raz_cas: form.razCas ? form.razCas.slice(0,5) : null,
         navodila: form.navodila||"",
         voznik_id: form.voznikId||null,
+        original_pdf_url: pdfUrl||form.originalPdfUrl||null,
+        znesek_original: form.znesek||null,
+        je_slovenska_ddv: form.jeSlovenskaDdv!==undefined?form.jeSlovenskaDdv:null,
       }]).select().single();
       if (error) throw error;
       await naložiPodatke();
