@@ -492,16 +492,72 @@ function VoznikiTab({nalogi,vozniki}){
 }
 
 function ObracuniTab({obracuni,onSelect}){
-  const sk=obracuni.reduce((a,o)=>a+(o.km||0),0);
-  const sz=obracuni.reduce((a,o)=>a+(o.km||0)*0.18+(o.stranke||0)*20+(o.stroski||[]).reduce((b,x)=>b+(parseFloat(x.znesek)||0),0),0);
+  const [tedenskiOb,setTedenskiOb]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [selOb,setSelOb]=useState(null);
+
+  useEffect(()=>{
+    supabase.from("tedenski_obracuni").select("*, vozniki(id,ime,priimek,vozilo)").order("datum_od",{ascending:false}).then(({data})=>{
+      if(data)setTedenskiOb(data);
+      setLoading(false);
+    });
+  },[]);
+
+  const TARIFA_KM=0.185;const TARIFA_STR=20;const TARIFA_DOPUST=40;
+  const skupajKm=tedenskiOb.reduce((a,o)=>a+(o.km_prevozeni||0),0);
+  const skupajZnesek=tedenskiOb.reduce((a,o)=>a+(o.sestevek||0),0);
+
+  if(selOb){
+    const o=selOb;const v=o.vozniki;const prevozi=o.prevozi||[];const tankanja=o.tankanja||[];const stroski=o.drugi_stroski||[];
+    const zaslKm=(o.km_prevozeni||0)*TARIFA_KM;const zaslStr=(o.stevilo_strank||0)*TARIFA_STR;const zaslDop=(o.dopust_dni||0)*TARIFA_DOPUST;
+    const zaslStr2=stroski.reduce((a,x)=>a+(parseFloat(x.znesek)||0),0);
+    return(<div>
+      <button style={{...s.fBtn,marginBottom:12}} onClick={()=>setSelOb(null)}>← Nazaj</button>
+      <div style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:14,padding:18,color:"#fff",marginBottom:14}}>
+        <div style={{fontSize:18,fontWeight:800}}>{v?`${v.ime} ${v.priimek}`:"Voznik"}</div>
+        <div style={{fontSize:12,opacity:0.7,marginTop:2}}>{v?.vozilo||""} · {fmt(o.datum_od+"T00:00:00")} – {fmt(o.datum_do+"T00:00:00")}</div>
+        <div style={{fontSize:10,marginTop:6,padding:"3px 10px",borderRadius:20,display:"inline-block",background:o.status==="poslan"?"rgba(22,163,74,0.3)":"rgba(255,255,255,0.15)",color:o.status==="poslan"?"#86efac":"#fff"}}>{o.status==="poslan"?"✅ Poslan":"⏳ Osnutek"}</div>
+      </div>
+      <Sec title="🛣️ Kilometri"><R label="Začetni km" val={o.km_zacetek?.toLocaleString()||"–"}/><R label="Končni km" val={o.km_konec?.toLocaleString()||"–"}/><R label="Prevoženi km" val={`${(o.km_prevozeni||0).toLocaleString()} km`} bold/><R label={`× ${TARIFA_KM} €`} val={`${zaslKm.toFixed(2)} €`} bold/></Sec>
+      <Sec title="👥 Stranke"><R label="Število strank" val={o.stevilo_strank||0}/><R label={`× ${TARIFA_STR} €`} val={`${zaslStr.toFixed(2)} €`} bold/></Sec>
+      {prevozi.length>0&&<Sec title="🚛 Prevozi">{prevozi.map((p,i)=><R key={i} label={`#${p.st||i+1}`} val={`${p.nakKraj} → ${p.razKraj}`}/>)}</Sec>}
+      {tankanja.length>0&&<Sec title="⛽ Tankanja">{tankanja.map((t,i)=><R key={i} label={t.dan?fmt(t.dan+"T00:00:00"):`#${i+1}`} val={`${t.kolicina||"?"} L · ${t.lokacija||"?"}`}/>)}</Sec>}
+      {(o.dopust_dni>0||o.bolniska_dni>0||o.cakanje_opis)&&<Sec title="📋 Ostalo">
+        {o.dopust_dni>0&&<R label="Dopust" val={`${o.dopust_dni} dni × ${TARIFA_DOPUST} € = ${zaslDop.toFixed(2)} €`}/>}
+        {o.bolniska_dni>0&&<R label="Bolniška" val={`${o.bolniska_dni} dni`}/>}
+        {o.cakanje_opis&&<R label="Čakanje" val={o.cakanje_opis}/>}
+      </Sec>}
+      {stroski.length>0&&<Sec title="🧾 Drugi stroški">{stroski.map((x,i)=><R key={i} label={x.opis||"Strošek"} val={`${parseFloat(x.znesek).toFixed(2)} €`}/>)}</Sec>}
+      <div style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:14,padding:18,color:"#fff",marginTop:8}}>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:14,opacity:0.85,padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.1)"}}><span>Km ({(o.km_prevozeni||0).toLocaleString()} × {TARIFA_KM} €)</span><span>{zaslKm.toFixed(2)} €</span></div>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:14,opacity:0.85,padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.1)"}}><span>Stranke ({o.stevilo_strank||0} × {TARIFA_STR} €)</span><span>{zaslStr.toFixed(2)} €</span></div>
+        {zaslDop>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:14,opacity:0.85,padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.1)"}}><span>Dopust</span><span>{zaslDop.toFixed(2)} €</span></div>}
+        {zaslStr2>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:14,opacity:0.85,padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.1)"}}><span>Drugi stroški</span><span>+ {zaslStr2.toFixed(2)} €</span></div>}
+        <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:22,paddingTop:12}}><span>SEŠTEVEK</span><span>{(o.sestevek||0).toFixed(2)} €</span></div>
+      </div>
+    </div>);
+  }
+
   return(<div>
     <div style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:14,padding:"16px 20px",marginBottom:14,color:"#fff",display:"flex",justifyContent:"space-around"}}>
-      <div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:800}}>{obracuni.length}</div><div style={{fontSize:11,opacity:0.7}}>Obračunov</div></div>
-      <div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:800}}>{sk.toLocaleString()} km</div><div style={{fontSize:11,opacity:0.7}}>Skupaj km</div></div>
-      <div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:800,color:"#86efac"}}>{sz.toFixed(0)} €</div><div style={{fontSize:11,opacity:0.7}}>Za izplačilo</div></div>
+      <div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:800}}>{tedenskiOb.length}</div><div style={{fontSize:11,opacity:0.7}}>Obračunov</div></div>
+      <div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:800}}>{skupajKm.toLocaleString()} km</div><div style={{fontSize:11,opacity:0.7}}>Skupaj km</div></div>
+      <div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:800,color:"#86efac"}}>{skupajZnesek.toFixed(0)} €</div><div style={{fontSize:11,opacity:0.7}}>Za izplačilo</div></div>
     </div>
-    {obracuni.length===0&&<div style={s.empty}>Ni prejetih obračunov.</div>}
-    {obracuni.map(o=><OC key={o.id} o={o} onClick={()=>onSelect(o)}/>)}
+    {loading&&<div style={{textAlign:"center",padding:20,color:"#94a3b8"}}>⏳ Nalagam...</div>}
+    {!loading&&tedenskiOb.length===0&&<div style={s.empty}>Ni tedenskih obračunov.</div>}
+    {tedenskiOb.map(o=>{const v=o.vozniki;return(
+      <button key={o.id} onClick={()=>setSelOb(o)} style={{width:"100%",background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:9,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:"none",cursor:"pointer",textAlign:"left",borderLeft:`4px solid ${o.status==="poslan"?"#16a34a":"#d97706"}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{v?`${v.ime} ${v.priimek}`:"Voznik"}</div>
+            <div style={{fontSize:12,color:"#64748b"}}>{fmt(o.datum_od+"T00:00:00")} – {fmt(o.datum_do+"T00:00:00")} · {v?.vozilo||""}</div>
+            <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{(o.km_prevozeni||0).toLocaleString()} km · {o.stevilo_strank||0} strank {o.status==="poslan"?"· ✅":"· ⏳"}</div>
+          </div>
+          <div style={{fontWeight:800,fontSize:18,color:"#16a34a"}}>{(o.sestevek||0).toFixed(2)} €</div>
+        </div>
+      </button>
+    );})}
   </div>);
 }
 
