@@ -396,18 +396,63 @@ function ProstiCMRTab({ st, upd, showToast }) {
   const [slike, setSlike] = useState([]);
   const [opomba, setOpomba] = useState("");
   const [poslan, setPostlan] = useState(false);
-  const nalogNajden = st.nalogi?.find(n=>n.stevilkaNaloga?.toUpperCase()===stevilkaNaloga.toUpperCase());
-  const arhiv = (st.prostiCMR||[]).slice().reverse();
+  const [arhiv, setArhiv] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const nalogNajden = st.nalogi?.find(n => n.stevilkaNaloga?.toUpperCase() === stevilkaNaloga.toUpperCase());
+
+  useEffect(()=>{
+    setLoading(true);
+    supabase.from("prosti_cmr").select("*").order("created_at",{ascending:false}).then(({data})=>{
+      if(data)setArhiv(data);
+      setLoading(false);
+    });
+  },[]);
 
   const dodajSliko = async(e)=>{const file=e.target.files[0];if(!file)return;showToast("⏳ Optimizacija...");const reader=new FileReader();reader.onload=async(ev)=>{const opt=await optimizejSliko(ev.target.result);setSlike(f=>[...f,{img:opt,ime:file.name,cas:new Date().toISOString()}]);showToast("✅ Dodana!");};reader.readAsDataURL(file);e.target.value="";};
   const odstraniSliko = (idx)=>setSlike(f=>f.filter((_,i)=>i!==idx));
-  const posljiCMR = ()=>{
+
+  const posljiCMR = async()=>{
     if(!stevilkaNaloga)return showToast("Vnesi številko naloga!",true);
     if(slike.length===0)return showToast("Dodaj vsaj eno sliko!",true);
-    const cmr={id:Date.now(),stevilkaNaloga:stevilkaNaloga.toUpperCase(),slike,opomba,cas:new Date().toISOString(),voznik:st.voznik.ime,vozilo:st.voznik.vozilo};
-    if(nalogNajden){upd(s=>({...s,nalogi:s.nalogi.map(n=>n.id===nalogNajden.id?{...n,cmrSlike:[...(n.cmrSlike||[]),...slike]}:n),prostiCMR:[...(s.prostiCMR||[]),{...cmr,povezan:true}]}));showToast(`✅ CMR dodan k nalogu!`);}
-    else{upd(s=>({...s,prostiCMR:[...(s.prostiCMR||[]),{...cmr,povezan:false}]}));showToast("✅ CMR poslan dispečerju.");}
-    setPostlan(true);setStevilkaNaloga("");setSlike([]);setOpomba("");setTimeout(()=>{setPostlan(false);setPogled("arhiv");},1500);
+    try{
+      // Upload slik v Storage
+      const uploadedSlike=[];
+      for(const sl of slike){
+        const base64=sl.img.split(',')[1];
+        const byteArr=Uint8Array.from(atob(base64),c=>c.charCodeAt(0));
+        const blob=new Blob([byteArr],{type:'image/jpeg'});
+        const pot=`prosti/${Date.now()}-${sl.ime||'cmr.jpg'}`;
+        await supabase.storage.from('cmr-dokumenti').upload(pot,blob,{contentType:'image/jpeg',upsert:false});
+        const{data:urlData}=supabase.storage.from('cmr-dokumenti').getPublicUrl(pot);
+        uploadedSlike.push({url:urlData?.publicUrl,ime:sl.ime,pot});
+      }
+      // Shrani v Supabase
+      const povezan=!!nalogNajden;
+      const{error}=await supabase.from("prosti_cmr").insert([{
+        stevilka_naloga:stevilkaNaloga.toUpperCase(),
+        opomba,
+        slike:uploadedSlike,
+        povezan,
+        nalog_id:nalogNajden?.id||null,
+      }]);
+      if(error)throw error;
+      // Če je nalog najden, dodaj CMR tudi v cmr_dokumenti tabelo
+      if(nalogNajden){
+        for(const sl of uploadedSlike){
+          await supabase.from('cmr_dokumenti').insert([{nalog_id:nalogNajden.id,ime_datoteke:sl.ime||'cmr.jpg',storage_pot:sl.pot}]);
+        }
+      }
+      showToast(povezan?`✅ CMR dodan k nalogu ${stevilkaNaloga}!`:"✅ CMR poslan dispečerju.");
+      setPostlan(true);setStevilkaNaloga("");setSlike([]);setOpomba("");
+      // Osveži arhiv
+      const{data:a}=await supabase.from("prosti_cmr").select("*").order("created_at",{ascending:false});
+      if(a)setArhiv(a);
+      setTimeout(()=>{setPostlan(false);setPogled("arhiv");},1500);
+    }catch(err){
+      showToast("❌ Napaka: "+err.message,true);
+      console.error(err);
+    }
   };
 
   return(<div>
@@ -416,8 +461,8 @@ function ProstiCMRTab({ st, upd, showToast }) {
     {pogled==="nov"&&<div style={s.card}><div style={s.cardTitle}>📸 CMR brez naloga</div>
       <div style={{fontSize:12,color:"#64748b",marginBottom:16,lineHeight:1.6}}>Vnesi <b>številko naloga</b> ki piše na CMR listini.</div>
       <div style={{marginBottom:14}}><label style={s.label}>📋 Številka naloga *</label>
-        <input style={{...s.inputBig,textTransform:"uppercase",borderColor:stevilkaNaloga?(nalogNajden?"#16a34a":"#f59e0b"):"#e2e8f0"}} placeholder="npr. NAL-2025-042" value={stevilkaNaloga} onChange={e=>setStevilkaNaloga(e.target.value)}/>
-        {stevilkaNaloga&&<div style={{marginTop:6,fontSize:13,fontWeight:600,padding:"6px 12px",borderRadius:8,background:nalogNajden?"#f0fdf4":"#fffbeb",color:nalogNajden?"#16a34a":"#d97706"}}>{nalogNajden?`✅ ${nalogNajden.stranka} · ${nalogNajden.nakKraj} → ${nalogNajden.razKraj}`:"⚠️ Nalog ni v sistemu"}</div>}</div>
+        <input style={{...s.inputBig,textTransform:"uppercase",borderColor:stevilkaNaloga?(nalogNajden?"#16a34a":"#f59e0b"):"#e2e8f0"}} placeholder="npr. NAL-2026-042" value={stevilkaNaloga} onChange={e=>setStevilkaNaloga(e.target.value)}/>
+        {stevilkaNaloga&&<div style={{marginTop:6,fontSize:13,fontWeight:600,padding:"6px 12px",borderRadius:8,background:nalogNajden?"#f0fdf4":"#fffbeb",color:nalogNajden?"#16a34a":"#d97706"}}>{nalogNajden?`✅ ${nalogNajden.stranka} · ${nalogNajden.nakKraj} → ${nalogNajden.razKraj}`:"⚠️ Nalog ni v sistemu — CMR bo poslan dispečerju"}</div>}</div>
       <div style={{marginBottom:14}}><label style={s.smallLabel}>Opomba</label><input style={s.input} placeholder="npr. Preložitev iz kamiona" value={opomba} onChange={e=>setOpomba(e.target.value)}/></div>
       {slike.length>0&&<div style={s.cmrGallery}>{slike.map((sl,i)=><div key={i} style={s.cmrGalleryItem}><img src={sl.img} alt={`CMR ${i+1}`} style={s.cmrGalleryImg}/><button style={s.cmrOdstraniBtn} onClick={()=>odstraniSliko(i)}>✕</button><div style={s.cmrGalleryLbl}>✅ {i+1}.</div></div>)}</div>}
       <input type="file" accept="image/*" capture="environment" id="prosti-cmr-add" style={{display:"none"}} onChange={dodajSliko}/>
@@ -425,10 +470,12 @@ function ProstiCMRTab({ st, upd, showToast }) {
       {slike.length>0&&<div style={s.cmrSteviloBadge}>✅ {slike.length} {slike.length===1?"slika":"slik"} dodanih</div>}
       {poslan&&<div style={{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:12,padding:"12px 16px",textAlign:"center",fontSize:14,fontWeight:700,color:"#16a34a",marginBottom:14}}>✅ Uspešno!</div>}
       <button style={{...s.btnPrimary,opacity:(stevilkaNaloga&&slike.length>0)?1:0.45}} onClick={posljiCMR}>📤 Pošlji CMR</button></div>}
-    {pogled==="arhiv"&&<div>{arhiv.length===0&&<div style={s.empty}>Ni prostih CMR.</div>}
-      {arhiv.map(cmr=><div key={cmr.id} style={s.vnosCard}><div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontWeight:800,fontSize:15,fontFamily:"monospace",color:"#2563eb"}}>{cmr.stevilkaNaloga}</span><span style={{fontSize:11,color:"#94a3b8"}}>{fmt(cmr.cas)}</span></div>
-        {cmr.slike?.length>0&&<div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>{cmr.slike.filter(Boolean).map((sl,i)=><img key={i} src={sl.img} alt="" style={{width:55,height:75,objectFit:"cover",borderRadius:6,border:"1px solid #e2e8f0"}}/>)}</div>}
-        <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:8,height:8,borderRadius:"50%",background:cmr.povezan?"#16a34a":"#d97706"}}/><span style={{fontSize:12,fontWeight:700,color:cmr.povezan?"#16a34a":"#d97706"}}>{cmr.povezan?"Povezan":"Čaka"}</span></div></div>)}</div>}
+    {pogled==="arhiv"&&<div>{loading&&<div style={{textAlign:"center",padding:20,color:"#94a3b8"}}>⏳ Nalagam...</div>}
+      {!loading&&arhiv.length===0&&<div style={s.empty}>Ni prostih CMR.</div>}
+      {arhiv.map(cmr=><div key={cmr.id} style={s.vnosCard}><div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontWeight:800,fontSize:15,fontFamily:"monospace",color:"#2563eb"}}>{cmr.stevilka_naloga}</span><span style={{fontSize:11,color:"#94a3b8"}}>{fmt(cmr.created_at)}</span></div>
+        {cmr.opomba&&<div style={{fontSize:12,color:"#64748b",marginBottom:6}}>📝 {cmr.opomba}</div>}
+        {cmr.slike?.length>0&&<div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>{cmr.slike.map((sl,i)=><img key={i} src={sl.url} alt="" style={{width:55,height:75,objectFit:"cover",borderRadius:6,border:"1px solid #e2e8f0"}}/>)}</div>}
+        <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:8,height:8,borderRadius:"50%",background:cmr.povezan?"#16a34a":"#d97706"}}/><span style={{fontSize:12,fontWeight:700,color:cmr.povezan?"#16a34a":"#d97706"}}>{cmr.povezan?"Povezan z nalogom":"Čaka na dispečerja"}</span></div></div>)}</div>}
   </div>);
 }
 

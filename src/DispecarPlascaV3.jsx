@@ -443,7 +443,7 @@ const handleDrop=async(e)=>{
                 <div style={{gridColumn:"1/-1"}}><label style={s.lbl}>Navodila</label><textarea style={{...s.inp,resize:"vertical"}} rows={2} value={form.navodila||""} onChange={e=>setForm(f=>({...f,navodila:e.target.value}))}/></div>
                 <div style={{gridColumn:"1/-1"}}><I label="💶 Email kontakta za račun" val={form.kontaktEmail} set={v=>setForm(f=>({...f,kontaktEmail:v}))} ph="finance@stranka.com"/></div>
               </div>
-              <button style={s.btnP} onClick={form.editId?submitEdit:submitNalog}>{form.editId?"💾 Shrani spremembe":"📤 Ustvari nalog"}</button>
+              <button style={s.btnP} onClick={submitNalog}>📤 Ustvari nalog</button>
             </div>
           </div>
         </div>
@@ -1044,40 +1044,65 @@ function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
 
 
 function ProstiCMRTab({st,upd,showToast}){
-  const nepov=(st.prostiCMR||[]).filter(c=>!c.povezan);
-  const pov=(st.prostiCMR||[]).filter(c=>c.povezan);
-  const [sel,setSel]=useState(null);
+  const [prostiCmr,setProstiCmr]=useState([]);
+  const [loading,setLoading]=useState(true);
   const [vn,setVn]=useState("");
-  const poveziCMR=(cmr)=>{
+  const [sel,setSel]=useState(null);
+
+  useEffect(()=>{
+    supabase.from("prosti_cmr").select("*, vozniki(ime,priimek,vozilo)").order("created_at",{ascending:false}).then(({data})=>{
+      if(data)setProstiCmr(data);
+      setLoading(false);
+    });
+  },[]);
+
+  const nepov=prostiCmr.filter(c=>!c.povezan);
+  const pov=prostiCmr.filter(c=>c.povezan);
+
+  const poveziCMR=async(cmr)=>{
     const n=st.nalogi.find(x=>x.stevilkaNaloga?.toUpperCase()===vn.toUpperCase());
     if(!n)return showToast("Nalog ne obstaja!",true);
-    upd(s=>({...s,prostiCMR:(s.prostiCMR||[]).map(c=>c.id===cmr.id?{...c,povezan:true,nalogPovezan:n.stevilkaNaloga}:c),nalogi:s.nalogi.map(x=>x.id===n.id?{...x,cmrSlike:[...(x.cmrSlike||[]),...(cmr.slike||[])]}:x)}));
-    showToast(`✅ CMR povezan z ${n.stevilkaNaloga}!`);setSel(null);setVn("");
+    try{
+      await supabase.from("prosti_cmr").update({povezan:true,nalog_id:n.id}).eq("id",cmr.id);
+      for(const sl of (cmr.slike||[])){
+        if(sl.pot){
+          await supabase.from('cmr_dokumenti').insert([{nalog_id:n.id,ime_datoteke:sl.ime||'cmr.jpg',storage_pot:sl.pot}]);
+        }
+      }
+      const{data}=await supabase.from("prosti_cmr").select("*, vozniki(ime,priimek,vozilo)").order("created_at",{ascending:false});
+      if(data)setProstiCmr(data);
+      showToast(`✅ CMR povezan z ${n.stevilkaNaloga}!`);
+      setSel(null);setVn("");
+    }catch(err){showToast("❌ Napaka: "+err.message,true);}
   };
+
+  if(loading)return <div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>⏳ Nalagam...</div>;
+
   return(<div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
       <div style={{background:"#fff",borderRadius:12,padding:"14px 10px",textAlign:"center",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:20}}>⏳</div><div style={{fontSize:22,fontWeight:800,color:"#d97706"}}>{nepov.length}</div><div style={{fontSize:11,color:"#94a3b8"}}>Čakajo</div></div>
       <div style={{background:"#fff",borderRadius:12,padding:"14px 10px",textAlign:"center",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:20}}>✅</div><div style={{fontSize:22,fontWeight:800,color:"#16a34a"}}>{pov.length}</div><div style={{fontSize:11,color:"#94a3b8"}}>Povezani</div></div>
     </div>
     {nepov.length===0&&<div style={s.empty}>✅ Vsi prosti CMR so povezani.</div>}
-    {nepov.map(cmr=>(
+    {nepov.map(cmr=>{const v=cmr.vozniki;return(
       <div key={cmr.id} style={{background:"#fff",borderRadius:12,padding:14,marginBottom:10,borderLeft:"4px solid #d97706",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-          <div><div style={{fontWeight:800,fontSize:16,fontFamily:"monospace",color:"#0f2744"}}>{cmr.stevilkaNaloga}</div><div style={{fontSize:12,color:"#475569"}}>🚛 {cmr.voznik} · {cmr.vozilo}</div></div>
-          <div style={{fontSize:12,color:"#94a3b8"}}>{fmt(cmr.cas)}</div>
+          <div><div style={{fontWeight:800,fontSize:16,fontFamily:"monospace",color:"#0f2744"}}>{cmr.stevilka_naloga}</div><div style={{fontSize:12,color:"#475569"}}>🚛 {v?`${v.ime} ${v.priimek} · ${v.vozilo}`:""}</div></div>
+          <div style={{fontSize:12,color:"#94a3b8"}}>{fmt(cmr.created_at)}</div>
         </div>
         {cmr.opomba&&<div style={{fontSize:12,color:"#64748b",marginBottom:8}}>📝 {cmr.opomba}</div>}
+        {cmr.slike?.length>0&&<div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>{cmr.slike.map((sl,i)=><a key={i} href={sl.url} target="_blank" rel="noopener noreferrer"><img src={sl.url} alt="" style={{width:60,height:80,objectFit:"cover",borderRadius:6,border:"1px solid #e2e8f0"}}/></a>)}</div>}
         {sel===cmr.id?(
           <div style={{background:"#eff6ff",borderRadius:10,padding:12}}>
             <div style={{fontSize:13,fontWeight:600,color:"#1d4ed8",marginBottom:8}}>Vnesi številko naloga:</div>
-            <input style={{...s.inp,marginBottom:8,fontFamily:"monospace"}} placeholder="npr. NAL-2025-042" value={vn} onChange={e=>setVn(e.target.value)} autoFocus/>
+            <input style={{...s.inp,marginBottom:8,fontFamily:"monospace"}} placeholder="npr. NAL-2026-031" value={vn} onChange={e=>setVn(e.target.value)} autoFocus/>
             {vn&&<div style={{fontSize:12,marginBottom:8,color:st.nalogi.find(n=>n.stevilkaNaloga?.toUpperCase()===vn.toUpperCase())?"#16a34a":"#dc2626"}}>{st.nalogi.find(n=>n.stevilkaNaloga?.toUpperCase()===vn.toUpperCase())?`✅ ${st.nalogi.find(n=>n.stevilkaNaloga?.toUpperCase()===vn.toUpperCase()).stranka}`:"❌ Nalog ne obstaja"}</div>}
             <div style={{display:"flex",gap:8}}><button style={{...s.btnP,flex:1,padding:"10px"}} onClick={()=>poveziCMR(cmr)}>Poveži →</button><button style={s.btnSm} onClick={()=>{setSel(null);setVn("");}}>Prekliči</button></div>
           </div>
         ):<button style={s.btnSm} onClick={()=>setSel(cmr.id)}>🔗 Poveži z nalogom</button>}
       </div>
-    ))}
-    {pov.length>0&&<><div style={{fontWeight:700,fontSize:14,color:"#0f2744",marginBottom:10,marginTop:8}}>✅ Povezani ({pov.length})</div>{pov.map(c=><div key={c.id} style={{background:"#f0fdf4",borderRadius:10,padding:"10px 14px",marginBottom:8,borderLeft:"4px solid #16a34a",display:"flex",justifyContent:"space-between"}}><div><div style={{fontWeight:700,fontFamily:"monospace",color:"#0f2744"}}>{c.stevilkaNaloga}</div><div style={{fontSize:12,color:"#16a34a"}}>✅ → {c.nalogPovezan}</div></div><div style={{fontSize:12,color:"#94a3b8"}}>{c.voznik}</div></div>)}</>}
+    );})}
+    {pov.length>0&&<><div style={{fontWeight:700,fontSize:14,color:"#0f2744",marginBottom:10,marginTop:8}}>✅ Povezani ({pov.length})</div>{pov.map(cmr=>{const v=cmr.vozniki;return(<div key={cmr.id} style={{background:"#f0fdf4",borderRadius:10,padding:"10px 14px",marginBottom:8,borderLeft:"4px solid #16a34a",display:"flex",justifyContent:"space-between"}}><div><div style={{fontWeight:700,fontFamily:"monospace",color:"#0f2744"}}>{cmr.stevilka_naloga}</div><div style={{fontSize:12,color:"#16a34a"}}>✅ Povezan</div></div><div style={{fontSize:12,color:"#94a3b8"}}>{v?`${v.ime} ${v.priimek}`:""}</div></div>);})}</>}
   </div>);
 }
 
