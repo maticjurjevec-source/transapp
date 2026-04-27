@@ -224,6 +224,27 @@ je_slovenska_ddv: form.jeSlovenskaDdv!==undefined?form.jeSlovenskaDdv:null,
     }
   };
 
+  const urediNalog=async(id)=>{
+    const n=st.nalogi.find(x=>x.id===id);if(!n)return;
+    setForm({editId:id,voznikId:n.voznikId||"",stranka:n.stranka||"",blago:n.blago||"",kolicina:n.kolicina||"",teza:n.teza||"",nakFirma:n.nakFirma||"",nakKraj:n.nakKraj||"",nakNaslov:n.nakNaslov||"",nakReferenca:n.nakReferenca||"",nakDatum:n.nakDatum||"",nakCas:n.nakCas||"",razFirma:n.razFirma||"",razKraj:n.razKraj||"",razNaslov:n.razNaslov||"",razReferenca:n.razReferenca||"",razDatum:n.razDatum||"",razCas:n.razCas||"",navodila:n.navodila||"",kontaktEmail:n.kontaktEmail||"",znesek:n.znesek_original||n.znesekOriginal||"",stevilkaNarocnika:n.stevilka_narocnika||n.stevilkaNarocnika||""});
+    setModal("nalog");setSelNalog(null);
+  };
+  const submitEdit=async()=>{
+    if(!form.stranka||!form.nakKraj||!form.razKraj)return showToast("Izpolni obvezna polja!",true);
+    try{
+      const{error}=await supabase.from('nalogi').update({
+        stranka:form.stranka,blago:form.blago,kolicina:form.kolicina,teza:form.teza,
+        nak_firma:form.nakFirma,nak_kraj:form.nakKraj,nak_naslov:form.nakNaslov,nak_referenca:form.nakReferenca,
+        nak_datum:form.nakDatum||null,nak_cas:form.nakCas?form.nakCas.slice(0,5):null,
+        raz_firma:form.razFirma,raz_kraj:form.razKraj,raz_naslov:form.razNaslov,raz_referenca:form.razReferenca,
+        raz_datum:form.razDatum||null,raz_cas:form.razCas?form.razCas.slice(0,5):null,
+        navodila:form.navodila,voznik_id:form.voznikId||null,
+        znesek_original:form.znesek||null,stevilka_narocnika:form.stevilkaNarocnika||null,
+      }).eq('id',form.editId);
+      if(error)throw error;
+      await naložiPodatke();closeModal();showToast("✅ Nalog posodobljen!");
+    }catch(err){showToast("❌ Napaka!",true);console.error(err);}
+  };
   const izbrisiNalog=async(id)=>{
     try {
       const { error } = await supabase.from('nalogi').delete().eq('id',id);
@@ -326,6 +347,7 @@ const handleDrop=async(e)=>{
             <select style={s.sel} value={izVoz} onChange={e=>setIzVoz(e.target.value)}><option value="">– Izberi voznika –</option>{vozniki.map(v=><option key={v.id} value={v.id}>{v.ime} · {v.vozilo}</option>)}</select>
             <button style={{...s.btnP,marginTop:10,opacity:izVoz?1:0.45}} onClick={()=>izVoz&&dodelijNalog(n.id,izVoz)}>📤 Pošlji vozniku</button>
           </div>}
+          <button style={{...s.btnP,background:"#2563eb",marginTop:8}} onClick={()=>urediNalog(n.id)}>✏️ Uredi nalog</button>
           {(n.status==="nov"||n.status==="poslan")&&<button style={s.btnD} onClick={()=>izbrisiNalog(n.id)}>🗑️ Izbriši nalog</button>}
         </div>
       </div>
@@ -385,7 +407,7 @@ const handleDrop=async(e)=>{
         </div>
         {tab==="pregled"&&<PregledTab stats={stats} nalogi={st.nalogi} obracuni={st.obracuni} onSelNalog={odpriNalog} onSelOb={setSelObracun}/>}
         {tab==="nalogi"&&<NalogiTab nalogi={st.nalogi} onSelect={odpriNalog} openNovNalog={openNovNalog}/>}
-        {tab==="vozniki"&&<VoznikiTab nalogi={st.nalogi} vozniki={vozniki}/>}
+        {tab==="vozniki"&&<VoznikiTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog}/>}
         {tab==="obracuni"&&<ObracuniTab obracuni={st.obracuni} onSelect={setSelObracun}/>}
         {tab==="finance"&&<FinanceTab st={st} upd={upd} showToast={showToast}/>}
         {tab==="prosticmr"&&<ProstiCMRTab st={st} upd={upd} showToast={showToast}/>}
@@ -421,7 +443,7 @@ const handleDrop=async(e)=>{
                 <div style={{gridColumn:"1/-1"}}><label style={s.lbl}>Navodila</label><textarea style={{...s.inp,resize:"vertical"}} rows={2} value={form.navodila||""} onChange={e=>setForm(f=>({...f,navodila:e.target.value}))}/></div>
                 <div style={{gridColumn:"1/-1"}}><I label="💶 Email kontakta za račun" val={form.kontaktEmail} set={v=>setForm(f=>({...f,kontaktEmail:v}))} ph="finance@stranka.com"/></div>
               </div>
-              <button style={s.btnP} onClick={submitNalog}>📤 Ustvari nalog</button>
+              <button style={s.btnP} onClick={form.editId?submitEdit:submitNalog}>{form.editId?"💾 Shrani spremembe":"📤 Ustvari nalog"}</button>
             </div>
           </div>
         </div>
@@ -471,13 +493,26 @@ function NalogiTab({nalogi,onSelect,openNovNalog}){
   </div>);
 }
 
-function VoznikiTab({nalogi,vozniki}){
+function VoznikiTab({nalogi,vozniki,onSelect}){
+  const [selVoznik,setSelVoznik]=useState(null);
+  if(selVoznik){
+    const vn=nalogi.filter(n=>n.voznikId===selVoznik.id).sort((a,b)=>new Date(b.poslan)-new Date(a.poslan));
+    return(<div>
+      <button style={{...s.fBtn,marginBottom:12}} onClick={()=>setSelVoznik(null)}>← Nazaj na voznike</button>
+      <div style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:14,padding:16,color:"#fff",marginBottom:14,display:"flex",alignItems:"center",gap:12}}>
+        <div style={{width:44,height:44,borderRadius:"50%",background:"rgba(255,255,255,0.2)",fontSize:18,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>{selVoznik.ime.charAt(0)}</div>
+        <div><div style={{fontSize:17,fontWeight:800}}>{selVoznik.ime}</div><div style={{fontSize:12,opacity:0.7}}>{selVoznik.vozilo} · {vn.length} nalogov</div></div>
+      </div>
+      {vn.length===0&&<div style={s.empty}>Ni nalogov za tega voznika.</div>}
+      {vn.map(n=><NC key={n.id} n={n} onClick={()=>onSelect(n)}/>)}
+    </div>);
+  }
   return(<div>
     <div style={{fontWeight:700,fontSize:15,color:"#0f2744",marginBottom:12}}>Vozniki ({vozniki.length})</div>
     {vozniki.map(v=>{
       const vn=nalogi.filter(n=>n.voznikId===v.id);
       const ak=vn.filter(n=>["poslan","sprejet"].includes(n.status));
-      return(<div key={v.id} style={{background:"#fff",borderRadius:14,padding:14,marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+      return(<div key={v.id} onClick={()=>setSelVoznik(v)} style={{background:"#fff",borderRadius:14,padding:14,marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",cursor:"pointer",transition:"all 0.15s",border:"1px solid transparent"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.1)";e.currentTarget.style.borderColor="#cbd5e1";}} onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,0.06)";e.currentTarget.style.borderColor="transparent";}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
           <div style={{width:40,height:40,borderRadius:"50%",background:"linear-gradient(135deg,#0f2744,#1d4ed8)",color:"#fff",fontSize:16,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{v.ime.charAt(0)}</div>
           <div style={{flex:1}}><div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{v.ime}</div><div style={{fontSize:12,color:"#64748b"}}>{v.vozilo}</div></div>
