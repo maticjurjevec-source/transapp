@@ -70,7 +70,7 @@ export default function FinanceApp(){
   function getCmrUrl(cmr){
     if(!cmr?.storage_pot)return null;
     if(cmr.storage_pot.startsWith("http"))return cmr.storage_pot;
-    const{data}=supabase.storage.from("cmr_dokumenti").getPublicUrl(cmr.storage_pot);
+    const{data}=supabase.storage.from("cmr-dokumenti").getPublicUrl(cmr.storage_pot);
     return data?.publicUrl||null;
   }
 
