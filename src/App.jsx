@@ -3,6 +3,7 @@ import { supabase } from './supabase';
 import DispecarPlasca from './DispecarPlascaV3';
 import VoznikApp from './VoznikApp';
 import FinanceApp from './FinanceApp';
+import VzdrzevanjeApp from './VzdrzevanjeApp';
 
 const LS_SESSION = "transapp_session_v2";
 const getSession = () => { try { return JSON.parse(localStorage.getItem(LS_SESSION)); } catch { return null; } };
@@ -45,6 +46,7 @@ export default function App() {
   };
 
   // Finance app (ločen URL za Bernardo)
+  if (window.location.pathname === "/vzdrzevanje") return <VzdrzevanjeApp />;
   if (window.location.pathname === "/finance") {
     return <FinanceApp />;
   }
