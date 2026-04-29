@@ -136,7 +136,7 @@ function NalogDetail({nalog,onBack,onSprejmi,onZakljuci,onDodajCMR}){if(!nalog)r
 /* ===== ZAKLJUČI MODAL ===== */
 function ZakljuciModal({form,nalog,dodajSlikoCMR,odstraniSliko,onPotrdi,onClose}){const slike=(form.slike||[]).filter(Boolean);return(<div style={s.overlay}><div style={{...s.modalBox,maxHeight:"95vh"}}><div style={s.modalHead}><span style={s.modalTitle}>Zaključi nalog</span><button style={s.closeBtn} onClick={onClose}>✕</button></div><div style={s.modalBody}><div style={s.infoBox}><b>{nalog?.stranka}</b><br/><span style={{fontSize:13,color:"#475569"}}>{nalog?.stevilkaNaloga}</span></div><div style={{marginBottom:10}}><div style={s.label}>📸 CMR</div><div style={{fontSize:12,color:"#64748b",marginBottom:12}}>Dodaj slike.</div></div>{slike.length>0&&<div style={s.cmrGallery}>{slike.map((sl,i)=><div key={i} style={s.cmrGalleryItem}><img src={sl.img} alt={`CMR ${i+1}`} style={s.cmrGalleryImg}/><button style={s.cmrOdstraniBtn} onClick={()=>odstraniSliko(i)}>✕</button><div style={s.cmrGalleryLbl}>✅ {i+1}.</div></div>)}</div>}<input type="file" accept="image/*" capture="environment" id="cmr-add" style={{display:"none"}} onChange={dodajSlikoCMR}/><label htmlFor="cmr-add" style={s.cmrDodajBtn}>📷 {slike.length===0?"Fotografiraj CMR":"+ Dodaj"}</label>{slike.length>0&&<div style={s.cmrSteviloBadge}>✅ {slike.length} {slike.length===1?"slika":"slik"}</div>}<button style={s.btnPrimary} onClick={onPotrdi}>Zaključi & pošlji →</button></div></div></div>);}
 
-/* ===== PROSTI CMR TAB z AI OCR ===== */
+/* ===== PROSTI CMR TAB - HIBRID: AI OCR + DROPDOWN VSEH NALOGOV ===== */
 function ProstiCMRTab({st,upd,showToast}){
   const [pogled,setPogled]=useState("nov");
   const [stevilkaNaloga,setStevilkaNaloga]=useState("");
@@ -146,9 +146,67 @@ function ProstiCMRTab({st,upd,showToast}){
   const [arhiv,setArhiv]=useState([]);
   const [loading,setLoading]=useState(false);
   const [aiLoading,setAiLoading]=useState(false);
-  const nalogNajden=st.nalogi?.find(n=>n.stevilkaNaloga?.toUpperCase()===stevilkaNaloga.toUpperCase());
+  const [vsiNalogi,setVsiNalogi]=useState([]);
+  const [iskanje,setIskanje]=useState("");
+  const [showDropdown,setShowDropdown]=useState(false);
 
-  useEffect(()=>{setLoading(true);supabase.from("prosti_cmr").select("*").order("created_at",{ascending:false}).then(({data})=>{if(data)setArhiv(data);setLoading(false);});},[]);
+  // Smart parsing: "14" → "NAL-2026-014", "2026-14" → "NAL-2026-014", itd.
+  const normalizirajStevilko=(vnos)=>{
+    if(!vnos)return"";
+    const trenutnoLeto=new Date().getFullYear();
+    const cisto=vnos.toString().toUpperCase().replace(/\s/g,"");
+    // Že polna oblika NAL-YYYY-NNN
+    let m=cisto.match(/^NAL-?(\d{4})-?(\d{1,3})$/);
+    if(m)return`NAL-${m[1]}-${m[2].padStart(3,"0")}`;
+    // YYYY-NNN ali YYYYNNN (brez NAL)
+    m=cisto.match(/^(\d{4})-?(\d{1,3})$/);
+    if(m)return`NAL-${m[1]}-${m[2].padStart(3,"0")}`;
+    // Samo številka (1-3 števke) → NAL-trenutno_leto-NNN
+    m=cisto.match(/^(\d{1,3})$/);
+    if(m)return`NAL-${trenutnoLeto}-${m[1].padStart(3,"0")}`;
+    // Vrni kot je (uporabnik tipka)
+    return cisto;
+  };
+  const stevilkaPolna=normalizirajStevilko(stevilkaNaloga);
+  const nalogNajden=vsiNalogi.find(n=>n.stevilka_naloga?.toUpperCase()===stevilkaPolna.toUpperCase());
+
+  // Naloži arhiv prostih CMR
+  useEffect(()=>{
+    setLoading(true);
+    supabase.from("prosti_cmr").select("*").order("created_at",{ascending:false}).then(({data})=>{
+      if(data)setArhiv(data);
+      setLoading(false);
+    });
+  },[]);
+
+  // Naloži VSE aktivne naloge (ne samo svojih) za dropdown
+  useEffect(()=>{
+    supabase.from("nalogi")
+      .select("id,stevilka_naloga,stranka,nak_kraj,raz_kraj,nak_datum,raz_datum,status,voznik_id")
+      .in("status",["nov","poslan","sprejet","zakljucen"])
+      .order("created_at",{ascending:false})
+      .limit(200)
+      .then(({data,error})=>{
+        if(error){console.error("Napaka pri nalaganju nalogov:",error);return;}
+        if(data)setVsiNalogi(data);
+      });
+  },[]);
+
+  // Filtriran seznam za dropdown
+  const filtriraniNalogi=vsiNalogi.filter(n=>{
+    if(!iskanje)return true;
+    const q=iskanje.toLowerCase();
+    return n.stevilka_naloga?.toLowerCase().includes(q)
+      || n.stranka?.toLowerCase().includes(q)
+      || n.nak_kraj?.toLowerCase().includes(q)
+      || n.raz_kraj?.toLowerCase().includes(q);
+  }).slice(0,50);
+
+  const izberiNalog=(n)=>{
+    setStevilkaNaloga(n.stevilka_naloga);
+    setIskanje("");
+    setShowDropdown(false);
+  };
 
   const dodajSliko=async(e)=>{
     const file=e.target.files[0];if(!file)return;
@@ -157,7 +215,8 @@ function ProstiCMRTab({st,upd,showToast}){
     reader.onload=async(ev)=>{
       const opt=await optimizejSliko(ev.target.result);
       setSlike(f=>[...f,{img:opt,ime:file.name,cas:new Date().toISOString()}]);
-      // AI OCR — preberi številko naloga s slike
+
+      // AI OCR — preberi številko naloga s slike (samo če številka še ni vnesena)
       if(!stevilkaNaloga){
         setAiLoading(true);
         showToast("🤖 AI bere številko naloga...");
@@ -171,22 +230,29 @@ function ProstiCMRTab({st,upd,showToast}){
               max_tokens:200,
               messages:[{role:"user",content:[
                 {type:"image",source:{type:"base64",media_type:"image/jpeg",data:base64Data}},
-                {type:"text",text:"Na tej CMR listini/transportnem dokumentu je ročno napisana številka naloga v formatu NAL-YYYY-NNN (npr. NAL-2026-022 ali NAL-2026-013). Številka je običajno napisana ročno s kemičnim svinčnikom na vrhu ali robu dokumenta. Poišči to ročno napisano številko. Vrni SAMO številko naloga (npr. NAL-2026-022), nič drugega. Če številke ne najdeš, vrni prazen odgovor."}
+                {type:"text",text:"Poglej to sliko CMR/transportnega dokumenta. Na njej je ROČNO NAPISANA številka naloga. Format je NAL-YYYY-NNN (npr. NAL-2026-014, NAL-2026-022). Številka je napisana ročno z modrim ali črnim kemičnim svinčnikom, običajno na vrhu, robu ali praznem prostoru dokumenta. Lahko je napisana z malim presledkom (NAL -2026-014) ali brez. Vrni SAMO najdeno številko v formatu NAL-YYYY-NNN, brez dodatnega besedila. Če številke ne najdeš, vrni samo besedo NENAJDENO."}
               ]}]
             })
           });
           const data=await res.json();
           const txt=(data.content?.map(i=>i.text||"").join("")||"").trim().toUpperCase();
-          const match=txt.match(/NAL-\d{4}-\d{3}/);
+          console.log("🤖 AI odgovor:",txt);
+          // Sprejmi različne formate: NAL-2026-014, NAL -2026-014, NAL2026014, itd.
+          const match=txt.match(/NAL\s*-?\s*(\d{4})\s*-?\s*(\d{2,3})/);
           if(match){
-            setStevilkaNaloga(match[0]);
-            showToast("✅ AI prebral: "+match[0]);
+            const leto=match[1];
+            const stev=match[2].padStart(3,"0");
+            const nalNum=`NAL-${leto}-${stev}`;
+            setStevilkaNaloga(nalNum);
+            showToast("✅ AI prebral: "+nalNum);
           }else{
-            showToast("📸 Slika dodana — vnesi številko ročno.");
+            showToast("📸 AI ni prepoznal — izberi nalog iz seznama.");
+            setShowDropdown(true);
           }
         }catch(err){
           console.error("AI OCR napaka:",err);
-          showToast("📸 Slika dodana.");
+          showToast("📸 Slika dodana — izberi nalog ročno.");
+          setShowDropdown(true);
         }
         setAiLoading(false);
       }else{
@@ -199,7 +265,7 @@ function ProstiCMRTab({st,upd,showToast}){
   const odstraniSliko=(idx)=>setSlike(f=>f.filter((_,i)=>i!==idx));
 
   const posljiCMR=async()=>{
-    if(!stevilkaNaloga)return showToast("Vnesi številko!",true);
+    if(!stevilkaNaloga)return showToast("Izberi ali vnesi številko naloga!",true);
     if(slike.length===0)return showToast("Dodaj sliko!",true);
     try{
       const uploadedSlike=[];
@@ -213,14 +279,14 @@ function ProstiCMRTab({st,upd,showToast}){
         uploadedSlike.push({url:urlData?.publicUrl,ime:sl.ime,pot});
       }
       const povezan=!!nalogNajden;
-      const{error}=await supabase.from("prosti_cmr").insert([{stevilka_naloga:stevilkaNaloga.toUpperCase(),opomba,slike:uploadedSlike,povezan,nalog_id:nalogNajden?.id||null}]);
+      const{error}=await supabase.from("prosti_cmr").insert([{stevilka_naloga:stevilkaPolna.toUpperCase(),opomba,slike:uploadedSlike,povezan,nalog_id:nalogNajden?.id||null}]);
       if(error)throw error;
       if(nalogNajden){
         for(const sl of uploadedSlike){
           await supabase.from('cmr_dokumenti').insert([{nalog_id:nalogNajden.id,ime_datoteke:sl.ime||'cmr.jpg',storage_pot:sl.pot}]);
         }
       }
-      showToast(povezan?"✅ CMR dodan!":"✅ CMR poslan.");
+      showToast(povezan?"✅ CMR povezan z nalogom!":"✅ CMR poslan dispečerju.");
       setPostlan(true);setStevilkaNaloga("");setSlike([]);setOpomba("");
       const{data:a}=await supabase.from("prosti_cmr").select("*").order("created_at",{ascending:false});
       if(a)setArhiv(a);
@@ -235,23 +301,74 @@ function ProstiCMRTab({st,upd,showToast}){
     </div>
     {pogled==="nov"&&<div style={s.card}>
       <div style={s.cardTitle}>📸 CMR brez naloga</div>
-      <div style={{fontSize:12,color:"#64748b",marginBottom:16,lineHeight:1.6}}>Fotografiraj CMR — <b>AI bo avtomatsko prebral številko naloga</b> ki si jo napisal na dokument.</div>
+      <div style={{fontSize:12,color:"#64748b",marginBottom:16,lineHeight:1.6}}>Fotografiraj CMR — <b>AI bo poskušal prebrati številko</b>. Če ne uspe, izberi nalog iz seznama.</div>
 
-      {/* Najprej slika, potem številka */}
+      {/* 1. Najprej slika */}
       <div style={{marginBottom:14}}>
         <label style={s.label}>📷 Fotografiraj CMR dokument</label>
         {slike.length>0&&<div style={s.cmrGallery}>{slike.map((sl,i)=><div key={i} style={s.cmrGalleryItem}><img src={sl.img} alt={`CMR ${i+1}`} style={s.cmrGalleryImg}/><button style={s.cmrOdstraniBtn} onClick={()=>odstraniSliko(i)}>✕</button><div style={s.cmrGalleryLbl}>✅ {i+1}.</div></div>)}</div>}
         <input type="file" accept="image/*" capture="environment" id="prosti-cmr-add" style={{display:"none"}} onChange={dodajSliko}/>
         <label htmlFor="prosti-cmr-add" style={{...s.cmrDodajBtn,opacity:aiLoading?0.5:1}}>
-          {aiLoading?"🤖 AI bere...":slike.length===0?"📷 Fotografiraj CMR":"📷 + Dodaj še sliko"}
+          {aiLoading?"🤖 AI bere številko...":slike.length===0?"📷 Fotografiraj CMR":"📷 + Dodaj še sliko"}
         </label>
         {slike.length>0&&<div style={s.cmrSteviloBadge}>✅ {slike.length} {slike.length===1?"slika":"slik"}</div>}
       </div>
 
-      <div style={{marginBottom:14}}>
+      {/* 2. Številka naloga - smart vnos (lahko samo "14") */}
+      <div style={{marginBottom:14,position:"relative"}}>
         <label style={s.label}>📋 Številka naloga {aiLoading&&<span style={{color:"#2563eb",fontWeight:400}}>(AI bere...)</span>}</label>
-        <input style={{...s.inputBig,textTransform:"uppercase",borderColor:stevilkaNaloga?(nalogNajden?"#16a34a":"#f59e0b"):"#e2e8f0"}} placeholder="npr. NAL-2026-042" value={stevilkaNaloga} onChange={e=>setStevilkaNaloga(e.target.value)}/>
-        {stevilkaNaloga&&<div style={{marginTop:6,fontSize:13,fontWeight:600,padding:"6px 12px",borderRadius:8,background:nalogNajden?"#f0fdf4":"#fffbeb",color:nalogNajden?"#16a34a":"#d97706"}}>{nalogNajden?`✅ ${nalogNajden.stranka} · ${nalogNajden.nakKraj} → ${nalogNajden.razKraj}`:"⚠️ Ni v sistemu — CMR bo poslan dispečerju"}</div>}
+        <div style={{fontSize:11,color:"#94a3b8",marginBottom:6,marginTop:-2}}>💡 Vpiši samo številko (npr. <b>14</b>) ali celotno (<b>NAL-2026-014</b>)</div>
+
+        {/* Vnos številke */}
+        <input
+          style={{...s.inputBig,textTransform:"uppercase",borderColor:stevilkaNaloga?(nalogNajden?"#16a34a":"#f59e0b"):"#e2e8f0"}}
+          placeholder="npr. 14 ali NAL-2026-014"
+          value={stevilkaNaloga}
+          onChange={e=>setStevilkaNaloga(e.target.value)}
+          onFocus={()=>setShowDropdown(false)}
+        />
+
+        {/* Preview pretvorbe */}
+        {stevilkaNaloga&&stevilkaNaloga!==stevilkaPolna&&<div style={{marginTop:6,fontSize:13,color:"#64748b",padding:"6px 12px",background:"#f1f5f9",borderRadius:8,fontFamily:"monospace"}}>
+          → <b style={{color:"#2563eb"}}>{stevilkaPolna}</b>
+        </div>}
+
+        {/* Gumb za izbiro iz seznama */}
+        <button
+          style={s.izberiBtn}
+          onClick={()=>setShowDropdown(!showDropdown)}
+          type="button"
+        >
+          {showDropdown?"✕ Zapri seznam":`📋 Izberi iz seznama (${vsiNalogi.length} nalogov)`}
+        </button>
+
+        {/* Dropdown z iskalnikom */}
+        {showDropdown&&<div style={s.dropdownBox}>
+          <input
+            style={{...s.input,marginBottom:8}}
+            placeholder="🔍 Išči po številki, stranki, kraju..."
+            value={iskanje}
+            onChange={e=>setIskanje(e.target.value)}
+            autoFocus
+          />
+          <div style={s.dropdownList}>
+            {filtriraniNalogi.length===0?<div style={{padding:"12px",textAlign:"center",color:"#94a3b8",fontSize:13}}>Ni rezultatov</div>:filtriraniNalogi.map(n=><button
+              key={n.id}
+              style={s.dropdownItem}
+              onClick={()=>izberiNalog(n)}
+              type="button"
+            >
+              <div style={{fontWeight:700,color:"#2563eb",fontFamily:"monospace",fontSize:13}}>{n.stevilka_naloga}</div>
+              <div style={{fontSize:13,color:"#0f2744",fontWeight:600,marginTop:2}}>{n.nak_kraj} → {n.raz_kraj}</div>
+              <div style={{fontSize:12,color:"#64748b",marginTop:1}}>{n.stranka||"–"} · {fmt(n.nak_datum)}</div>
+            </button>)}
+          </div>
+        </div>}
+
+        {/* Status izbranega naloga */}
+        {stevilkaNaloga&&!showDropdown&&<div style={{marginTop:6,fontSize:13,fontWeight:600,padding:"8px 12px",borderRadius:8,background:nalogNajden?"#f0fdf4":"#fffbeb",color:nalogNajden?"#16a34a":"#d97706"}}>
+          {nalogNajden?`✅ ${nalogNajden.stranka||"–"} · ${nalogNajden.nak_kraj} → ${nalogNajden.raz_kraj}`:"⚠️ Ni v sistemu — CMR bo poslan dispečerju"}
+        </div>}
       </div>
 
       <div style={{marginBottom:14}}><label style={s.smallLabel}>Opomba</label><input style={s.input} placeholder="npr. Preložitev" value={opomba} onChange={e=>setOpomba(e.target.value)}/></div>
@@ -363,4 +480,8 @@ const s={
   closeBtn:{background:"#f1f5f9",border:"none",borderRadius:"50%",width:32,height:32,fontSize:14,cursor:"pointer"},
   modalBody:{padding:"16px 20px 32px"},
   empty:{textAlign:"center",color:"#94a3b8",padding:"40px 20px",fontSize:14,lineHeight:1.7},
+  izberiBtn:{width:"100%",marginTop:8,background:"#eff6ff",color:"#1d4ed8",border:"1.5px solid #bfdbfe",borderRadius:10,padding:"10px 14px",fontSize:13,fontWeight:700,cursor:"pointer"},
+  dropdownBox:{marginTop:8,background:"#fff",border:"1.5px solid #e2e8f0",borderRadius:12,padding:10,boxShadow:"0 4px 12px rgba(0,0,0,0.08)"},
+  dropdownList:{maxHeight:300,overflowY:"auto"},
+  dropdownItem:{width:"100%",textAlign:"left",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:"10px 12px",marginBottom:6,cursor:"pointer",display:"block"},
 };
