@@ -74,6 +74,14 @@ export default function FinanceApp(){
     return data?.publicUrl||null;
   }
 
+  // Print helper za CMR sliko
+  function printSliko(url){
+    const w=window.open("","_blank","width=800,height=900");
+    if(!w){alert("Brskalnik blokira pop-up okna. Dovoli pop-up za to stran.");return;}
+    w.document.write(`<html><head><title>CMR dokument</title><style>body{margin:0;padding:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#fff}img{max-width:100%;max-height:100vh;object-fit:contain}@media print{body{padding:0}img{max-width:100%;page-break-inside:avoid}}</style></head><body><img src="${url}" onload="window.print();"/></body></html>`);
+    w.document.close();
+  }
+
   if(loading)return(
     <div style={{minHeight:"100vh",background:"#f0f2f5",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       <div style={{textAlign:"center"}}>
@@ -175,7 +183,7 @@ export default function FinanceApp(){
 
         return(<div style={{position:"fixed",inset:0,zIndex:100,background:"rgba(0,0,0,0.5)",display:"flex",justifyContent:"center",alignItems:"flex-start",padding:"24px 16px",overflowY:"auto"}} onClick={()=>setDetail(null)}>
           <div style={{background:"#fff",borderRadius:16,maxWidth:800,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.2)",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
-            
+
             {/* Header */}
             <div style={{background:"linear-gradient(135deg, #1e3a5f 0%, #0f2744 100%)",color:"#fff",padding:"20px 24px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
@@ -267,9 +275,29 @@ export default function FinanceApp(){
         </div>);
       })()}
 
-      {/* Lightbox */}
-      {imgPreview&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:20,cursor:"pointer"}} onClick={()=>setImgPreview(null)}>
-        <img src={imgPreview} alt="" style={{maxWidth:"95%",maxHeight:"95vh",objectFit:"contain",borderRadius:8,boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}/>
+      {/* Lightbox z gumbi: Print, Download, Open in new tab */}
+      {imgPreview&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setImgPreview(null)}>
+        <img src={imgPreview} alt="CMR preview" style={{maxWidth:"95%",maxHeight:"85vh",objectFit:"contain",borderRadius:8,boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}} onClick={e=>e.stopPropagation()}/>
+        {/* Action buttons */}
+        <div style={{position:"absolute",bottom:20,left:"50%",transform:"translateX(-50%)",display:"flex",gap:10,background:"rgba(0,0,0,0.6)",padding:"10px 14px",borderRadius:30,backdropFilter:"blur(10px)"}} onClick={e=>e.stopPropagation()}>
+          <button
+            style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:20,padding:"10px 20px",fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}
+            onClick={()=>printSliko(imgPreview)}
+          >🖨️ Natisni</button>
+          <a
+            href={imgPreview}
+            download={`CMR-${Date.now()}.jpg`}
+            style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:20,padding:"10px 20px",fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6,textDecoration:"none"}}
+            onClick={e=>e.stopPropagation()}
+          >⬇️ Prenesi</a>
+          <a
+            href={imgPreview}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{background:"rgba(255,255,255,0.2)",color:"#fff",border:"none",borderRadius:20,padding:"10px 20px",fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6,textDecoration:"none"}}
+            onClick={e=>e.stopPropagation()}
+          >🔗 Nov zavihek</a>
+        </div>
         <button style={{position:"absolute",top:20,right:20,background:"rgba(255,255,255,0.2)",border:"none",color:"#fff",width:40,height:40,borderRadius:20,fontSize:18,cursor:"pointer"}} onClick={()=>setImgPreview(null)}>✕</button>
       </div>}
     </div>
