@@ -110,20 +110,239 @@ function ObracunTab({ st, showToast, voznikId }) {
 
 /* ===== VZDRŽEVANJE TAB ===== */
 function VzdrzevanjeTab({ voznikId, showToast }) {
-  const [voznik,setVoznik]=useState(null);const [loading,setLoading]=useState(true);
-  const [regVozilo,setRegVozilo]=useState("");const [regPrikolica,setRegPrikolica]=useState("");const [prikolica,setPrikolica]=useState("");
+  const [voznik,setVoznik]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const [regVozilo,setRegVozilo]=useState("");
+  const [regPrikolica,setRegPrikolica]=useState("");
+  const [prikolica,setPrikolica]=useState("");
   const [saving,setSaving]=useState(false);
-  useEffect(()=>{if(!voznikId)return;supabase.from("vozniki").select("*").eq("id",voznikId).single().then(({data})=>{if(data){setVoznik(data);setRegVozilo(data.registracija_pretek||"");setRegPrikolica(data.registracija_prikolica_pretek||"");setPrikolica(data.prikolica||"");}setLoading(false);});},[voznikId]);
-  const shrani=async()=>{setSaving(true);try{const{error}=await supabase.from("vozniki").update({registracija_pretek:regVozilo||null,registracija_prikolica_pretek:regPrikolica||null,prikolica:prikolica||null}).eq("id",voznikId);if(error)throw error;showToast("✅ Shranjeno!");}catch(err){showToast("❌ Napaka!",true);}setSaving(false);};
+  // Vzdrževalni vnosi
+  const [vnosi,setVnosi]=useState([]);
+  const [modalOpen,setModalOpen]=useState(false);
+  const [novVnos,setNovVnos]=useState({tip:"servis",datum:new Date().toISOString().slice(0,10),opis:"",kilometrina:"",znesek:"",slikaUrl:""});
+  const [uploadingSlika,setUploadingSlika]=useState(false);
+  const [savingVnos,setSavingVnos]=useState(false);
+
+  const TIPI=[
+    {id:"gume",label:"🛞 Gume"},
+    {id:"olje",label:"🛢️ Olje"},
+    {id:"akumulator",label:"🔋 Akumulator"},
+    {id:"popravilo",label:"🔧 Popravilo"},
+    {id:"pranje",label:"🚿 Pranje"},
+    {id:"servis",label:"🔍 Servis"},
+    {id:"napaka",label:"⚠️ Napaka"},
+    {id:"drugo",label:"📋 Drugo"},
+  ];
+
+  const naložiVnose=async()=>{
+    if(!voznikId)return;
+    const{data}=await supabase.from("vozilo_vzdrzevanje").select("*").eq("voznik_id",voznikId).order("datum",{ascending:false}).limit(100);
+    if(data)setVnosi(data);
+  };
+
+  useEffect(()=>{
+    if(!voznikId)return;
+    supabase.from("vozniki").select("*").eq("id",voznikId).single().then(({data})=>{
+      if(data){
+        setVoznik(data);
+        setRegVozilo(data.registracija_pretek||"");
+        setRegPrikolica(data.registracija_prikolica_pretek||"");
+        setPrikolica(data.prikolica||"");
+      }
+      setLoading(false);
+    });
+    naložiVnose();
+  },[voznikId]);
+
+  const shrani=async()=>{
+    setSaving(true);
+    try{
+      const{error}=await supabase.from("vozniki").update({
+        registracija_pretek:regVozilo||null,
+        registracija_prikolica_pretek:regPrikolica||null,
+        prikolica:prikolica||null
+      }).eq("id",voznikId);
+      if(error)throw error;
+      showToast("✅ Shranjeno!");
+    }catch(err){showToast("❌ Napaka!",true);}
+    setSaving(false);
+  };
+
+  const naložiSliko=async(e)=>{
+    const file=e.target.files[0];
+    if(!file)return;
+    setUploadingSlika(true);
+    showToast("⏳ Optimizacija slike...");
+    try{
+      const reader=new FileReader();
+      reader.onload=async(ev)=>{
+        const optimized=await optimizejSliko(ev.target.result);
+        const base64=optimized.split(",")[1];
+        const byteArr=Uint8Array.from(atob(base64),c=>c.charCodeAt(0));
+        const blob=new Blob([byteArr],{type:"image/jpeg"});
+        const pot=`${voznikId}/${Date.now()}-${file.name||"vzdrz.jpg"}`;
+        const{error}=await supabase.storage.from("vzdrzevanje-slike").upload(pot,blob,{contentType:"image/jpeg",upsert:false});
+        if(error)throw error;
+        const{data:urlData}=supabase.storage.from("vzdrzevanje-slike").getPublicUrl(pot);
+        setNovVnos(v=>({...v,slikaUrl:urlData?.publicUrl||""}));
+        showToast("✅ Slika naložena!");
+        setUploadingSlika(false);
+      };
+      reader.readAsDataURL(file);
+    }catch(err){
+      showToast("❌ Napaka pri sliki!",true);
+      setUploadingSlika(false);
+    }
+    e.target.value="";
+  };
+
+  const shraniVnos=async()=>{
+    if(!novVnos.opis.trim())return showToast("Vnesi opis!",true);
+    setSavingVnos(true);
+    try{
+      const{error}=await supabase.from("vozilo_vzdrzevanje").insert([{
+        voznik_id:voznikId,
+        vozilo:voznik?.vozilo||"",
+        tip:novVnos.tip,
+        opis:novVnos.opis.trim(),
+        datum:novVnos.datum,
+        kilometrina:novVnos.kilometrina?parseInt(novVnos.kilometrina):null,
+        znesek:novVnos.znesek?parseFloat(novVnos.znesek):null,
+        slika_url:novVnos.slikaUrl||null,
+        status:"odprto",
+      }]);
+      if(error)throw error;
+      showToast("✅ Vnos dodan!");
+      setModalOpen(false);
+      setNovVnos({tip:"servis",datum:new Date().toISOString().slice(0,10),opis:"",kilometrina:"",znesek:"",slikaUrl:""});
+      await naložiVnose();
+    }catch(err){
+      showToast("❌ Napaka!",true);
+      console.error(err);
+    }
+    setSavingVnos(false);
+  };
+
+  const izbrisiVnos=async(id)=>{
+    if(!window.confirm("Izbrišem ta vnos?"))return;
+    try{
+      const{error}=await supabase.from("vozilo_vzdrzevanje").delete().eq("id",id);
+      if(error)throw error;
+      showToast("✅ Izbrisan!");
+      await naložiVnose();
+    }catch(err){showToast("❌ Napaka!",true);}
+  };
+
   const daysUntil=(iso)=>{if(!iso)return null;const d=new Date(iso);const now=new Date();now.setHours(0,0,0,0);d.setHours(0,0,0,0);return Math.ceil((d-now)/(1000*60*60*24));};
+
   if(loading)return<div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>⏳ Nalagam...</div>;
-  const dniV=daysUntil(regVozilo);const dniP=daysUntil(regPrikolica);
+
+  const dniV=daysUntil(regVozilo);
+  const dniP=daysUntil(regPrikolica);
   const regColor=(dni)=>dni===null?"#94a3b8":dni<=0?"#dc2626":dni<=7?"#dc2626":dni<=30?"#d97706":"#16a34a";
   const regText=(dni)=>dni===null?null:dni<=0?`⚠️ Potekla pred ${Math.abs(dni)} dnevi!`:dni<=7?`🔴 Še ${dni} dni!`:dni<=30?`⏳ Še ${dni} dni`:`✅ Še ${dni} dni`;
+
+  const tipLabel=(t)=>TIPI.find(x=>x.id===t)?.label||t;
+
   return(<div>
     <div style={s.card}><div style={s.cardTitle}>🚛 Registracija vozila</div><div style={{fontSize:14,color:"#2563eb",fontWeight:700,marginBottom:12}}>{voznik?.vozilo||"–"}</div><label style={s.smallLabel}>Datum preteka registracije</label><input style={s.input} type="date" value={regVozilo} onChange={e=>setRegVozilo(e.target.value)}/>{dniV!==null&&<div style={{marginTop:8,fontSize:13,fontWeight:600,color:regColor(dniV)}}>{regText(dniV)}</div>}</div>
     <div style={s.card}><div style={s.cardTitle}>🚛 Registracija prikolice</div><label style={s.smallLabel}>Registrska številka prikolice</label><input style={{...s.input,marginBottom:12}} placeholder="npr. CE-AB-123" value={prikolica} onChange={e=>setPrikolica(e.target.value)}/><label style={s.smallLabel}>Datum preteka registracije</label><input style={s.input} type="date" value={regPrikolica} onChange={e=>setRegPrikolica(e.target.value)}/>{dniP!==null&&<div style={{marginTop:8,fontSize:13,fontWeight:600,color:regColor(dniP)}}>{regText(dniP)}</div>}</div>
-    <button style={{...s.btnPrimary,opacity:saving?0.5:1}} onClick={shrani} disabled={saving}>💾 Shrani podatke</button>
+    <button style={{...s.btnPrimary,opacity:saving?0.5:1,marginBottom:14}} onClick={shrani} disabled={saving}>💾 Shrani podatke</button>
+
+    {/* SERVIS & VZDRŽEVANJE */}
+    <div style={s.card}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+        <div style={{...s.cardTitle,marginBottom:0}}>🔧 Servis & napake</div>
+        <button style={{background:"#0f2744",color:"#fff",border:"none",borderRadius:10,padding:"8px 14px",fontSize:13,fontWeight:700,cursor:"pointer"}} onClick={()=>setModalOpen(true)}>+ Dodaj</button>
+      </div>
+      {vnosi.length===0?<div style={{fontSize:13,color:"#94a3b8",textAlign:"center",padding:16}}>Ni vnosov. Klikni "+ Dodaj" da dodaš servis ali napako.</div>:
+        <div>{vnosi.map(v=>(
+          <div key={v.id} style={{background:"#f8fafc",borderRadius:10,padding:12,marginBottom:8,borderLeft:`4px solid ${v.status==="odprto"?"#d97706":v.status==="resi"?"#16a34a":"#94a3b8"}`}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14,fontWeight:700,color:"#0f2744"}}>{tipLabel(v.tip)}</div>
+                <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{fmt(v.datum+"T00:00:00")}{v.kilometrina?` · ${v.kilometrina.toLocaleString()} km`:""}</div>
+              </div>
+              <button style={{background:"none",border:"none",color:"#dc2626",cursor:"pointer",fontSize:14,padding:4}} onClick={()=>izbrisiVnos(v.id)}>🗑️</button>
+            </div>
+            <div style={{fontSize:13,color:"#1e293b",marginTop:6,whiteSpace:"pre-wrap",lineHeight:1.4}}>{v.opis}</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8,gap:8}}>
+              {v.slika_url&&<a href={v.slika_url} target="_blank" rel="noopener noreferrer"><img src={v.slika_url} alt="" style={{width:60,height:60,objectFit:"cover",borderRadius:6,border:"1px solid #e2e8f0"}}/></a>}
+              <div style={{flex:1}}/>
+              {v.znesek&&<div style={{fontSize:13,fontWeight:700,color:"#16a34a"}}>{parseFloat(v.znesek).toFixed(2)} €</div>}
+              <span style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:20,background:v.status==="odprto"?"#fef3c7":v.status==="resi"?"#dcfce7":"#f1f5f9",color:v.status==="odprto"?"#92400e":v.status==="resi"?"#15803d":"#64748b"}}>{v.status==="odprto"?"⏳ Odprto":v.status==="resi"?"✅ Rešeno":"📋 Arhivirano"}</span>
+            </div>
+          </div>
+        ))}</div>
+      }
+    </div>
+
+    {/* MODAL: Nov vnos */}
+    {modalOpen&&<div style={s.overlay} onClick={()=>setModalOpen(false)}>
+      <div style={{...s.modalBox,maxHeight:"90vh"}} onClick={e=>e.stopPropagation()}>
+        <div style={s.modalHead}><span style={s.modalTitle}>🔧 Nov servisni vnos</span><button style={s.closeBtn} onClick={()=>setModalOpen(false)}>✕</button></div>
+        <div style={s.modalBody}>
+          {/* Tip */}
+          <div style={{marginBottom:14}}>
+            <label style={s.label}>Tip</label>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              {TIPI.map(t=>(
+                <button key={t.id} type="button"
+                  style={{padding:"10px 12px",borderRadius:10,border:"1.5px solid",borderColor:novVnos.tip===t.id?"#0f2744":"#e2e8f0",background:novVnos.tip===t.id?"#0f2744":"#fff",color:novVnos.tip===t.id?"#fff":"#475569",fontSize:13,fontWeight:novVnos.tip===t.id?700:500,cursor:"pointer",textAlign:"left"}}
+                  onClick={()=>setNovVnos(v=>({...v,tip:t.id}))}
+                >{t.label}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Datum */}
+          <div style={{marginBottom:14}}>
+            <label style={s.label}>📅 Datum</label>
+            <input style={s.input} type="date" value={novVnos.datum} onChange={e=>setNovVnos(v=>({...v,datum:e.target.value}))}/>
+          </div>
+
+          {/* Opis */}
+          <div style={{marginBottom:14}}>
+            <label style={s.label}>📝 Opis *</label>
+            <textarea style={{...s.input,minHeight:80,resize:"vertical"}} placeholder="npr. Menjava vseh 4 gum, Continental 315/70 R22.5..." value={novVnos.opis} onChange={e=>setNovVnos(v=>({...v,opis:e.target.value}))}/>
+          </div>
+
+          {/* Kilometrina + znesek */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+            <div>
+              <label style={s.smallLabel}>Kilometrina (km)</label>
+              <input style={s.input} type="number" placeholder="130500" value={novVnos.kilometrina} onChange={e=>setNovVnos(v=>({...v,kilometrina:e.target.value}))}/>
+            </div>
+            <div>
+              <label style={s.smallLabel}>Strošek (€)</label>
+              <input style={s.input} type="number" step="0.01" placeholder="0.00" value={novVnos.znesek} onChange={e=>setNovVnos(v=>({...v,znesek:e.target.value}))}/>
+            </div>
+          </div>
+
+          {/* Slika */}
+          <div style={{marginBottom:14}}>
+            <label style={s.label}>📷 Slika (opcijsko)</label>
+            {novVnos.slikaUrl?(
+              <div style={{position:"relative",marginBottom:8}}>
+                <img src={novVnos.slikaUrl} alt="" style={{width:"100%",maxHeight:200,objectFit:"cover",borderRadius:10,border:"1px solid #e2e8f0"}}/>
+                <button style={{position:"absolute",top:6,right:6,background:"#dc2626",color:"#fff",border:"none",borderRadius:"50%",width:28,height:28,fontSize:14,cursor:"pointer",fontWeight:700}} onClick={()=>setNovVnos(v=>({...v,slikaUrl:""}))}>✕</button>
+              </div>
+            ):(
+              <>
+                <input type="file" accept="image/*" capture="environment" id="vzdrz-slika" style={{display:"none"}} onChange={naložiSliko} disabled={uploadingSlika}/>
+                <label htmlFor="vzdrz-slika" style={{...s.cmrDodajBtn,opacity:uploadingSlika?0.5:1,marginBottom:0}}>
+                  {uploadingSlika?"⏳ Nalagam...":"📷 Fotografiraj / izberi"}
+                </label>
+              </>
+            )}
+          </div>
+
+          <button style={{...s.btnPrimary,opacity:savingVnos?0.5:1}} onClick={shraniVnos} disabled={savingVnos}>
+            {savingVnos?"⏳ Shranjevanje...":"💾 Shrani vnos"}
+          </button>
+        </div>
+      </div>
+    </div>}
   </div>);
 }
 
