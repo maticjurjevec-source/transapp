@@ -36,6 +36,9 @@ const SC={
 };
 const SRed=["nov","poslan","sprejet","zakljucen","za_fakturo","fakturirano"];
 
+// POPRAVEK: pravilno ime bucket-a (s pomišljajem, kot je v Supabase)
+const CMR_BUCKET = "cmr-dokumenti";
+
 const DEMO=[
   {id:"NAL-2025-0041",stevilkaNaloga:"NAL-2025-0041",voznikId:"V003",status:"sprejet",stranka:"Müller GmbH",blago:"Avtomobilski deli",kolicina:"24 palet",teza:"18.500 kg",nakFirma:"Logistika d.o.o.",nakKraj:"Ljubljana",nakNaslov:"Dunajska cesta 5, 1000 Ljubljana",nakReferenca:"REF-NAK-88123",nakDatum:"2025-04-10",nakCas:"07:00",razFirma:"Müller GmbH",razKraj:"München",razNaslov:"Schillerstraße 12, 80336 München",razReferenca:"REF-RAZ-99541",razDatum:"2025-04-11",razCas:"14:00",navodila:"Blago krhko!",poslan:new Date(Date.now()-7200000).toISOString(),sprejetCas:new Date(Date.now()-6000000).toISOString(),zakljucenCas:null,cmrSlike:[],nakFirmaKontakt:"",kontaktEmail:"finance@muller-gmbh.de"},
   {id:"NAL-2025-0042",stevilkaNaloga:"NAL-2025-0042",voznikId:"V002",status:"poslan",stranka:"Kaufland Logistik",blago:"Živila – suho blago",kolicina:"33 palet",teza:"22.000 kg",nakFirma:"Koper Terminal d.d.",nakKraj:"Koper",nakNaslov:"Industrijska ulica 8, 6000 Koper",nakReferenca:"REF-NAK-77234",nakDatum:"2025-04-12",nakCas:"05:30",razFirma:"Kaufland Berlin",razKraj:"Berlin",razNaslov:"Frankfurter Allee 99, 10247 Berlin",razReferenca:"REF-RAZ-44871",razDatum:"2025-04-14",razCas:"09:00",navodila:"Dostava samo s predhodno najavo.",poslan:new Date(Date.now()-3600000).toISOString(),sprejetCas:null,zakljucenCas:null,cmrSlike:[],kontaktEmail:"ap@kaufland.de"},
@@ -134,21 +137,49 @@ export default function DispecarPlasca() {
     setLoading(false);
   };
 
+  // POPRAVEK: naložiCMR z boljšim debug logom in pravim bucketom
   const naložiCMR = async (nalogId) => {
     try {
-      const { data } = await supabase.from('cmr_dokumenti').select('*').eq('nalog_id', nalogId).order('created_at');
+      const { data, error } = await supabase
+        .from('cmr_dokumenti')
+        .select('*')
+        .eq('nalog_id', nalogId)
+        .order('created_at');
+      if (error) {
+        console.error('❌ CMR fetch napaka:', error);
+        return [];
+      }
+      console.log(`📄 CMR za ${nalogId}: najdenih ${data?.length || 0} dokumentov`, data);
       if (!data || data.length === 0) return [];
-      return data.map(d => ({
-        url: supabase.storage.from('cmr-dokumenti').getPublicUrl(d.storage_pot).data.publicUrl,
-        ime: d.ime_datoteke
-      }));
-    } catch { return []; }
+      return data.map(d => {
+        const { data: urlData } = supabase.storage
+          .from(CMR_BUCKET)
+          .getPublicUrl(d.storage_pot);
+        return {
+          url: urlData?.publicUrl,
+          ime: d.ime_datoteke,
+          pot: d.storage_pot,
+          id: d.id,
+        };
+      });
+    } catch(err) {
+      console.error('❌ naložiCMR napaka:', err);
+      return [];
+    }
   };
 
   // POPRAVEK: odpriNalog vedno naloži CMR slike iz Supabase
   const odpriNalog = async (n) => {
+    setSelNalog({...n, cmrSlike: [], _loading: true});
     const cmr = await naložiCMR(n.id);
-    setSelNalog({...n, cmrSlike: cmr});
+    setSelNalog({...n, cmrSlike: cmr, _loading: false});
+  };
+
+  // Funkcija za reload CMR-jev v odprtem nalogu
+  const osveziCMR = async () => {
+    if (!selNalog) return;
+    const cmr = await naložiCMR(selNalog.id);
+    setSelNalog(prev => prev ? {...prev, cmrSlike: cmr} : prev);
   };
 
   const [aiParsing,setAiParsing]=useState(false);
@@ -291,8 +322,9 @@ const handleDrop=async(e)=>{
   // Nalog detail
   if(selNalog){
     const n=st.nalogi.find(x=>x.id===selNalog.id)||selNalog;
-    // Uporabi cmrSlike iz selNalog (ki jih je naložil odpriNalog)
+    // POPRAVEK: Uporabi cmrSlike iz selNalog (ki jih je naložil odpriNalog)
     const cmrSlike = selNalog.cmrSlike || [];
+    const cmrLoading = selNalog._loading;
     const sc=SC[n.status]||{};
     const naslednji={poslan:{next:"sprejet",label:"Označi: Sprejeto",icon:"✅"},sprejet:{next:"zakljucen",label:"Označi: Zaključeno",icon:"✔️"},zakljucen:{next:"za_fakturo",label:"Premakni v Finance",icon:"💶"}}[n.status];
     return(
@@ -325,20 +357,41 @@ const handleDrop=async(e)=>{
           {n.navodila&&<Sec title="⚠️ Navodila"><div style={{fontSize:13,background:"#fffbeb",borderRadius:8,padding:"10px 12px",border:"1px solid #fde68a"}}>{n.navodila}</div></Sec>}
           {(n.stevilka_narocnika||n.stevilkaNarocnika)&&<Sec title="📋 Št. naloga naročnika"><div style={{fontFamily:"monospace",fontSize:16,fontWeight:800,color:"#2563eb"}}>{n.stevilka_narocnika||n.stevilkaNarocnika}</div></Sec>}
           {n.kontaktEmail&&<Sec title="💶 Kontakt za račun"><R label="Email" val={n.kontaktEmail} mono/></Sec>}
-          {/* CMR sekcija - vedno vidna za zaključene naloge */}
+          {/* Original PDF */}
           <Sec title="📄 Original nalog od naročnika">{(n.original_pdf_url||n.originalPdfUrl)?<div><iframe src={n.original_pdf_url||n.originalPdfUrl} style={{width:"100%",height:500,border:"none",borderRadius:8}} title="Original nalog"/><a href={n.original_pdf_url||n.originalPdfUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",textAlign:"center",padding:8,fontSize:12,color:"#2563eb",fontWeight:600}}>Odpri v novem zavihku ↗</a></div>:<div><div style={{fontSize:13,color:"#94a3b8",marginBottom:8}}>Ni naložen.</div><input type="file" id={`pdf-${n.id}`} accept=".pdf" style={{display:"none"}} onChange={async(e)=>{const file=e.target.files?.[0];if(!file)return;showToast("⏳ Nalagam PDF...");const url=await uploadOriginalPdf(file);if(url){await supabase.from('nalogi').update({original_pdf_url:url}).eq('id',n.id);await naložiPodatke();odpriNalog({...n,original_pdf_url:url});showToast("✅ PDF naložen!");}else{showToast("❌ Napaka pri uploadu!",true);}}}/><label htmlFor={`pdf-${n.id}`} style={{background:"#2563eb",color:"#fff",padding:"8px 16px",borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer"}}>📂 Naloži original PDF</label></div>}</Sec>
-          <Sec title="📄 CMR dokumenti">
-            {cmrSlike.length > 0 ? (
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                {cmrSlike.map((sl,i)=>(
-                  <a key={i} href={sl.url} target="_blank" rel="noopener noreferrer">
-                    <img src={sl.url} alt={sl.ime||`CMR ${i+1}`} style={{width:80,height:107,objectFit:"cover",borderRadius:8,border:"1px solid #e2e8f0",cursor:"pointer"}}/>
-                  </a>
-                ))}
+          {/* CMR sekcija — VEDNO vidna, popravljen prikaz */}
+          <Sec title={`📄 CMR dokumenti${cmrSlike.length>0?` (${cmrSlike.length})`:""}`}>
+            {cmrLoading ? (
+              <div style={{textAlign:"center",padding:20,color:"#94a3b8",fontSize:13}}>⏳ Nalagam CMR slike...</div>
+            ) : cmrSlike.length > 0 ? (
+              <div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
+                  {cmrSlike.map((sl,i)=>(
+                    <a key={sl.id||i} href={sl.url} target="_blank" rel="noopener noreferrer" style={{display:"block",position:"relative"}}>
+                      <img
+                        src={sl.url}
+                        alt={sl.ime||`CMR ${i+1}`}
+                        style={{width:100,height:134,objectFit:"cover",borderRadius:8,border:"1px solid #e2e8f0",cursor:"pointer",display:"block"}}
+                        onError={e=>{e.target.style.background="#fef2f2";e.target.style.padding="20px";e.target.alt="❌ "+sl.ime;}}
+                      />
+                      <div style={{position:"absolute",bottom:4,right:4,background:"rgba(0,0,0,0.7)",color:"#fff",padding:"2px 6px",borderRadius:4,fontSize:10,fontWeight:600}}>{i+1}</div>
+                    </a>
+                  ))}
+                </div>
+                <button
+                  onClick={osveziCMR}
+                  style={{background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",color:"#64748b"}}
+                >🔄 Osveži</button>
               </div>
             ) : (
-              <div style={{fontSize:13,color:"#94a3b8"}}>
-                {n.status==="zakljucen" ? "Ni CMR dokumentov." : "CMR bo prikazan po zaključitvi naloga."}
+              <div>
+                <div style={{fontSize:13,color:"#94a3b8",marginBottom:8}}>
+                  {n.status==="zakljucen" ? "Voznik še ni naložil CMR dokumentov za ta nalog." : "CMR bo prikazan ko voznik fotografira in zaključi nalog."}
+                </div>
+                <button
+                  onClick={osveziCMR}
+                  style={{background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",color:"#64748b"}}
+                >🔄 Osveži</button>
               </div>
             )}
           </Sec>
@@ -409,7 +462,7 @@ const handleDrop=async(e)=>{
         {tab==="nalogi"&&<NalogiTab nalogi={st.nalogi} onSelect={odpriNalog} openNovNalog={openNovNalog}/>}
         {tab==="vozniki"&&<VoznikiTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog}/>}
         {tab==="obracuni"&&<ObracuniTab obracuni={st.obracuni} onSelect={setSelObracun}/>}
-        {tab==="finance"&&<FinanceTab st={st} upd={upd} showToast={showToast}/>}
+        {tab==="finance"&&<FinanceTab st={st} upd={upd} showToast={showToast} supabase={supabase} setActiveTab={setTab}/>}
         {tab==="prosticmr"&&<ProstiCMRTab st={st} upd={upd} showToast={showToast}/>}
         {tab==="email"&&<EmailNalogTab upd={upd} showToast={showToast} naložiPodatke={naložiPodatke} vozniki={vozniki}/>}
       </div>
@@ -443,7 +496,7 @@ const handleDrop=async(e)=>{
                 <div style={{gridColumn:"1/-1"}}><label style={s.lbl}>Navodila</label><textarea style={{...s.inp,resize:"vertical"}} rows={2} value={form.navodila||""} onChange={e=>setForm(f=>({...f,navodila:e.target.value}))}/></div>
                 <div style={{gridColumn:"1/-1"}}><I label="💶 Email kontakta za račun" val={form.kontaktEmail} set={v=>setForm(f=>({...f,kontaktEmail:v}))} ph="finance@stranka.com"/></div>
               </div>
-              <button style={s.btnP} onClick={submitNalog}>📤 Ustvari nalog</button>
+              <button style={s.btnP} onClick={form.editId?submitEdit:submitNalog}>📤 {form.editId?"Posodobi nalog":"Ustvari nalog"}</button>
             </div>
           </div>
         </div>
@@ -598,43 +651,34 @@ function ObracuniTab({obracuni,onSelect}){
   </div>);
 }
 
-// ===== KONSTANTE (prilagodi po potrebi) =====
-const CMR_BUCKET = "cmr_dokumenti"; // ime Supabase Storage bucket-a
-const ORIGINAL_BUCKET = "nalogi_original"; // bucket za original PDF-je (če obstaja)
-
-// ===== HELPER FUNKCIJE (dodaj ven iz FinanceTab, na vrh datoteke poleg fmt) =====
-
-// Regex za izvlečenje emaila iz teksta (npr. iz navodil)
+// ===== HELPER FUNKCIJE =====
 function izvleciEmail(text){
   if(!text) return "";
   const match = text.match(/[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
   return match ? match[0] : "";
 }
 
-// Parser za znesek iz niza: "€850", "850.00 EUR", "1.200,50 EUR", "1200", itd.
 function parseZnesek(str){
   if(!str) return 0;
   if(typeof str === "number") return str;
-  // Poišči prvi sklop številk + decimalka
   const cleaned = String(str).replace(/[^\d,.\s]/g, " ").trim();
-  // Odstrani tisočice (pike/presledke pred 3 števkami), obdrži decimalko
   let num = cleaned.replace(/\s/g,"").replace(/\.(?=\d{3}(\D|$))/g,"").replace(",",".");
   const parsed = parseFloat(num);
   return isNaN(parsed) ? 0 : parsed;
 }
 
-// Pridobi public URL za Supabase Storage datoteko
-function getStorageUrl(supabase, bucket, path){
-  if(!path) return null;
-  // Če je že celi URL, ga vrni direktno
+function getStorageUrl(supabaseClient, bucket, path){
+  if(!path || !supabaseClient) return null;
   if(path.startsWith("http")) return path;
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  const { data } = supabaseClient.storage.from(bucket).getPublicUrl(path);
   return data?.publicUrl || null;
 }
 
 
 // ===== FINANCE TAB =====
-function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
+function FinanceTab({st,upd,showToast,supabase:supabaseProp,setActiveTab}){
+  // POPRAVEK: če supabase ni v props, uporabi importan supabase iz top
+  const sb = supabaseProp || supabase;
   const [f,setF]=useState("vsi");
   const [modal,setModal]=useState(null);
   const [form,setForm]=useState({});
@@ -645,7 +689,7 @@ function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
   const [cmrLoading,setCmrLoading]=useState(false);
   const [imgPreview,setImgPreview]=useState(null);
   const [search,setSearch]=useState("");
-  
+
   const racuni=st.racuni||[];
   const zaF=st.nalogi.filter(n=>n.status==="za_fakturo");
   const list=racuni.filter(r=>{
@@ -659,26 +703,25 @@ function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
 
   const povezanNalog=detail?.nalogId?st.nalogi.find(n=>n.id===detail.nalogId):null;
 
-  // Helperji za snake_case / camelCase kompatibilnost
   const getZnesekOriginal=(n)=>n?.znesek_original||n?.znesekOriginal||null;
   const getRef=(n)=>n?.nak_referenca||n?.nakReferenca||null;
   const getOriginalUrl=(n)=>n?.original_pdf_url||n?.originalPdfUrl||null;
   const getKontaktEmail=(n)=>n?.kontaktEmail||n?.kontakt_email||(n?.navodila?izvleciEmail(n.navodila):"")||(n?.navodila_text?izvleciEmail(n.navodila_text):"");
 
   useEffect(()=>{
-    if(!povezanNalog?.id||!supabase){setCmrList([]);return;}
+    if(!povezanNalog?.id||!sb){setCmrList([]);return;}
     setCmrLoading(true);
-    supabase.from("cmr_dokumenti").select("*").eq("nalog_id",povezanNalog.id).order("created_at",{ascending:false}).then(({data,error})=>{
+    sb.from("cmr_dokumenti").select("*").eq("nalog_id",povezanNalog.id).order("created_at",{ascending:false}).then(({data,error})=>{
+      if(error){console.error("❌ CMR fetch napaka v Finance:",error);}
       if(!error && data) setCmrList(data);
       setCmrLoading(false);
     });
-  },[povezanNalog?.id,supabase]);
+  },[povezanNalog?.id,sb]);
 
   const novRacun=(n)=>{
     const kontaktEmail=getKontaktEmail(n);
     const znesekRaw=getZnesekOriginal(n);
     const reverseCharge=n?.je_slovenska_ddv===false;
-    // Če je slovenski naročnik, dodaj 22% DDV na ceno iz naloga
     const osnovaCena=znesekRaw?parseZnesek(znesekRaw):0;
     const znesek=znesekRaw?(reverseCharge?osnovaCena:(osnovaCena*1.22)).toFixed(2):"";
     const ref=getRef(n);
@@ -715,7 +758,7 @@ function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
   };
   const shraniEdit=(updated)=>{upd(s=>({...s,racuni:(s.racuni||[]).map(r=>r.id===updated.id?updated:r)}));setDetail(updated);setEditMode(false);showToast("✅ Račun posodobljen.");};
   const izbrisiRacun=(id)=>{upd(s=>({...s,racuni:(s.racuni||[]).filter(r=>r.id!==id)}));setDetail(null);setConfirmDel(false);showToast("🗑️ Račun izbrisan.");};
-  
+
   const odpriNalog=(nalogId)=>{
     setDetail(null);
     if(setActiveTab){setActiveTab("nalogi");}
@@ -782,7 +825,7 @@ function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
         </div>
       </div>
     );})}
-    
+
     {/* MODAL: Nov račun */}
     {modal==="racun"&&<div style={s.overlay}><div style={{...s.mbox,maxWidth:900,maxHeight:"95vh",overflowY:"auto"}}><div style={s.mhead}><span style={s.mtitle}>Nov račun</span><button style={s.mcls} onClick={()=>{setModal(null);setForm({});}}>✕</button></div>
       <div style={s.mbody}>
@@ -790,9 +833,8 @@ function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
           <div style={{fontWeight:700,marginBottom:3}}>📋 {form.nalogId}</div>
           <div style={{fontSize:11,color:"#3b82f6"}}>Podatki so avtomatsko preneseni iz naloga</div>
         </div>}
-        
+
         <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
-          {/* LEVA STRAN: Forma */}
           <div style={{flex:"1 1 300px",minWidth:280}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px",marginBottom:12}}>
               <div style={{gridColumn:"1/-1"}}><label style={s.lbl}>Stranka *</label><input style={s.inp} value={form.stranka||""} onChange={e=>setForm(f=>({...f,stranka:e.target.value}))}/></div>
@@ -808,33 +850,26 @@ function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
                 </label>
               </div>
             </div>
-            
-            {/* Povzetek rute */}
+
             {(form.nakKraj||form.razKraj)&&<div style={{background:"#f8fafc",borderRadius:8,padding:10,marginBottom:12,fontSize:12,color:"#64748b"}}>
               <div style={{fontWeight:700,color:"#0f2744",marginBottom:4}}>🚚 Ruta</div>
               {form.nakFirma&&<div>{form.nakFirma}</div>}
               <div>📍 {form.nakKraj} → {form.razKraj}</div>
               {form.razFirma&&<div>{form.razFirma}</div>}
             </div>}
-            
-            {/* Navodila iz naloga */}
+
             {form.navodila&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,padding:10,marginBottom:12}}>
               <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#92400e",marginBottom:4,fontWeight:700}}>⚠️ Navodila iz naloga</div>
               <div style={{fontSize:12,color:"#78350f",whiteSpace:"pre-wrap",lineHeight:1.4}}>{form.navodila}</div>
             </div>}
-            
+
             <button style={s.btnP} onClick={submitRacun}>Ustvari račun</button>
           </div>
-          
-          {/* DESNA STRAN: PDF predogled */}
+
           {form.originalPdfUrl&&<div style={{flex:"1 1 320px",minWidth:300}}>
             <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:6,fontWeight:700}}>📄 Original nalog</div>
             <div style={{border:"1px solid #e2e8f0",borderRadius:8,overflow:"hidden",background:"#f1f5f9"}}>
-              <iframe 
-                src={form.originalPdfUrl} 
-                style={{width:"100%",height:500,border:"none"}} 
-                title="Original nalog PDF"
-              />
+              <iframe src={form.originalPdfUrl} style={{width:"100%",height:500,border:"none"}} title="Original nalog PDF"/>
               <a href={form.originalPdfUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",padding:"8px 12px",fontSize:11,color:"#2563eb",textAlign:"center",borderTop:"1px solid #e2e8f0",textDecoration:"none",background:"#fff"}}>
                 Odpri v novem zavihku ↗
               </a>
@@ -842,7 +877,7 @@ function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
           </div>}
         </div>
       </div></div></div>}
-    
+
     {/* MODAL: Detajl računa */}
     {detail&&(()=>{
       const sc=rSC[detail.status]||rSC.osnutek;
@@ -867,9 +902,8 @@ function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
             </div>
             <button style={{...s.mcls,color:"#fff"}} onClick={()=>setDetail(null)}>✕</button>
           </div>
-          
+
           <div style={{...s.mbody,padding:"18px 20px"}}>
-            {/* Znesek */}
             <div style={{background:"linear-gradient(135deg, #f8fafc 0%, #fff 100%)",border:"1px solid #e2e8f0",borderRadius:12,padding:16,marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
               <div>
                 <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:4}}>Za plačilo</div>
@@ -883,8 +917,7 @@ function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
                 </div>}
               </div>}
             </div>
-            
-            {/* Stranka */}
+
             <div style={{marginBottom:16}}>
               <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:6,fontWeight:700}}>🏢 Stranka</div>
               {editMode?<input style={s.inp} value={detail.stranka||""} onChange={e=>setDetail(d=>({...d,stranka:e.target.value}))}/>:
@@ -894,8 +927,7 @@ function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
                   {detail.reverseCharge&&<div style={{display:"inline-block",marginTop:6,fontSize:10,background:"#fef3c7",color:"#92400e",padding:"2px 8px",borderRadius:4,fontWeight:600}}>Reverse charge</div>}
                 </div>}
             </div>
-            
-            {/* Povezan nalog */}
+
             {povezanNalog&&<div style={{marginBottom:16}}>
               <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:6,fontWeight:700}}>🚚 Povezan nalog</div>
               <div onClick={()=>odpriNalog(povezanNalog.id)} style={{background:"#f8fafc",borderRadius:8,padding:12,cursor:"pointer",transition:"all 0.15s",border:"1px solid transparent"}} onMouseEnter={e=>{e.currentTarget.style.background="#eff6ff";e.currentTarget.style.borderColor="#bfdbfe";}} onMouseLeave={e=>{e.currentTarget.style.background="#f8fafc";e.currentTarget.style.borderColor="transparent";}}>
@@ -909,8 +941,8 @@ function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
                 </div>
               </div>
             </div>}
-            
-            {/* CMR */}
+
+            {/* CMR — POPRAVEK: pravi bucket + sb prop */}
             {povezanNalog&&<div style={{marginBottom:16}}>
               <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:6,fontWeight:700,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <span>📎 CMR dokumenti {cmrList.length>0&&`(${cmrList.length})`}</span>
@@ -921,7 +953,7 @@ function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
                 </div>:
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(100px,1fr))",gap:8}}>
                   {cmrList.map(cmr=>{
-                    const url=getStorageUrl(supabase,CMR_BUCKET,cmr.storage_pot);
+                    const url=getStorageUrl(sb,CMR_BUCKET,cmr.storage_pot);
                     const isImage=/\.(jpg|jpeg|png|webp|gif)$/i.test(cmr.ime_datoteke||"");
                     return(<div key={cmr.id} onClick={()=>{if(isImage&&url){setImgPreview(url);}else if(url){window.open(url,"_blank");}}} style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:6,cursor:"pointer",transition:"all 0.15s",textAlign:"center"}} onMouseEnter={e=>{e.currentTarget.style.borderColor="#2563eb";e.currentTarget.style.transform="translateY(-2px)";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#e2e8f0";e.currentTarget.style.transform="translateY(0)";}}>
                       {isImage&&url?
@@ -932,8 +964,7 @@ function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
                   })}
                 </div>}
             </div>}
-            
-            {/* ORIGINAL NALOG PDF */}
+
             {originalUrl&&<div style={{marginBottom:16}}>
               <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:6,fontWeight:700}}>📄 Original nalog (od stranke)</div>
               <a href={originalUrl} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:12,background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:12,textDecoration:"none",color:"inherit",transition:"all 0.15s"}} onMouseEnter={e=>{e.currentTarget.style.background="#eff6ff";e.currentTarget.style.borderColor="#bfdbfe";}} onMouseLeave={e=>{e.currentTarget.style.background="#f8fafc";e.currentTarget.style.borderColor="#e2e8f0";}}>
@@ -948,8 +979,7 @@ function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
                 </div>}
               </a>
             </div>}
-            
-            {/* Razčlenitev */}
+
             <div style={{marginBottom:16}}>
               <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:6,fontWeight:700}}>💶 Razčlenitev</div>
               <div style={{border:"1px solid #e2e8f0",borderRadius:8,overflow:"hidden"}}>
@@ -975,8 +1005,7 @@ function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
                 Reverse charge (za tuje stranke)
               </label>
             </div>
-            
-            {/* Meta */}
+
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
               <div style={{background:"#f8fafc",borderRadius:8,padding:10}}>
                 <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:3}}>📅 Izdan</div>
@@ -990,8 +1019,7 @@ function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
                 <div style={{fontSize:13,fontWeight:600,color:"#64748b"}}>Neplačano</div>
               </div>}
             </div>
-            
-            {/* Opombe */}
+
             <div style={{marginBottom:16}}>
               <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#94a3b8",marginBottom:6,fontWeight:700}}>📝 Opombe</div>
               {editMode?<textarea style={{...s.inp,minHeight:60,resize:"vertical"}} value={detail.opombe||""} onChange={e=>setDetail(d=>({...d,opombe:e.target.value}))}/>:
@@ -999,8 +1027,7 @@ function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
                   {detail.opombe||"Brez opomb"}
                 </div>}
             </div>
-            
-            {/* Akcije */}
+
             {confirmDel?<div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:8,padding:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:13,fontWeight:600,color:"#991b1b"}}>Res želiš izbrisati?</span>
               <div style={{display:"flex",gap:6}}>
@@ -1027,20 +1054,13 @@ function FinanceTab({st,upd,showToast,supabase,setActiveTab}){
         </div>
       </div>);
     })()}
-    
-    {/* Lightbox */}
+
     {imgPreview&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,cursor:"pointer"}} onClick={()=>setImgPreview(null)}>
       <img src={imgPreview} alt="CMR preview" style={{maxWidth:"95%",maxHeight:"95vh",objectFit:"contain",borderRadius:8,boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}/>
       <button style={{position:"absolute",top:20,right:20,background:"rgba(255,255,255,0.2)",border:"none",color:"#fff",width:40,height:40,borderRadius:20,fontSize:20,cursor:"pointer"}} onClick={()=>setImgPreview(null)}>✕</button>
     </div>}
   </div>);
 }
-
-
-
-
-
-
 
 
 function ProstiCMRTab({st,upd,showToast}){
