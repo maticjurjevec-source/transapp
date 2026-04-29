@@ -136,9 +136,139 @@ function NalogDetail({nalog,onBack,onSprejmi,onZakljuci,onDodajCMR}){if(!nalog)r
 /* ===== ZAKLJUČI MODAL ===== */
 function ZakljuciModal({form,nalog,dodajSlikoCMR,odstraniSliko,onPotrdi,onClose}){const slike=(form.slike||[]).filter(Boolean);return(<div style={s.overlay}><div style={{...s.modalBox,maxHeight:"95vh"}}><div style={s.modalHead}><span style={s.modalTitle}>Zaključi nalog</span><button style={s.closeBtn} onClick={onClose}>✕</button></div><div style={s.modalBody}><div style={s.infoBox}><b>{nalog?.stranka}</b><br/><span style={{fontSize:13,color:"#475569"}}>{nalog?.stevilkaNaloga}</span></div><div style={{marginBottom:10}}><div style={s.label}>📸 CMR</div><div style={{fontSize:12,color:"#64748b",marginBottom:12}}>Dodaj slike.</div></div>{slike.length>0&&<div style={s.cmrGallery}>{slike.map((sl,i)=><div key={i} style={s.cmrGalleryItem}><img src={sl.img} alt={`CMR ${i+1}`} style={s.cmrGalleryImg}/><button style={s.cmrOdstraniBtn} onClick={()=>odstraniSliko(i)}>✕</button><div style={s.cmrGalleryLbl}>✅ {i+1}.</div></div>)}</div>}<input type="file" accept="image/*" capture="environment" id="cmr-add" style={{display:"none"}} onChange={dodajSlikoCMR}/><label htmlFor="cmr-add" style={s.cmrDodajBtn}>📷 {slike.length===0?"Fotografiraj CMR":"+ Dodaj"}</label>{slike.length>0&&<div style={s.cmrSteviloBadge}>✅ {slike.length} {slike.length===1?"slika":"slik"}</div>}<button style={s.btnPrimary} onClick={onPotrdi}>Zaključi & pošlji →</button></div></div></div>);}
 
-/* ===== PROSTI CMR TAB ===== */
-function ProstiCMRTab({st,upd,showToast}){const [pogled,setPogled]=useState("nov");const [stevilkaNaloga,setStevilkaNaloga]=useState("");const [slike,setSlike]=useState([]);const [opomba,setOpomba]=useState("");const [poslan,setPostlan]=useState(false);const [arhiv,setArhiv]=useState([]);const [loading,setLoading]=useState(false);const nalogNajden=st.nalogi?.find(n=>n.stevilkaNaloga?.toUpperCase()===stevilkaNaloga.toUpperCase());useEffect(()=>{setLoading(true);supabase.from("prosti_cmr").select("*").order("created_at",{ascending:false}).then(({data})=>{if(data)setArhiv(data);setLoading(false);});},[]);const dodajSliko=async(e)=>{const file=e.target.files[0];if(!file)return;showToast("⏳ Optimizacija...");const reader=new FileReader();reader.onload=async(ev)=>{const opt=await optimizejSliko(ev.target.result);setSlike(f=>[...f,{img:opt,ime:file.name,cas:new Date().toISOString()}]);showToast("✅ Dodana!");};reader.readAsDataURL(file);e.target.value="";};const odstraniSliko=(idx)=>setSlike(f=>f.filter((_,i)=>i!==idx));const posljiCMR=async()=>{if(!stevilkaNaloga)return showToast("Vnesi številko!",true);if(slike.length===0)return showToast("Dodaj sliko!",true);try{const uploadedSlike=[];for(const sl of slike){const base64=sl.img.split(',')[1];const byteArr=Uint8Array.from(atob(base64),c=>c.charCodeAt(0));const blob=new Blob([byteArr],{type:'image/jpeg'});const pot=`prosti/${Date.now()}-${sl.ime||'cmr.jpg'}`;await supabase.storage.from('cmr-dokumenti').upload(pot,blob,{contentType:'image/jpeg',upsert:false});const{data:urlData}=supabase.storage.from('cmr-dokumenti').getPublicUrl(pot);uploadedSlike.push({url:urlData?.publicUrl,ime:sl.ime,pot});}const povezan=!!nalogNajden;const{error}=await supabase.from("prosti_cmr").insert([{stevilka_naloga:stevilkaNaloga.toUpperCase(),opomba,slike:uploadedSlike,povezan,nalog_id:nalogNajden?.id||null}]);if(error)throw error;if(nalogNajden){for(const sl of uploadedSlike){await supabase.from('cmr_dokumenti').insert([{nalog_id:nalogNajden.id,ime_datoteke:sl.ime||'cmr.jpg',storage_pot:sl.pot}]);}}showToast(povezan?`✅ CMR dodan!`:"✅ CMR poslan.");setPostlan(true);setStevilkaNaloga("");setSlike([]);setOpomba("");const{data:a}=await supabase.from("prosti_cmr").select("*").order("created_at",{ascending:false});if(a)setArhiv(a);setTimeout(()=>{setPostlan(false);setPogled("arhiv");},1500);}catch(err){showToast("❌ Napaka!",true);console.error(err);}};
-return(<div><div style={s.nacin}><button style={{...s.nacinBtn,...(pogled==="nov"?s.nacinOn:{})}} onClick={()=>setPogled("nov")}>📸 Nov CMR</button><button style={{...s.nacinBtn,...(pogled==="arhiv"?s.nacinOn:{})}} onClick={()=>setPogled("arhiv")}>📋 Moji CMR {arhiv.length>0?`(${arhiv.length})`:""}</button></div>{pogled==="nov"&&<div style={s.card}><div style={s.cardTitle}>📸 CMR brez naloga</div><div style={{fontSize:12,color:"#64748b",marginBottom:16,lineHeight:1.6}}>Vnesi <b>številko naloga</b> s CMR.</div><div style={{marginBottom:14}}><label style={s.label}>📋 Številka naloga *</label><input style={{...s.inputBig,textTransform:"uppercase",borderColor:stevilkaNaloga?(nalogNajden?"#16a34a":"#f59e0b"):"#e2e8f0"}} placeholder="npr. NAL-2026-042" value={stevilkaNaloga} onChange={e=>setStevilkaNaloga(e.target.value)}/>{stevilkaNaloga&&<div style={{marginTop:6,fontSize:13,fontWeight:600,padding:"6px 12px",borderRadius:8,background:nalogNajden?"#f0fdf4":"#fffbeb",color:nalogNajden?"#16a34a":"#d97706"}}>{nalogNajden?`✅ ${nalogNajden.stranka} · ${nalogNajden.nakKraj} → ${nalogNajden.razKraj}`:"⚠️ Ni v sistemu"}</div>}</div><div style={{marginBottom:14}}><label style={s.smallLabel}>Opomba</label><input style={s.input} placeholder="npr. Preložitev" value={opomba} onChange={e=>setOpomba(e.target.value)}/></div>{slike.length>0&&<div style={s.cmrGallery}>{slike.map((sl,i)=><div key={i} style={s.cmrGalleryItem}><img src={sl.img} alt={`CMR ${i+1}`} style={s.cmrGalleryImg}/><button style={s.cmrOdstraniBtn} onClick={()=>odstraniSliko(i)}>✕</button><div style={s.cmrGalleryLbl}>✅ {i+1}.</div></div>)}</div>}<input type="file" accept="image/*" capture="environment" id="prosti-cmr-add" style={{display:"none"}} onChange={dodajSliko}/><label htmlFor="prosti-cmr-add" style={s.cmrDodajBtn}>📷 {slike.length===0?"Fotografiraj CMR":"+ Dodaj"}</label>{slike.length>0&&<div style={s.cmrSteviloBadge}>✅ {slike.length} {slike.length===1?"slika":"slik"}</div>}{poslan&&<div style={{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:12,padding:"12px 16px",textAlign:"center",fontSize:14,fontWeight:700,color:"#16a34a",marginBottom:14}}>✅ Uspešno!</div>}<button style={{...s.btnPrimary,opacity:(stevilkaNaloga&&slike.length>0)?1:0.45}} onClick={posljiCMR}>📤 Pošlji CMR</button></div>}{pogled==="arhiv"&&<div>{loading&&<div style={{textAlign:"center",padding:20,color:"#94a3b8"}}>⏳</div>}{!loading&&arhiv.length===0&&<div style={s.empty}>Ni prostih CMR.</div>}{arhiv.map(cmr=><div key={cmr.id} style={s.vnosCard}><div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontWeight:800,fontSize:15,fontFamily:"monospace",color:"#2563eb"}}>{cmr.stevilka_naloga}</span><span style={{fontSize:11,color:"#94a3b8"}}>{fmt(cmr.created_at)}</span></div>{cmr.slike?.length>0&&<div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>{cmr.slike.map((sl,i)=><img key={i} src={sl.url} alt="" style={{width:55,height:75,objectFit:"cover",borderRadius:6,border:"1px solid #e2e8f0"}}/>)}</div>}<div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:8,height:8,borderRadius:"50%",background:cmr.povezan?"#16a34a":"#d97706"}}/><span style={{fontSize:12,fontWeight:700,color:cmr.povezan?"#16a34a":"#d97706"}}>{cmr.povezan?"Povezan":"Čaka"}</span></div></div>)}</div>}</div>);}
+/* ===== PROSTI CMR TAB z AI OCR ===== */
+function ProstiCMRTab({st,upd,showToast}){
+  const [pogled,setPogled]=useState("nov");
+  const [stevilkaNaloga,setStevilkaNaloga]=useState("");
+  const [slike,setSlike]=useState([]);
+  const [opomba,setOpomba]=useState("");
+  const [poslan,setPostlan]=useState(false);
+  const [arhiv,setArhiv]=useState([]);
+  const [loading,setLoading]=useState(false);
+  const [aiLoading,setAiLoading]=useState(false);
+  const nalogNajden=st.nalogi?.find(n=>n.stevilkaNaloga?.toUpperCase()===stevilkaNaloga.toUpperCase());
+
+  useEffect(()=>{setLoading(true);supabase.from("prosti_cmr").select("*").order("created_at",{ascending:false}).then(({data})=>{if(data)setArhiv(data);setLoading(false);});},[]);
+
+  const dodajSliko=async(e)=>{
+    const file=e.target.files[0];if(!file)return;
+    showToast("⏳ Optimizacija...");
+    const reader=new FileReader();
+    reader.onload=async(ev)=>{
+      const opt=await optimizejSliko(ev.target.result);
+      setSlike(f=>[...f,{img:opt,ime:file.name,cas:new Date().toISOString()}]);
+      // AI OCR — preberi številko naloga s slike
+      if(!stevilkaNaloga){
+        setAiLoading(true);
+        showToast("🤖 AI bere številko naloga...");
+        try{
+          const base64Data=opt.split(",")[1];
+          const res=await fetch("/api/parse",{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({
+              model:"claude-sonnet-4-20250514",
+              max_tokens:200,
+              messages:[{role:"user",content:[
+                {type:"image",source:{type:"base64",media_type:"image/jpeg",data:base64Data}},
+                {type:"text",text:"Na tej CMR listini/transportnem dokumentu je ročno napisana številka naloga v formatu NAL-YYYY-NNN (npr. NAL-2026-022 ali NAL-2026-013). Številka je običajno napisana ročno s kemičnim svinčnikom na vrhu ali robu dokumenta. Poišči to ročno napisano številko. Vrni SAMO številko naloga (npr. NAL-2026-022), nič drugega. Če številke ne najdeš, vrni prazen odgovor."}
+              ]}]
+            })
+          });
+          const data=await res.json();
+          const txt=(data.content?.map(i=>i.text||"").join("")||"").trim().toUpperCase();
+          const match=txt.match(/NAL-\d{4}-\d{3}/);
+          if(match){
+            setStevilkaNaloga(match[0]);
+            showToast("✅ AI prebral: "+match[0]);
+          }else{
+            showToast("📸 Slika dodana — vnesi številko ročno.");
+          }
+        }catch(err){
+          console.error("AI OCR napaka:",err);
+          showToast("📸 Slika dodana.");
+        }
+        setAiLoading(false);
+      }else{
+        showToast("✅ Slika dodana!");
+      }
+    };
+    reader.readAsDataURL(file);e.target.value="";
+  };
+
+  const odstraniSliko=(idx)=>setSlike(f=>f.filter((_,i)=>i!==idx));
+
+  const posljiCMR=async()=>{
+    if(!stevilkaNaloga)return showToast("Vnesi številko!",true);
+    if(slike.length===0)return showToast("Dodaj sliko!",true);
+    try{
+      const uploadedSlike=[];
+      for(const sl of slike){
+        const base64=sl.img.split(',')[1];
+        const byteArr=Uint8Array.from(atob(base64),c=>c.charCodeAt(0));
+        const blob=new Blob([byteArr],{type:'image/jpeg'});
+        const pot=`prosti/${Date.now()}-${sl.ime||'cmr.jpg'}`;
+        await supabase.storage.from('cmr-dokumenti').upload(pot,blob,{contentType:'image/jpeg',upsert:false});
+        const{data:urlData}=supabase.storage.from('cmr-dokumenti').getPublicUrl(pot);
+        uploadedSlike.push({url:urlData?.publicUrl,ime:sl.ime,pot});
+      }
+      const povezan=!!nalogNajden;
+      const{error}=await supabase.from("prosti_cmr").insert([{stevilka_naloga:stevilkaNaloga.toUpperCase(),opomba,slike:uploadedSlike,povezan,nalog_id:nalogNajden?.id||null}]);
+      if(error)throw error;
+      if(nalogNajden){
+        for(const sl of uploadedSlike){
+          await supabase.from('cmr_dokumenti').insert([{nalog_id:nalogNajden.id,ime_datoteke:sl.ime||'cmr.jpg',storage_pot:sl.pot}]);
+        }
+      }
+      showToast(povezan?"✅ CMR dodan!":"✅ CMR poslan.");
+      setPostlan(true);setStevilkaNaloga("");setSlike([]);setOpomba("");
+      const{data:a}=await supabase.from("prosti_cmr").select("*").order("created_at",{ascending:false});
+      if(a)setArhiv(a);
+      setTimeout(()=>{setPostlan(false);setPogled("arhiv");},1500);
+    }catch(err){showToast("❌ Napaka!",true);console.error(err);}
+  };
+
+  return(<div>
+    <div style={s.nacin}>
+      <button style={{...s.nacinBtn,...(pogled==="nov"?s.nacinOn:{})}} onClick={()=>setPogled("nov")}>📸 Nov CMR</button>
+      <button style={{...s.nacinBtn,...(pogled==="arhiv"?s.nacinOn:{})}} onClick={()=>setPogled("arhiv")}>📋 Moji CMR {arhiv.length>0?`(${arhiv.length})`:""}</button>
+    </div>
+    {pogled==="nov"&&<div style={s.card}>
+      <div style={s.cardTitle}>📸 CMR brez naloga</div>
+      <div style={{fontSize:12,color:"#64748b",marginBottom:16,lineHeight:1.6}}>Fotografiraj CMR — <b>AI bo avtomatsko prebral številko naloga</b> ki si jo napisal na dokument.</div>
+
+      {/* Najprej slika, potem številka */}
+      <div style={{marginBottom:14}}>
+        <label style={s.label}>📷 Fotografiraj CMR dokument</label>
+        {slike.length>0&&<div style={s.cmrGallery}>{slike.map((sl,i)=><div key={i} style={s.cmrGalleryItem}><img src={sl.img} alt={`CMR ${i+1}`} style={s.cmrGalleryImg}/><button style={s.cmrOdstraniBtn} onClick={()=>odstraniSliko(i)}>✕</button><div style={s.cmrGalleryLbl}>✅ {i+1}.</div></div>)}</div>}
+        <input type="file" accept="image/*" capture="environment" id="prosti-cmr-add" style={{display:"none"}} onChange={dodajSliko}/>
+        <label htmlFor="prosti-cmr-add" style={{...s.cmrDodajBtn,opacity:aiLoading?0.5:1}}>
+          {aiLoading?"🤖 AI bere...":slike.length===0?"📷 Fotografiraj CMR":"📷 + Dodaj še sliko"}
+        </label>
+        {slike.length>0&&<div style={s.cmrSteviloBadge}>✅ {slike.length} {slike.length===1?"slika":"slik"}</div>}
+      </div>
+
+      <div style={{marginBottom:14}}>
+        <label style={s.label}>📋 Številka naloga {aiLoading&&<span style={{color:"#2563eb",fontWeight:400}}>(AI bere...)</span>}</label>
+        <input style={{...s.inputBig,textTransform:"uppercase",borderColor:stevilkaNaloga?(nalogNajden?"#16a34a":"#f59e0b"):"#e2e8f0"}} placeholder="npr. NAL-2026-042" value={stevilkaNaloga} onChange={e=>setStevilkaNaloga(e.target.value)}/>
+        {stevilkaNaloga&&<div style={{marginTop:6,fontSize:13,fontWeight:600,padding:"6px 12px",borderRadius:8,background:nalogNajden?"#f0fdf4":"#fffbeb",color:nalogNajden?"#16a34a":"#d97706"}}>{nalogNajden?`✅ ${nalogNajden.stranka} · ${nalogNajden.nakKraj} → ${nalogNajden.razKraj}`:"⚠️ Ni v sistemu — CMR bo poslan dispečerju"}</div>}
+      </div>
+
+      <div style={{marginBottom:14}}><label style={s.smallLabel}>Opomba</label><input style={s.input} placeholder="npr. Preložitev" value={opomba} onChange={e=>setOpomba(e.target.value)}/></div>
+      {poslan&&<div style={{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:12,padding:"12px 16px",textAlign:"center",fontSize:14,fontWeight:700,color:"#16a34a",marginBottom:14}}>✅ Uspešno!</div>}
+      <button style={{...s.btnPrimary,opacity:(stevilkaNaloga&&slike.length>0)?1:0.45}} onClick={posljiCMR}>📤 Pošlji CMR</button>
+    </div>}
+    {pogled==="arhiv"&&<div>
+      {loading&&<div style={{textAlign:"center",padding:20,color:"#94a3b8"}}>⏳</div>}
+      {!loading&&arhiv.length===0&&<div style={s.empty}>Ni prostih CMR.</div>}
+      {arhiv.map(cmr=><div key={cmr.id} style={s.vnosCard}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontWeight:800,fontSize:15,fontFamily:"monospace",color:"#2563eb"}}>{cmr.stevilka_naloga}</span><span style={{fontSize:11,color:"#94a3b8"}}>{fmt(cmr.created_at)}</span></div>
+        {cmr.slike?.length>0&&<div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>{cmr.slike.map((sl,i)=><img key={i} src={sl.url} alt="" style={{width:55,height:75,objectFit:"cover",borderRadius:6,border:"1px solid #e2e8f0"}}/>)}</div>}
+        <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:8,height:8,borderRadius:"50%",background:cmr.povezan?"#16a34a":"#d97706"}}/><span style={{fontSize:12,fontWeight:700,color:cmr.povezan?"#16a34a":"#d97706"}}>{cmr.povezan?"Povezan":"Čaka"}</span></div>
+      </div>)}
+    </div>}
+  </div>);
+}
 
 /* ===== HELPERS ===== */
 const Sec=({title,children})=><div style={s.section}><div style={s.sectionTitle2}>{title}</div>{children}</div>;
@@ -147,4 +277,90 @@ const NavBtn=({active,onClick,icon,label})=><button onClick={onClick} style={s.n
 const Toast=({toast})=><div style={{...s.toast,background:toast.err?"#dc2626":"#16a34a"}}>{toast.txt}</div>;
 
 /* ===== STYLES ===== */
-const s={wrap:{fontFamily:"'Segoe UI',system-ui,sans-serif",background:"#f1f5f9",minHeight:"100vh",maxWidth:430,margin:"0 auto",display:"flex",flexDirection:"column"},header:{background:"linear-gradient(135deg,#0f2744 0%,#1d4ed8 100%)",padding:"16px 20px 14px",color:"#fff"},hRow:{display:"flex",justifyContent:"space-between",alignItems:"center"},logo:{fontSize:21,fontWeight:800,letterSpacing:-0.5},sub:{fontSize:12,opacity:0.65,marginTop:3},redBadge:{background:"#ef4444",color:"#fff",padding:"5px 12px",borderRadius:20,fontSize:12,fontWeight:700},backBtn:{background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",padding:"6px 14px",borderRadius:20,fontSize:13,cursor:"pointer",marginBottom:10,display:"block"},toast:{position:"fixed",top:74,left:"50%",transform:"translateX(-50%)",color:"#fff",padding:"12px 24px",borderRadius:30,fontWeight:700,fontSize:14,zIndex:400,boxShadow:"0 4px 20px rgba(0,0,0,0.25)",whiteSpace:"nowrap",maxWidth:"90vw"},content:{flex:1,padding:"14px 14px 90px",overflowY:"auto"},nav:{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,display:"flex",background:"#fff",borderTop:"1px solid #e2e8f0",padding:"6px 0 4px",zIndex:50},navBtn:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",background:"none",border:"none",cursor:"pointer",padding:"4px 2px"},datumRow:{display:"flex",alignItems:"flex-end",gap:8},datumPolje:{flex:1},datumSep:{fontSize:18,color:"#94a3b8",paddingBottom:10,flexShrink:0},obdobjeLabel:{fontSize:12,color:"#16a34a",fontWeight:600,marginTop:8,textAlign:"center"},card:{background:"#fff",borderRadius:16,padding:18,marginBottom:14,boxShadow:"0 1px 5px rgba(0,0,0,0.07)"},cardTitle:{fontWeight:700,fontSize:16,color:"#0f2744",marginBottom:14},nacin:{display:"flex",gap:8,marginBottom:14},nacinBtn:{flex:1,padding:"9px 0",borderRadius:10,border:"1.5px solid #e2e8f0",background:"#f8fafc",fontSize:13,cursor:"pointer",fontWeight:500,color:"#475569"},nacinOn:{background:"#0f2744",color:"#fff",border:"1.5px solid #0f2744",fontWeight:700},kmRazlikaWrap:{display:"flex",alignItems:"flex-end",gap:8},kmPolje:{flex:1},kmMinus:{fontSize:20,color:"#94a3b8",paddingBottom:10,flexShrink:0},kmRezultat:{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:12,background:"#f0fdf4",borderRadius:10,padding:"10px 14px"},kmRezultatNum:{fontWeight:700,color:"#0f2744",fontSize:15},kmRezultatZasl:{fontSize:14,color:"#475569"},strankeWrap:{display:"flex",alignItems:"center",gap:12,margin:"12px 0"},strankeBtn:{width:44,height:44,borderRadius:12,border:"1.5px solid #e2e8f0",background:"#f8fafc",fontSize:22,cursor:"pointer",fontWeight:700,color:"#0f2744",flexShrink:0},strankeInput:{flex:1,border:"1.5px solid #e2e8f0",borderRadius:12,padding:"10px",fontSize:24,fontWeight:800,textAlign:"center",outline:"none",color:"#0f2744"},skupajCard:{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:16,padding:20,marginBottom:14,color:"#fff"},skupajLabel:{fontSize:13,opacity:0.75,marginBottom:2},skupajLabel2:{fontSize:12,opacity:0.6,marginBottom:14},skupajVrstice:{},skupajVrstica:{display:"flex",justifyContent:"space-between",fontSize:14,opacity:0.85,padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.1)"},skupajTotal:{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:22,paddingTop:12},obracunZakljucen:{textAlign:"center",color:"#dcfce7",fontWeight:700,fontSize:13,marginTop:14,background:"rgba(255,255,255,0.15)",borderRadius:12,padding:"11px"},pregledBtn:{width:"100%",background:"#fff",border:"1.5px solid #e2e8f0",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",color:"#0f2744",marginBottom:8},arhivRow:{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fff",borderRadius:10,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 3px rgba(0,0,0,0.05)",cursor:"pointer"},arhivLabel:{fontWeight:600,fontSize:13,color:"#1e293b",marginBottom:2},arhivMeta:{fontSize:12,color:"#94a3b8"},arhivZasl:{fontWeight:800,fontSize:16,color:"#16a34a"},filterRow:{display:"flex",gap:6,marginBottom:14},filterBtn:{padding:"7px 14px",borderRadius:20,border:"1.5px solid #e2e8f0",background:"#fff",fontSize:13,cursor:"pointer",fontWeight:500,color:"#475569"},filterOn:{background:"#0f2744",color:"#fff",border:"1.5px solid #0f2744"},nalogRow:{width:"100%",background:"#fff",borderRadius:14,padding:"14px 16px",marginBottom:10,boxShadow:"0 1px 5px rgba(0,0,0,0.07)",display:"flex",alignItems:"center",justifyContent:"space-between",border:"none",cursor:"pointer",textAlign:"left"},nalogRowLeft:{display:"flex",alignItems:"flex-start",flex:1},statusCard:{borderRadius:12,padding:"12px 14px",marginBottom:14,border:"1.5px solid"},statusPill2:{padding:"4px 12px",borderRadius:20,fontSize:12,fontWeight:700,display:"inline-block",marginBottom:6},statusMeta:{fontSize:12,color:"#64748b",marginTop:4},section:{background:"#fff",borderRadius:14,padding:"14px 16px",marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"},sectionTitle2:{fontSize:13,fontWeight:700,color:"#64748b",marginBottom:10,textTransform:"uppercase",letterSpacing:0.5},infoRow:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",paddingBottom:7,marginBottom:7,borderBottom:"1px solid #f8fafc"},infoLabel:{fontSize:12,color:"#94a3b8",flexShrink:0,marginRight:10,paddingTop:1},infoVal:{fontSize:13,color:"#1e293b",textAlign:"right",flex:1},navodilaBox:{fontSize:13,color:"#1e293b",lineHeight:1.6,background:"#fffbeb",borderRadius:8,padding:"10px 12px",border:"1px solid #fde68a"},cmrGrid:{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"},cmrThumbWrap:{width:"calc(33% - 6px)",textAlign:"center"},cmrThumb:{width:"100%",aspectRatio:"3/4",objectFit:"cover",borderRadius:8,border:"1px solid #e2e8f0"},cmrThumbLabel:{fontSize:11,color:"#64748b",marginTop:4},cmrPoslan:{fontSize:12,color:"#16a34a",fontWeight:600,textAlign:"center",padding:"8px",background:"#f0fdf4",borderRadius:8},metaBox:{fontSize:11,color:"#94a3b8",textAlign:"center",padding:"8px 0"},actionBar:{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,background:"#fff",borderTop:"1px solid #e2e8f0",padding:"12px 16px 20px",zIndex:50},zakljucenoBar:{textAlign:"center",color:"#16a34a",fontWeight:700,fontSize:14,padding:"14px"},cmrGallery:{display:"flex",flexWrap:"wrap",gap:10,marginBottom:14},cmrGalleryItem:{position:"relative",width:"calc(33% - 7px)"},cmrGalleryImg:{width:"100%",aspectRatio:"3/4",objectFit:"cover",borderRadius:10,border:"2px solid #16a34a",display:"block"},cmrGalleryLbl:{fontSize:11,color:"#16a34a",fontWeight:700,textAlign:"center",marginTop:3},cmrOdstraniBtn:{position:"absolute",top:4,right:4,background:"#dc2626",color:"#fff",border:"none",borderRadius:"50%",width:22,height:22,fontSize:11,cursor:"pointer",fontWeight:700,lineHeight:"22px",padding:0},cmrDodajBtn:{display:"block",width:"100%",textAlign:"center",background:"#0f2744",color:"#fff",padding:"13px",borderRadius:12,fontWeight:700,fontSize:15,cursor:"pointer",marginBottom:12,boxSizing:"border-box"},cmrSteviloBadge:{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#1d4ed8",marginBottom:14,textAlign:"center"},vnosCard:{background:"#fff",borderRadius:12,padding:"13px 15px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"},label:{display:"block",fontSize:13,fontWeight:600,color:"#475569",marginBottom:6},smallLabel:{display:"block",fontSize:12,color:"#64748b",marginBottom:6},input:{width:"100%",border:"1.5px solid #e2e8f0",borderRadius:10,padding:"11px 13px",fontSize:15,outline:"none",boxSizing:"border-box",background:"#f8fafc"},inputBig:{width:"100%",border:"1.5px solid #e2e8f0",borderRadius:12,padding:"13px 16px",fontSize:22,fontWeight:700,outline:"none",boxSizing:"border-box",background:"#f8fafc",color:"#0f2744"},infoBox:{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"12px 14px",marginBottom:16,lineHeight:1.7},btnPrimary:{width:"100%",background:"linear-gradient(135deg,#0f2744,#1d4ed8)",color:"#fff",border:"none",borderRadius:12,padding:14,fontSize:15,fontWeight:700,cursor:"pointer",marginTop:4},btnSuccess:{width:"100%",background:"linear-gradient(135deg,#065f46,#16a34a)",color:"#fff",border:"none",borderRadius:12,padding:14,fontSize:15,fontWeight:700,cursor:"pointer"},overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:200},modalBox:{background:"#fff",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:430,overflowY:"auto"},modalHead:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"18px 20px 12px",borderBottom:"1px solid #e2e8f0"},modalTitle:{fontWeight:700,fontSize:17,color:"#0f2744"},closeBtn:{background:"#f1f5f9",border:"none",borderRadius:"50%",width:32,height:32,fontSize:14,cursor:"pointer"},modalBody:{padding:"16px 20px 32px"},empty:{textAlign:"center",color:"#94a3b8",padding:"40px 20px",fontSize:14,lineHeight:1.7}};
+const s={
+  wrap:{fontFamily:"'Segoe UI',system-ui,sans-serif",background:"#f1f5f9",minHeight:"100vh",maxWidth:430,margin:"0 auto",display:"flex",flexDirection:"column"},
+  header:{background:"linear-gradient(135deg,#0f2744 0%,#1d4ed8 100%)",padding:"16px 20px 14px",color:"#fff"},
+  hRow:{display:"flex",justifyContent:"space-between",alignItems:"center"},
+  logo:{fontSize:21,fontWeight:800,letterSpacing:-0.5},
+  sub:{fontSize:12,opacity:0.65,marginTop:3},
+  redBadge:{background:"#ef4444",color:"#fff",padding:"5px 12px",borderRadius:20,fontSize:12,fontWeight:700},
+  backBtn:{background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",padding:"6px 14px",borderRadius:20,fontSize:13,cursor:"pointer",marginBottom:10,display:"block"},
+  toast:{position:"fixed",top:74,left:"50%",transform:"translateX(-50%)",color:"#fff",padding:"12px 24px",borderRadius:30,fontWeight:700,fontSize:14,zIndex:400,boxShadow:"0 4px 20px rgba(0,0,0,0.25)",whiteSpace:"nowrap",maxWidth:"90vw"},
+  content:{flex:1,padding:"14px 14px 90px",overflowY:"auto"},
+  nav:{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,display:"flex",background:"#fff",borderTop:"1px solid #e2e8f0",padding:"6px 0 4px",zIndex:50},
+  navBtn:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",background:"none",border:"none",cursor:"pointer",padding:"4px 2px"},
+  datumRow:{display:"flex",alignItems:"flex-end",gap:8},
+  datumPolje:{flex:1},
+  datumSep:{fontSize:18,color:"#94a3b8",paddingBottom:10,flexShrink:0},
+  obdobjeLabel:{fontSize:12,color:"#16a34a",fontWeight:600,marginTop:8,textAlign:"center"},
+  card:{background:"#fff",borderRadius:16,padding:18,marginBottom:14,boxShadow:"0 1px 5px rgba(0,0,0,0.07)"},
+  cardTitle:{fontWeight:700,fontSize:16,color:"#0f2744",marginBottom:14},
+  nacin:{display:"flex",gap:8,marginBottom:14},
+  nacinBtn:{flex:1,padding:"9px 0",borderRadius:10,border:"1.5px solid #e2e8f0",background:"#f8fafc",fontSize:13,cursor:"pointer",fontWeight:500,color:"#475569"},
+  nacinOn:{background:"#0f2744",color:"#fff",border:"1.5px solid #0f2744",fontWeight:700},
+  kmRazlikaWrap:{display:"flex",alignItems:"flex-end",gap:8},
+  kmPolje:{flex:1},
+  kmMinus:{fontSize:20,color:"#94a3b8",paddingBottom:10,flexShrink:0},
+  kmRezultat:{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:12,background:"#f0fdf4",borderRadius:10,padding:"10px 14px"},
+  kmRezultatNum:{fontWeight:700,color:"#0f2744",fontSize:15},
+  kmRezultatZasl:{fontSize:14,color:"#475569"},
+  strankeWrap:{display:"flex",alignItems:"center",gap:12,margin:"12px 0"},
+  strankeBtn:{width:44,height:44,borderRadius:12,border:"1.5px solid #e2e8f0",background:"#f8fafc",fontSize:22,cursor:"pointer",fontWeight:700,color:"#0f2744",flexShrink:0},
+  strankeInput:{flex:1,border:"1.5px solid #e2e8f0",borderRadius:12,padding:"10px",fontSize:24,fontWeight:800,textAlign:"center",outline:"none",color:"#0f2744"},
+  skupajCard:{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:16,padding:20,marginBottom:14,color:"#fff"},
+  skupajLabel:{fontSize:13,opacity:0.75,marginBottom:2},
+  skupajLabel2:{fontSize:12,opacity:0.6,marginBottom:14},
+  skupajVrstice:{},
+  skupajVrstica:{display:"flex",justifyContent:"space-between",fontSize:14,opacity:0.85,padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.1)"},
+  skupajTotal:{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:22,paddingTop:12},
+  obracunZakljucen:{textAlign:"center",color:"#dcfce7",fontWeight:700,fontSize:13,marginTop:14,background:"rgba(255,255,255,0.15)",borderRadius:12,padding:"11px"},
+  pregledBtn:{width:"100%",background:"#fff",border:"1.5px solid #e2e8f0",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",color:"#0f2744",marginBottom:8},
+  arhivRow:{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fff",borderRadius:10,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 3px rgba(0,0,0,0.05)",cursor:"pointer"},
+  arhivLabel:{fontWeight:600,fontSize:13,color:"#1e293b",marginBottom:2},
+  arhivMeta:{fontSize:12,color:"#94a3b8"},
+  arhivZasl:{fontWeight:800,fontSize:16,color:"#16a34a"},
+  filterRow:{display:"flex",gap:6,marginBottom:14},
+  filterBtn:{padding:"7px 14px",borderRadius:20,border:"1.5px solid #e2e8f0",background:"#fff",fontSize:13,cursor:"pointer",fontWeight:500,color:"#475569"},
+  filterOn:{background:"#0f2744",color:"#fff",border:"1.5px solid #0f2744"},
+  nalogRow:{width:"100%",background:"#fff",borderRadius:14,padding:"14px 16px",marginBottom:10,boxShadow:"0 1px 5px rgba(0,0,0,0.07)",display:"flex",alignItems:"center",justifyContent:"space-between",border:"none",cursor:"pointer",textAlign:"left"},
+  nalogRowLeft:{display:"flex",alignItems:"flex-start",flex:1},
+  statusCard:{borderRadius:12,padding:"12px 14px",marginBottom:14,border:"1.5px solid"},
+  statusPill2:{padding:"4px 12px",borderRadius:20,fontSize:12,fontWeight:700,display:"inline-block",marginBottom:6},
+  statusMeta:{fontSize:12,color:"#64748b",marginTop:4},
+  section:{background:"#fff",borderRadius:14,padding:"14px 16px",marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"},
+  sectionTitle2:{fontSize:13,fontWeight:700,color:"#64748b",marginBottom:10,textTransform:"uppercase",letterSpacing:0.5},
+  infoRow:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",paddingBottom:7,marginBottom:7,borderBottom:"1px solid #f8fafc"},
+  infoLabel:{fontSize:12,color:"#94a3b8",flexShrink:0,marginRight:10,paddingTop:1},
+  infoVal:{fontSize:13,color:"#1e293b",textAlign:"right",flex:1},
+  navodilaBox:{fontSize:13,color:"#1e293b",lineHeight:1.6,background:"#fffbeb",borderRadius:8,padding:"10px 12px",border:"1px solid #fde68a"},
+  cmrGrid:{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"},
+  cmrThumbWrap:{width:"calc(33% - 6px)",textAlign:"center"},
+  cmrThumb:{width:"100%",aspectRatio:"3/4",objectFit:"cover",borderRadius:8,border:"1px solid #e2e8f0"},
+  cmrThumbLabel:{fontSize:11,color:"#64748b",marginTop:4},
+  cmrPoslan:{fontSize:12,color:"#16a34a",fontWeight:600,textAlign:"center",padding:"8px",background:"#f0fdf4",borderRadius:8},
+  metaBox:{fontSize:11,color:"#94a3b8",textAlign:"center",padding:"8px 0"},
+  actionBar:{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,background:"#fff",borderTop:"1px solid #e2e8f0",padding:"12px 16px 20px",zIndex:50},
+  zakljucenoBar:{textAlign:"center",color:"#16a34a",fontWeight:700,fontSize:14,padding:"14px"},
+  cmrGallery:{display:"flex",flexWrap:"wrap",gap:10,marginBottom:14},
+  cmrGalleryItem:{position:"relative",width:"calc(33% - 7px)"},
+  cmrGalleryImg:{width:"100%",aspectRatio:"3/4",objectFit:"cover",borderRadius:10,border:"2px solid #16a34a",display:"block"},
+  cmrGalleryLbl:{fontSize:11,color:"#16a34a",fontWeight:700,textAlign:"center",marginTop:3},
+  cmrOdstraniBtn:{position:"absolute",top:4,right:4,background:"#dc2626",color:"#fff",border:"none",borderRadius:"50%",width:22,height:22,fontSize:11,cursor:"pointer",fontWeight:700,lineHeight:"22px",padding:0},
+  cmrDodajBtn:{display:"block",width:"100%",textAlign:"center",background:"#0f2744",color:"#fff",padding:"13px",borderRadius:12,fontWeight:700,fontSize:15,cursor:"pointer",marginBottom:12,boxSizing:"border-box"},
+  cmrSteviloBadge:{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#1d4ed8",marginBottom:14,textAlign:"center"},
+  vnosCard:{background:"#fff",borderRadius:12,padding:"13px 15px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"},
+  label:{display:"block",fontSize:13,fontWeight:600,color:"#475569",marginBottom:6},
+  smallLabel:{display:"block",fontSize:12,color:"#64748b",marginBottom:6},
+  input:{width:"100%",border:"1.5px solid #e2e8f0",borderRadius:10,padding:"11px 13px",fontSize:15,outline:"none",boxSizing:"border-box",background:"#f8fafc"},
+  inputBig:{width:"100%",border:"1.5px solid #e2e8f0",borderRadius:12,padding:"13px 16px",fontSize:22,fontWeight:700,outline:"none",boxSizing:"border-box",background:"#f8fafc",color:"#0f2744"},
+  infoBox:{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"12px 14px",marginBottom:16,lineHeight:1.7},
+  btnPrimary:{width:"100%",background:"linear-gradient(135deg,#0f2744,#1d4ed8)",color:"#fff",border:"none",borderRadius:12,padding:14,fontSize:15,fontWeight:700,cursor:"pointer",marginTop:4},
+  btnSuccess:{width:"100%",background:"linear-gradient(135deg,#065f46,#16a34a)",color:"#fff",border:"none",borderRadius:12,padding:14,fontSize:15,fontWeight:700,cursor:"pointer"},
+  overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:200},
+  modalBox:{background:"#fff",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:430,overflowY:"auto"},
+  modalHead:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"18px 20px 12px",borderBottom:"1px solid #e2e8f0"},
+  modalTitle:{fontWeight:700,fontSize:17,color:"#0f2744"},
+  closeBtn:{background:"#f1f5f9",border:"none",borderRadius:"50%",width:32,height:32,fontSize:14,cursor:"pointer"},
+  modalBody:{padding:"16px 20px 32px"},
+  empty:{textAlign:"center",color:"#94a3b8",padding:"40px 20px",fontSize:14,lineHeight:1.7},
+};
