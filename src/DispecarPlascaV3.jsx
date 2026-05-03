@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from './supabase';
+import { loginToOutlook, logoutFromOutlook, getActiveAccount, getRecentEmails, getEmailWithAttachments, markEmailAsRead } from './outlookService';
 
 const pad=(n)=>String(n).padStart(2,"0");
 const fmt=(iso)=>{if(!iso)return"–";const d=new Date(iso);return`${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()}`;};
@@ -1135,6 +1136,116 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
   const [form, setForm] = useState({});
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
 
+  // Outlook integracija
+  const [outlookAccount, setOutlookAccount] = useState(getActiveAccount());
+  const [outlookEmails, setOutlookEmails] = useState([]);
+  const [outlookLoading, setOutlookLoading] = useState(false);
+  const [outlookFilter, setOutlookFilter] = useState("vsi"); // vsi | priponke | neprebrani
+
+  useEffect(() => {
+    setOutlookAccount(getActiveAccount());
+  }, []);
+
+  const outlookPrijava = async () => {
+    try {
+      const acc = await loginToOutlook();
+      setOutlookAccount(acc);
+      showToast(`✅ Povezan z Outlookom: ${acc.username}`);
+      naložiOutlookEmaile();
+    } catch (err) {
+      console.error(err);
+      showToast("❌ Prijava v Outlook ni uspela.", true);
+    }
+  };
+
+  const outlookOdjava = async () => {
+    try {
+      await logoutFromOutlook();
+      setOutlookAccount(null);
+      setOutlookEmails([]);
+      showToast("Odjavljen iz Outlooka.");
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const naložiOutlookEmaile = async () => {
+    setOutlookLoading(true);
+    try {
+      const emails = await getRecentEmails(50);
+      setOutlookEmails(emails);
+    } catch (err) {
+      console.error(err);
+      showToast("❌ Napaka pri branju emailov.", true);
+    }
+    setOutlookLoading(false);
+  };
+
+  // Uvozi izbran email iz Outlooka — pridobi priponke (PDF) in pošlje v AI parser
+  const uvoziOutlookEmail = async (msgId, subject) => {
+    setAiLoading(true);
+    showToast(`⏳ Uvažam: ${subject}...`);
+    try {
+      const { email, attachments } = await getEmailWithAttachments(msgId);
+      
+      // Najprej poskusi PDF priponko
+      const pdfAttachment = attachments.find(a => 
+        a.contentType === "application/pdf" || 
+        (a.name && a.name.toLowerCase().endsWith(".pdf"))
+      );
+      
+      let vir = "";
+      let pdfFile = null;
+      
+      if (pdfAttachment && pdfAttachment.contentBytes) {
+        // Pretvori base64 v File objekt
+        const byteString = atob(pdfAttachment.contentBytes);
+        const arr = new Uint8Array(byteString.length);
+        for (let i = 0; i < byteString.length; i++) arr[i] = byteString.charCodeAt(i);
+        pdfFile = new File([arr], pdfAttachment.name, { type: "application/pdf" });
+        
+        // Preberi PDF besedilo
+        const lib = await loadPdfJs();
+        const pdf = await lib.getDocument({ data: arr.buffer }).promise;
+        let txt = "";
+        for (let i = 1; i <= Math.min(pdf.numPages, 5); i++) {
+          const p = await pdf.getPage(i);
+          const tc = await p.getTextContent();
+          txt += tc.items.map(x => x.str).join(" ") + "\n";
+        }
+        vir = txt.trim();
+        setPriponkaFile(pdfFile);
+        setPriponka({ ime: pdfAttachment.name, vsebina: vir, tip: "pdf" });
+      } else {
+        // Brez priponke — uporabi telo emaila
+        vir = (email.body?.content || email.bodyPreview || "").replace(/<[^>]*>/g, " ");
+        setPriponka(null);
+      }
+      
+      if (!vir.trim()) {
+        showToast("❌ Email je prazen ali nima besedila.", true);
+        setAiLoading(false);
+        return;
+      }
+      
+      // Pošlji AI v razčlenitev
+      showToast("⏳ AI razčlenjuje...");
+      const { data, error } = await supabase.functions.invoke("ai-razcleni", {
+        body: { tekst: vir }
+      });
+      if (error) throw error;
+      const txt = data.content?.map(i => i.text || "").join("").replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(txt);
+      setForm({ ...parsed, voznikId: "", _outlookMsgId: msgId });
+      setKorak("forma");
+      showToast("✅ AI je razčlenil! Preveri in potrdi.");
+    } catch (err) {
+      console.error(err);
+      showToast("❌ Napaka pri uvozu emaila.", true);
+    }
+    setAiLoading(false);
+  };
+
   const loadPdfJs = () => new Promise(res => {
     if (window.pdfjsLib) return res(window.pdfjsLib);
     const s = document.createElement("script");
@@ -1228,6 +1339,16 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
         je_slovenska_ddv: form.jeSlovenskaDdv!==undefined?form.jeSlovenskaDdv:null,
       }]).select().single();
       if (error) throw error;
+
+      // Če je email iz Outlooka — označi kot prebran
+      if (form._outlookMsgId) {
+        try {
+          await markEmailAsRead(form._outlookMsgId);
+        } catch (e) {
+          console.warn("Mark as read failed:", e);
+        }
+      }
+
       await naložiPodatke();
       showToast(`✅ Nalog ${data.stevilka_naloga} ustvarjen!`);
       setKorak("vnos");
@@ -1240,12 +1361,76 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
     }
   };
 
+  // Filter za Outlook emaile
+  const filtriraniEmaili = outlookEmails.filter(em => {
+    if (outlookFilter === "priponke") return em.hasAttachments;
+    if (outlookFilter === "neprebrani") return !em.isRead;
+    return true;
+  });
+
   if (korak==="vnos") return (
     <div>
       <div style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:14,padding:18,color:"#fff",marginBottom:14}}>
         <div style={{fontWeight:800,fontSize:16,marginBottom:6}}>🤖 Email → Nalog</div>
-        <div style={{fontSize:13,opacity:0.85}}>Prilepi besedilo emaila ali naloži PDF priponko — AI bo avtomatsko izpolnil nalog.</div>
+        <div style={{fontSize:13,opacity:0.85}}>Poveži Outlook za avtomatski uvoz, prilepi besedilo emaila ali naloži PDF priponko — AI bo avtomatsko izpolnil nalog.</div>
       </div>
+
+      {/* OUTLOOK SEKCIJA */}
+      <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:outlookAccount?"2px solid #16a34a":"2px solid #e2e8f0"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:outlookAccount?12:0}}>
+          <div style={{fontWeight:700,fontSize:14,color:"#0f2744"}}>📨 Outlook povezava</div>
+          {outlookAccount ? (
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <span style={{fontSize:12,color:"#16a34a",fontWeight:600}}>✅ {outlookAccount.username}</span>
+              <button style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#dc2626",borderRadius:6,padding:"4px 10px",fontSize:12,cursor:"pointer",fontWeight:600}} onClick={outlookOdjava}>Odjava</button>
+            </div>
+          ) : (
+            <button style={{background:"#0078d4",color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}} onClick={outlookPrijava}>
+              🔐 Poveži Outlook
+            </button>
+          )}
+        </div>
+
+        {outlookAccount && (
+          <>
+            <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
+              <button style={{...s.fBtn,...(outlookFilter==="vsi"?s.fOn:{})}} onClick={()=>setOutlookFilter("vsi")}>Vsi</button>
+              <button style={{...s.fBtn,...(outlookFilter==="priponke"?s.fOn:{})}} onClick={()=>setOutlookFilter("priponke")}>📎 S priponko</button>
+              <button style={{...s.fBtn,...(outlookFilter==="neprebrani"?s.fOn:{})}} onClick={()=>setOutlookFilter("neprebrani")}>📬 Neprebrani</button>
+              <button style={{marginLeft:"auto",background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",color:"#64748b"}} onClick={naložiOutlookEmaile} disabled={outlookLoading}>
+                {outlookLoading?"⏳":"🔄"} Osveži
+              </button>
+            </div>
+
+            {outlookLoading && outlookEmails.length===0 ? (
+              <div style={{textAlign:"center",padding:20,color:"#94a3b8",fontSize:13}}>⏳ Nalagam emaile...</div>
+            ) : filtriraniEmaili.length===0 ? (
+              <div style={{textAlign:"center",padding:20,color:"#94a3b8",fontSize:13}}>
+                {outlookEmails.length===0?"Klikni Osveži za pridobitev emailov.":"Ni emailov za izbrani filter."}
+              </div>
+            ) : (
+              <div style={{maxHeight:400,overflowY:"auto",border:"1px solid #e2e8f0",borderRadius:8}}>
+                {filtriraniEmaili.map(em=>(
+                  <div key={em.id} style={{padding:"10px 12px",borderBottom:"1px solid #f1f5f9",cursor:aiLoading?"not-allowed":"pointer",background:em.isRead?"#fff":"#eff6ff",opacity:aiLoading?0.5:1}} onClick={()=>!aiLoading&&uvoziOutlookEmail(em.id, em.subject||"(brez naslova)")}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+                      <div style={{fontSize:12,fontWeight:em.isRead?500:700,color:"#0f2744",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {em.hasAttachments&&"📎 "}{em.subject||"(brez naslova)"}
+                      </div>
+                      <div style={{fontSize:10,color:"#94a3b8",marginLeft:8,whiteSpace:"nowrap"}}>{fmt(em.receivedDateTime)}</div>
+                    </div>
+                    <div style={{fontSize:11,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {em.from?.emailAddress?.address || "(neznan)"} · {em.bodyPreview?.slice(0,80) || ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <div style={{textAlign:"center",fontSize:11,color:"#94a3b8",margin:"8px 0"}}>— ALI ROČNO —</div>
+
       <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
         <div style={{fontWeight:700,fontSize:14,color:"#0f2744",marginBottom:8}}>📎 Naloži priponko iz emaila</div>
         {priponka ? (
