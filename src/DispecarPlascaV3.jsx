@@ -455,7 +455,7 @@ const handleDrop=async(e)=>{
         </div>
         {/* Tabs */}
         <div style={s.tabs}>
-          {[["pregled","📊 Pregled"],["nalogi","📋 Nalogi"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["finance","🧾 Finance"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`]].map(([id,label])=>(
+          {[["pregled","📊 Pregled"],["nalogi","📋 Nalogi"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["finance","🧾 Finance"],["komunikacija","📨 Komunikacija"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`]].map(([id,label])=>(
             <button key={id} style={{...s.tab,...(tab===id?s.tabOn:{})}} onClick={()=>setTab(id)}>{label}</button>
           ))}
         </div>
@@ -466,6 +466,7 @@ const handleDrop=async(e)=>{
         {tab==="finance"&&<FinanceTab st={st} upd={upd} showToast={showToast} supabase={supabase} setActiveTab={setTab}/>}
         {tab==="prosticmr"&&<ProstiCMRTab st={st} upd={upd} showToast={showToast}/>}
         {tab==="email"&&<EmailNalogTab upd={upd} showToast={showToast} naložiPodatke={naložiPodatke} vozniki={vozniki}/>}
+        {tab==="komunikacija"&&<KomunikacijaTab showToast={showToast}/>}
       </div>
       {/* Nov nalog modal */}
       {modal==="nalog"&&(
@@ -1525,6 +1526,356 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
   );
 
   return null;
+}
+
+// ===== KOMUNIKACIJA TAB =====
+function KomunikacijaTab({ showToast }) {
+  const [korak, setKorak] = useState("vnos"); // vnos | rezultat
+  const [aiLoading, setAiLoading] = useState(false);
+  const [stranke, setStranke] = useState([]);
+  const [skupno, setSkupno] = useState(null);
+  const [filter, setFilter] = useState("vsi"); // vsi | SI | DE | AT | HR | ostale
+  const [stopnjaFilter, setStopnjaFilter] = useState("vsi"); // vsi | vljuden | drugi | resen | zadnji | izvrsba
+  const [search, setSearch] = useState("");
+  const [selStranka, setSelStranka] = useState(null);
+
+  const loadPdfJs = () => new Promise(res => {
+    if (window.pdfjsLib) return res(window.pdfjsLib);
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+    s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; res(window.pdfjsLib); };
+    document.head.appendChild(s);
+  });
+
+  const obdelajPdf = async (file) => {
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      showToast("❌ Naloži samo PDF datoteko!", true);
+      return;
+    }
+    setAiLoading(true);
+    showToast(`⏳ Berem PDF: ${file.name}...`);
+    try {
+      // Preberi PDF besedilo s pdf.js
+      const ab = await file.arrayBuffer();
+      const lib = await loadPdfJs();
+      const pdf = await lib.getDocument({ data: ab }).promise;
+      let txt = "";
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const p = await pdf.getPage(i);
+        const tc = await p.getTextContent();
+        txt += tc.items.map(x => x.str).join(" ") + "\n";
+      }
+
+      if (!txt.trim()) {
+        showToast("❌ PDF je prazen ali nečitljiv.", true);
+        setAiLoading(false);
+        return;
+      }
+
+      showToast("⏳ AI razčlenjuje seznam strank... (lahko traja 30-60 sek)");
+
+      // Pošlji v Edge Function ai-zapadle-obveznosti
+      const { data, error } = await supabase.functions.invoke("ai-zapadle-obveznosti", {
+        body: { tekst: txt }
+      });
+
+      if (error) throw error;
+      if (!data?.success) {
+        showToast("❌ AI ni uspel razčleniti.", true);
+        console.error("AI napaka:", data);
+        setAiLoading(false);
+        return;
+      }
+
+      setStranke(data.stranke || []);
+      setSkupno(data.skupno || null);
+      setKorak("rezultat");
+      showToast(`✅ Razčlenjenih ${data.stranke?.length || 0} strank!`);
+    } catch (err) {
+      console.error("Napaka pri obdelavi PDF:", err);
+      showToast("❌ Napaka pri branju PDF.", true);
+    }
+    setAiLoading(false);
+  };
+
+  // Filtri
+  const filtriraneStranke = stranke.filter(s => {
+    // Filter po državi
+    if (filter !== "vsi") {
+      if (filter === "ostale") {
+        if (["SI","DE","AT","HR","IT","NL"].includes(s.drzavaCode)) return false;
+      } else {
+        if (s.drzavaCode !== filter) return false;
+      }
+    }
+    // Filter po stopnji
+    if (stopnjaFilter !== "vsi" && s.stopnja !== stopnjaFilter) return false;
+    // Iskanje
+    if (search.trim()) {
+      const q = search.toLowerCase().trim();
+      if (!s.naziv?.toLowerCase().includes(q) && !s.vat?.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  // Statistika
+  const skupajZnesek = filtriraneStranke.reduce((a, s) => a + (s.skupajOstanek || 0), 0);
+  const top10 = [...stranke].sort((a, b) => (b.skupajOstanek || 0) - (a.skupajOstanek || 0)).slice(0, 10);
+  
+  // Skupinje po državah
+  const poDrzavah = stranke.reduce((acc, s) => {
+    const code = s.drzavaCode || "??";
+    if (!acc[code]) acc[code] = { code, flag: s.flag, count: 0, znesek: 0 };
+    acc[code].count++;
+    acc[code].znesek += s.skupajOstanek || 0;
+    return acc;
+  }, {});
+
+  const stopnjaInfo = {
+    vljuden: { label: "Vljuden opomin", color: "#16a34a", bg: "#f0fdf4", icon: "🟢" },
+    drugi: { label: "Drugi opomin", color: "#d97706", bg: "#fffbeb", icon: "🟡" },
+    resen: { label: "Resen opomin", color: "#ea580c", bg: "#fff7ed", icon: "🟠" },
+    zadnji: { label: "Zadnji opomin", color: "#dc2626", bg: "#fef2f2", icon: "🔴" },
+    izvrsba: { label: "Predaja izterjavi", color: "#7f1d1d", bg: "#fef2f2", icon: "⚫" }
+  };
+
+  // ===== STRANKA DETAIL =====
+  if (selStranka) {
+    const stop = stopnjaInfo[selStranka.stopnja] || stopnjaInfo.vljuden;
+    return (
+      <div>
+        <button style={{...s.fBtn, marginBottom:12}} onClick={()=>setSelStranka(null)}>← Nazaj na seznam</button>
+        
+        <div style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:14,padding:18,color:"#fff",marginBottom:14}}>
+          <div style={{fontSize:11,opacity:0.7,marginBottom:4}}>{selStranka.flag} {selStranka.drzava}</div>
+          <div style={{fontSize:18,fontWeight:800,marginBottom:4}}>{selStranka.naziv}</div>
+          <div style={{fontSize:12,opacity:0.7,fontFamily:"monospace"}}>{selStranka.vat}</div>
+          <div style={{display:"flex",justifyContent:"space-between",marginTop:14,paddingTop:14,borderTop:"1px solid rgba(255,255,255,0.15)"}}>
+            <div>
+              <div style={{fontSize:11,opacity:0.7}}>Skupaj zapadlo</div>
+              <div style={{fontSize:24,fontWeight:800}}>{(selStranka.skupajOstanek||0).toFixed(2)} €</div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:11,opacity:0.7}}>Stopnja</div>
+              <div style={{fontSize:14,fontWeight:700,padding:"4px 10px",borderRadius:20,background:"rgba(255,255,255,0.15)",display:"inline-block",marginTop:2}}>
+                {stop.icon} {stop.label}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <Sec title={`📋 Računi (${selStranka.racuni?.length||0})`}>
+          {(selStranka.racuni||[]).map((r,i)=>{
+            const rstop = stopnjaInfo[r.stopnja] || stopnjaInfo.vljuden;
+            return (
+              <div key={i} style={{background:"#f8fafc",borderRadius:8,padding:12,marginBottom:8,borderLeft:`4px solid ${rstop.color}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                  <div>
+                    <div style={{fontFamily:"monospace",fontWeight:700,fontSize:13,color:"#2563eb"}}>{r.stevilka}</div>
+                    <div style={{fontSize:11,color:"#64748b",marginTop:2}}>Izdano: {r.datum} · Rok: {r.rokPlacila}</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontWeight:800,fontSize:16,color:"#0f2744"}}>{(r.ostanek||0).toFixed(2)} €</div>
+                    {r.placano>0 && <div style={{fontSize:10,color:"#16a34a"}}>(plačano {r.placano.toFixed(2)} €)</div>}
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:8,fontSize:11,flexWrap:"wrap"}}>
+                  <span style={{padding:"2px 8px",borderRadius:20,background:rstop.bg,color:rstop.color,fontWeight:600}}>{rstop.icon} {rstop.label}</span>
+                  <span style={{padding:"2px 8px",borderRadius:20,background:r.dniZamude>30?"#fef2f2":"#fffbeb",color:r.dniZamude>30?"#dc2626":"#92400e",fontWeight:600}}>
+                    📅 {r.dniZamude} dni zamude
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </Sec>
+
+        <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:14,marginTop:10}}>
+          <div style={{fontWeight:700,fontSize:14,color:"#92400e",marginBottom:6}}>⏳ Naslednji korak</div>
+          <div style={{fontSize:12,color:"#78350f",lineHeight:1.5}}>
+            Generiranje opomina v jeziku <strong>{selStranka.jezik?.toUpperCase()}</strong> in pošiljanje preko Outlook bo na voljo, ko bo Outlook povezava aktivirana (admin consent).
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== KORAK: VNOS PDF =====
+  if (korak === "vnos") {
+    return (
+      <div>
+        <div style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:14,padding:18,color:"#fff",marginBottom:14}}>
+          <div style={{fontWeight:800,fontSize:16,marginBottom:6}}>📨 Komunikacija — Opomini</div>
+          <div style={{fontSize:13,opacity:0.85}}>
+            Naloži PDF z zapadlimi obveznostmi (iz SQ Trans). AI bo razčlenil seznam strank, prepoznal države iz VAT številk in pripravil predogled za pošiljanje opominov.
+          </div>
+        </div>
+
+        <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+          <div style={{fontWeight:700,fontSize:14,color:"#0f2744",marginBottom:12}}>📂 Naloži PDF poročilo</div>
+
+          {aiLoading ? (
+            <div style={{textAlign:"center",padding:40,color:"#64748b"}}>
+              <div style={{fontSize:32,marginBottom:8}}>⏳</div>
+              <div style={{fontWeight:700,fontSize:14,color:"#0f2744"}}>AI razčlenjuje PDF...</div>
+              <div style={{fontSize:12,marginTop:4}}>To lahko traja 30-60 sekund pri velikih datotekah</div>
+            </div>
+          ) : (
+            <div
+              onDragOver={e=>{e.preventDefault();e.currentTarget.style.borderColor="#1d4ed8";e.currentTarget.style.background="#eff6ff";}}
+              onDragLeave={e=>{e.currentTarget.style.borderColor="#cbd5e1";e.currentTarget.style.background="#f8fafc";}}
+              onDrop={async e=>{
+                e.preventDefault();
+                e.currentTarget.style.borderColor="#cbd5e1";
+                e.currentTarget.style.background="#f8fafc";
+                const file = e.dataTransfer.files[0];
+                if (file) await obdelajPdf(file);
+              }}
+              style={{border:"2px dashed #cbd5e1",borderRadius:12,padding:"40px 16px",cursor:"pointer",textAlign:"center",background:"#f8fafc",transition:"all 0.2s"}}
+            >
+              <div style={{fontSize:48,marginBottom:12}}>📋</div>
+              <div style={{fontWeight:700,fontSize:16,color:"#0f2744",marginBottom:6}}>Povleci PDF poročilo sem</div>
+              <div style={{fontSize:12,color:"#64748b",marginBottom:16}}>Izpis zapadlih obveznosti iz SQ Trans (ali podobno)</div>
+              <input type="file" id="zapadle-pdf" accept=".pdf" style={{display:"none"}} onChange={async e=>{
+                const f=e.target.files?.[0]; if(f) await obdelajPdf(f); e.target.value="";
+              }}/>
+              <label htmlFor="zapadle-pdf" style={{background:"#0f2744",color:"#fff",padding:"10px 24px",borderRadius:10,fontWeight:700,fontSize:14,cursor:"pointer"}}>
+                📂 Ali izberi datoteko
+              </label>
+            </div>
+          )}
+        </div>
+
+        <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:14,fontSize:12,color:"#1d4ed8"}}>
+          <div style={{fontWeight:700,marginBottom:6}}>💡 Kaj bo naredil AI:</div>
+          <ul style={{margin:0,paddingLeft:18,lineHeight:1.7}}>
+            <li>Razčlenil seznam strank in vse zapadle račune</li>
+            <li>Prepoznal državo iz VAT številke (DE, SI, AT, HR, IT, NL...)</li>
+            <li>Določil jezik za opomin (slovenski, nemški, italijanski...)</li>
+            <li>Izračunal dni zamude za vsak račun</li>
+            <li>Razvrstil v stopnje (vljuden / drugi / resen / zadnji / izterjava)</li>
+          </ul>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== KORAK: REZULTAT =====
+  return (
+    <div>
+      {/* Header z gumbi */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,gap:8}}>
+        <button style={{...s.fBtn}} onClick={()=>{setKorak("vnos");setStranke([]);setSkupno(null);setSelStranka(null);setSearch("");setFilter("vsi");setStopnjaFilter("vsi");}}>← Nov PDF</button>
+        <div style={{fontSize:12,color:"#64748b"}}>{filtriraneStranke.length} od {stranke.length} strank · <strong style={{color:"#dc2626"}}>{skupajZnesek.toFixed(2)} €</strong></div>
+      </div>
+
+      {/* Glavna statistika */}
+      {skupno && (
+        <div style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:14,padding:18,color:"#fff",marginBottom:14}}>
+          <div style={{fontSize:11,opacity:0.7,marginBottom:4}}>📊 Skupaj zapadlih obveznosti</div>
+          <div style={{fontSize:32,fontWeight:800,marginBottom:8}}>{(skupno.skupajZapadlo||0).toFixed(2)} €</div>
+          <div style={{display:"flex",gap:16,fontSize:12,opacity:0.85,paddingTop:10,borderTop:"1px solid rgba(255,255,255,0.15)"}}>
+            <span>👥 {skupno.stevilkaStrank||stranke.length} strank</span>
+            <span>📋 {stranke.reduce((a,s)=>a+(s.steviloRacunov||0),0)} računov</span>
+            <span>📅 {skupno.datumPorocila||"–"}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Po državah */}
+      {Object.keys(poDrzavah).length>0 && (
+        <div style={{background:"#fff",borderRadius:12,padding:14,marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#64748b",marginBottom:10,textTransform:"uppercase"}}>🌍 Po državah</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:8}}>
+            {Object.values(poDrzavah).sort((a,b)=>b.znesek-a.znesek).map(d=>(
+              <button key={d.code} onClick={()=>setFilter(filter===d.code?"vsi":d.code)} style={{background:filter===d.code?"#eff6ff":"#f8fafc",border:filter===d.code?"2px solid #2563eb":"1px solid #e2e8f0",borderRadius:8,padding:10,textAlign:"center",cursor:"pointer"}}>
+                <div style={{fontSize:18,marginBottom:2}}>{d.flag}</div>
+                <div style={{fontSize:10,color:"#64748b",fontWeight:600}}>{d.code}</div>
+                <div style={{fontSize:13,fontWeight:800,color:"#0f2744",marginTop:2}}>{d.znesek.toFixed(0)} €</div>
+                <div style={{fontSize:10,color:"#94a3b8"}}>{d.count} {d.count===1?"stranka":"strank"}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TOP 10 dolžnikov */}
+      {top10.length>0 && (
+        <div style={{background:"#fff",borderRadius:12,padding:14,marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#64748b",marginBottom:10,textTransform:"uppercase"}}>🏆 Top 10 največjih dolžnikov</div>
+          {top10.map((s,i)=>(
+            <div key={s.vat||i} onClick={()=>setSelStranka(s)} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",borderBottom:i<9?"1px solid #f1f5f9":"none",cursor:"pointer"}}>
+              <div style={{width:24,height:24,borderRadius:"50%",background:i<3?"#fef3c7":"#f1f5f9",color:i<3?"#92400e":"#64748b",fontSize:11,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>{i+1}</div>
+              <div style={{fontSize:14}}>{s.flag}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:"#0f2744",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.naziv}</div>
+                <div style={{fontSize:10,color:"#94a3b8"}}>{s.steviloRacunov} {s.steviloRacunov===1?"račun":"računov"} · {s.maxDniZamude} dni</div>
+              </div>
+              <div style={{fontSize:14,fontWeight:800,color:"#dc2626"}}>{(s.skupajOstanek||0).toFixed(0)} €</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Iskalnik */}
+      <div style={{position:"relative",marginBottom:10}}>
+        <input style={{...s.inp,paddingLeft:34,paddingRight:search?34:12}} placeholder="🔍 Išči po nazivu ali VAT številki..." value={search} onChange={e=>setSearch(e.target.value)}/>
+        <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:14,color:"#94a3b8",pointerEvents:"none"}}>🔍</span>
+        {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"#e2e8f0",border:"none",borderRadius:"50%",width:22,height:22,fontSize:12,cursor:"pointer"}}>✕</button>}
+      </div>
+
+      {/* Filtri po stopnji */}
+      <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+        <button style={{...s.fBtn,...(stopnjaFilter==="vsi"?s.fOn:{})}} onClick={()=>setStopnjaFilter("vsi")}>Vse stopnje</button>
+        {Object.entries(stopnjaInfo).map(([key,info])=>(
+          <button key={key} style={{...s.fBtn,...(stopnjaFilter===key?s.fOn:{})}} onClick={()=>setStopnjaFilter(key)}>
+            {info.icon} {info.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Filtri po državi */}
+      {filter!=="vsi" && (
+        <div style={{background:"#eff6ff",borderRadius:8,padding:"6px 12px",marginBottom:10,fontSize:12,color:"#1d4ed8",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span>Prikazujem samo: <strong>{filter}</strong> ({poDrzavah[filter]?.flag})</span>
+          <button onClick={()=>setFilter("vsi")} style={{background:"none",border:"none",color:"#1d4ed8",cursor:"pointer",fontWeight:700}}>✕ Počisti</button>
+        </div>
+      )}
+
+      {/* Seznam strank */}
+      {filtriraneStranke.length===0 ? (
+        <div style={s.empty}>Ni strank po izbranih kriterijih.</div>
+      ) : (
+        <div>
+          {filtriraneStranke.sort((a,b)=>(b.skupajOstanek||0)-(a.skupajOstanek||0)).map((str,i)=>{
+            const stop = stopnjaInfo[str.stopnja] || stopnjaInfo.vljuden;
+            return (
+              <div key={str.vat||i} onClick={()=>setSelStranka(str)} style={{background:"#fff",borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",cursor:"pointer",borderLeft:`4px solid ${stop.color}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                      <span style={{fontSize:14}}>{str.flag}</span>
+                      <span style={{fontSize:10,color:"#64748b",fontFamily:"monospace"}}>{str.vat}</span>
+                    </div>
+                    <div style={{fontWeight:700,fontSize:14,color:"#0f2744"}}>{str.naziv}</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontWeight:800,fontSize:18,color:"#dc2626"}}>{(str.skupajOstanek||0).toFixed(2)} €</div>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",fontSize:11}}>
+                  <span style={{padding:"2px 8px",borderRadius:20,background:stop.bg,color:stop.color,fontWeight:600}}>{stop.icon} {stop.label}</span>
+                  <span style={{padding:"2px 8px",borderRadius:20,background:"#f1f5f9",color:"#64748b",fontWeight:600}}>📋 {str.steviloRacunov} {str.steviloRacunov===1?"račun":"računov"}</span>
+                  <span style={{padding:"2px 8px",borderRadius:20,background:"#f1f5f9",color:"#64748b",fontWeight:600}}>📅 {str.maxDniZamude} dni</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 const s2={lbl:{display:"block",fontSize:12,fontWeight:600,color:"#475569",marginBottom:4},inp:{width:"100%",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"9px 10px",fontSize:13,outline:"none",boxSizing:"border-box",background:"#f8fafc"},sel:{width:"100%",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"9px 10px",fontSize:13,outline:"none",background:"#f8fafc",boxSizing:"border-box"}};
