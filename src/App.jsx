@@ -7,12 +7,16 @@ import VzdrzevanjeApp from './VzdrzevanjeApp';
 
 const LS_SESSION = "transapp_session_v2";
 const LS_PIN_BLOCKED = "transapp_pin_blocked_until";
+const LS_DISP_BLOCKED = "transapp_disp_blocked_until";
 const getSession = () => { try { return JSON.parse(localStorage.getItem(LS_SESSION)); } catch { return null; } };
 const setSession = (u) => { try { localStorage.setItem(LS_SESSION, JSON.stringify(u)); } catch {} };
 const clearSession = () => { try { localStorage.removeItem(LS_SESSION); } catch {} };
 
 const getPinBlockedUntil = () => { try { return parseInt(localStorage.getItem(LS_PIN_BLOCKED)) || 0; } catch { return 0; } };
 const setPinBlockedUntil = (ts) => { try { localStorage.setItem(LS_PIN_BLOCKED, String(ts)); } catch {} };
+
+const getDispBlockedUntil = () => { try { return parseInt(localStorage.getItem(LS_DISP_BLOCKED)) || 0; } catch { return 0; } };
+const setDispBlockedUntil = (ts) => { try { localStorage.setItem(LS_DISP_BLOCKED, String(ts)); } catch {} };
 
 export default function App() {
   const [session, setSessionState] = useState(getSession);
@@ -26,6 +30,14 @@ export default function App() {
   const [blokiranDo, setBlokiranDo] = useState(getPinBlockedUntil());
   const [zdaj, setZdaj] = useState(Date.now());
   const [korakPrijave, setKorakPrijave] = useState("vloga"); // vloga | voznik | pin | dispecer
+  
+  // Dispečer geslo
+  const [dispGeslo, setDispGeslo] = useState("");
+  const [dispGesloShow, setDispGesloShow] = useState(false);
+  const [dispNapaka, setDispNapaka] = useState(false);
+  const [dispLoading, setDispLoading] = useState(false);
+  const [dispNapacniPoskusi, setDispNapacniPoskusi] = useState(0);
+  const [dispBlokiranDo, setDispBlokiranDo] = useState(getDispBlockedUntil());
 
   // Posodobi čas vsako sekundo (za odštevanje, če je blokiran)
   useEffect(() => {
@@ -110,10 +122,56 @@ export default function App() {
     }
   };
 
-  const prijavaDispecer = () => {
-    const ses = { vloga: "dispecer", ime: "Dispečer", id: null };
-    setSession(ses);
-    setSessionState(ses);
+  const prijavaDispecer = async () => {
+    if (!dispGeslo) {
+      setDispNapaka(true);
+      return;
+    }
+    setDispLoading(true);
+    setDispNapaka(false);
+    try {
+      // Preberi geslo iz Supabase
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('vrednost')
+        .eq('kljuc', 'dispecer_geslo')
+        .single();
+      
+      if (error || !data) {
+        console.error("Napaka pri branju gesla:", error);
+        setDispNapaka(true);
+        setDispLoading(false);
+        return;
+      }
+      
+      if (data.vrednost === dispGeslo) {
+        // Pravilno geslo
+        setDispNapacniPoskusi(0);
+        setDispBlockedUntil(0);
+        setDispGeslo("");
+        const ses = { vloga: "dispecer", ime: "Dispečer", id: null };
+        setSession(ses);
+        setSessionState(ses);
+      } else {
+        // Napačno geslo
+        const novNapacni = dispNapacniPoskusi + 1;
+        setDispNapacniPoskusi(novNapacni);
+        setDispNapaka(true);
+        setDispGeslo("");
+        
+        if (novNapacni >= 3) {
+          // Blokiraj za 10 minut (dlje kot voznik, ker je bolj kritično)
+          const blokDo = Date.now() + 10 * 60 * 1000;
+          setDispBlokiranDo(blokDo);
+          setDispBlockedUntil(blokDo);
+          setDispNapacniPoskusi(0);
+        }
+      }
+    } catch (err) {
+      console.error("Napaka pri prijavi:", err);
+      setDispNapaka(true);
+    }
+    setDispLoading(false);
   };
 
   const odjava = () => {
@@ -123,6 +181,8 @@ export default function App() {
     setVloga("");
     setPin("");
     setPinNapaka(false);
+    setDispGeslo("");
+    setDispNapaka(false);
     setKorakPrijave("vloga");
   };
 
@@ -337,28 +397,112 @@ export default function App() {
     );
   }
 
-  // ========== KORAK: DISPEČER (geslo / direktna prijava) ==========
+  // ========== KORAK: DISPEČER (vpis gesla) ==========
   if (korakPrijave === "dispecer") {
+    const dispJeBlokiran = dispBlokiranDo > zdaj;
+    const dispSekundDoOdblokade = dispJeBlokiran ? Math.ceil((dispBlokiranDo - zdaj) / 1000) : 0;
+    const dispMinutDoOdblokade = Math.floor(dispSekundDoOdblokade / 60);
+    const dispPreostaleSek = dispSekundDoOdblokade % 60;
+
+    if (dispJeBlokiran) {
+      return (
+        <div style={s.loginWrap}>
+          <div style={s.loginTop}>
+            <div style={{fontSize:48,marginBottom:8}}>🔒</div>
+            <div style={{fontSize:24,fontWeight:800,color:"#fff"}}>Prijava blokirana</div>
+            <div style={{fontSize:14,color:"rgba(255,255,255,0.7)",marginTop:8}}>3 napačni vpisi gesla</div>
+          </div>
+          <div style={s.loginCard}>
+            <div style={{textAlign:"center",padding:"20px 0"}}>
+              <div style={{fontSize:36,fontWeight:800,color:"#dc2626",marginBottom:8,fontFamily:"monospace"}}>
+                {String(dispMinutDoOdblokade).padStart(2,"0")}:{String(dispPreostaleSek).padStart(2,"0")}
+              </div>
+              <div style={{fontSize:13,color:"#64748b",marginBottom:16}}>Počakaj do konca odštevanja in poskusi znova</div>
+              <button style={s.btnSec} onClick={odjava}>← Nazaj na izbiro vloge</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div style={s.loginWrap}>
         <div style={s.loginTop}>
           <div style={{fontSize:48,marginBottom:8}}>⚡</div>
-          <div style={{fontSize:24,fontWeight:800,color:"#fff"}}>Dispečerska plošča</div>
-          <div style={{fontSize:13,color:"rgba(255,255,255,0.7)",marginTop:4}}>Upravljanje vseh nalogov</div>
+          <div style={{fontSize:24,fontWeight:800,color:"#fff"}}>Dispečer</div>
+          <div style={{fontSize:13,color:"rgba(255,255,255,0.7)",marginTop:4}}>Vpiši geslo za prijavo</div>
         </div>
 
         <div style={s.loginCard}>
-          <div style={{background:"#eff6ff",borderRadius:10,padding:"14px 16px",marginBottom:14,fontSize:13,color:"#1d4ed8"}}>
-            ⚡ Po prijavi imaš dostop do vseh nalogov, voznikov in računov.
+          <div style={{fontWeight:700,fontSize:16,color:"#0f2744",marginBottom:14,textAlign:"center"}}>
+            🔐 Geslo
           </div>
 
-          <button style={s.btnP} onClick={prijavaDispecer}>
-            Prijavi se kot Dispečer →
+          <div style={{position:"relative",marginBottom:dispNapaka?6:14}}>
+            <input
+              type={dispGesloShow ? "text" : "password"}
+              value={dispGeslo}
+              onChange={e => { setDispGeslo(e.target.value); setDispNapaka(false); }}
+              onKeyDown={e => { if (e.key === "Enter" && dispGeslo) prijavaDispecer(); }}
+              placeholder="Vpiši geslo..."
+              autoFocus
+              style={{
+                width:"100%",
+                border: dispNapaka ? "2px solid #dc2626" : "2px solid #e2e8f0",
+                borderRadius:12,
+                padding:"14px 50px 14px 16px",
+                fontSize:16,
+                outline:"none",
+                background: dispNapaka ? "#fef2f2" : "#f8fafc",
+                color:"#0f2744",
+                fontWeight:600,
+                boxSizing:"border-box",
+                transition:"all 0.15s"
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setDispGesloShow(!dispGesloShow)}
+              style={{
+                position:"absolute",
+                right:8,
+                top:"50%",
+                transform:"translateY(-50%)",
+                background:"none",
+                border:"none",
+                cursor:"pointer",
+                fontSize:18,
+                padding:6,
+                color:"#64748b"
+              }}
+              tabIndex={-1}
+              aria-label="Prikaži/skrij geslo"
+            >
+              {dispGesloShow ? "🙈" : "👁️"}
+            </button>
+          </div>
+
+          {dispNapaka && (
+            <div style={{textAlign:"center",fontSize:13,color:"#dc2626",fontWeight:600,marginBottom:14}}>
+              ❌ Napačno geslo! {dispNapacniPoskusi > 0 && `(${3 - dispNapacniPoskusi} poskus${3 - dispNapacniPoskusi === 1 ? "" : "i/a"} pred blokado)`}
+            </div>
+          )}
+
+          <button 
+            style={{...s.btnP, opacity: (dispGeslo && !dispLoading) ? 1 : 0.5}} 
+            onClick={prijavaDispecer}
+            disabled={!dispGeslo || dispLoading}
+          >
+            {dispLoading ? "⏳ Preverjam..." : "Prijavi se →"}
           </button>
 
           <button style={{...s.btnSec, marginTop:10}} onClick={nazajNaVlogo}>
             ← Nazaj
           </button>
+        </div>
+
+        <div style={{textAlign:"center",fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:16}}>
+          Po 3 napačnih poskusih bo prijava blokirana za 10 minut
         </div>
       </div>
     );
