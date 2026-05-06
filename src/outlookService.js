@@ -51,7 +51,7 @@ async function getAccessToken() {
     throw new Error("Ni prijavljenega Microsoft računa");
   }
   
-  try {
+  try {s
     const response = await msalInstance.acquireTokenSilent({
       ...loginRequest,
       account,
