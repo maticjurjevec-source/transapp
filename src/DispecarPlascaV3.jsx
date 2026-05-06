@@ -183,6 +183,67 @@ export default function DispecarPlasca() {
     setSelNalog(prev => prev ? {...prev, cmrSlike: cmr} : prev);
   };
 
+  // Pošlji nalog vozniku preko Viberja
+  const posljiViber = (n) => {
+    const v = voz(n.voznikId);
+    if (!v) return showToast("❌ Nalog nima dodeljenega voznika!", true);
+    if (!v.tel) return showToast(`❌ Voznik ${v.ime} nima telefonske številke!`, true);
+
+    // Sestavi celotno sporočilo z vsemi podatki naloga
+    const sc = SC[n.status] || {};
+    const lines = [
+      `🚛 NALOG ${n.stevilkaNaloga || n.id}`,
+      `Status: ${sc.label || n.status}`,
+      `Stranka: ${n.stranka || "–"}`,
+      ``,
+      `📦 BLAGO`,
+      `${n.blago || "–"}${n.kolicina ? ` · ${n.kolicina}` : ""}${n.teza ? ` · ${n.teza}` : ""}`,
+      ``,
+      `📍 NAKLAD`,
+      n.nakFirma || "",
+      `${n.nakKraj || ""}${n.nakNaslov ? `, ${n.nakNaslov}` : ""}`,
+      n.nakDatum ? `📅 ${fmt(n.nakDatum)}${n.nakCas ? ` ob ${n.nakCas}` : ""}` : "",
+      n.nakReferenca ? `Ref: ${n.nakReferenca}` : "",
+      ``,
+      `🏁 RAZKLAD`,
+      n.razFirma || "",
+      `${n.razKraj || ""}${n.razNaslov ? `, ${n.razNaslov}` : ""}`,
+      n.razDatum ? `📅 ${fmt(n.razDatum)}${n.razCas ? ` ob ${n.razCas}` : ""}` : "",
+      n.razReferenca ? `Ref: ${n.razReferenca}` : "",
+    ];
+    if (n.navodila) {
+      lines.push(``, `⚠️ NAVODILA`, n.navodila);
+    }
+    if (n.stevilka_narocnika || n.stevilkaNarocnika) {
+      lines.push(``, `📋 Št. naročnika: ${n.stevilka_narocnika || n.stevilkaNarocnika}`);
+    }
+
+    // Odstrani prazne vrstice na koncu in znotraj sosedov
+    const sporocilo = lines.filter((l, i, arr) => !(l === "" && arr[i-1] === "")).join("\n");
+
+    // Viber deeplink: številka brez "+" znaka
+    const tel = v.tel.replace(/^\+/, "");
+    const url = `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
+
+    window.location.href = url;
+    showToast(`📤 Odpiram Viber za ${v.ime}...`);
+  };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   const [aiParsing,setAiParsing]=useState(false);
 
   const upd=(fn)=>{const ns=fn(st);setSt(ns);save(ns);};
@@ -235,9 +296,31 @@ je_slovenska_ddv: form.jeSlovenskaDdv!==undefined?form.jeSlovenskaDdv:null,
       const { error } = await supabase.from('nalogi').update({ voznik_id:voznikId, status:'poslan', poslan_cas:new Date().toISOString() }).eq('id',nalogId);
       if(error) throw error;
       upd(s=>({...s,nalogi:s.nalogi.map(n=>n.id===nalogId?{...n,voznikId,status:"poslan",poslanCas:new Date().toISOString()}:n)}));
-      showToast(`✅ Nalog poslan vozniku ${voz(voznikId)?.ime}!`);setSelNalog(null);
+      // Posodobi tudi selNalog (da ostanemo v detail view in da se prikaže Viber gumb)
+      setSelNalog(prev => prev ? {...prev, voznikId, status:"poslan", poslanCas:new Date().toISOString()} : prev);
+      showToast(`✅ Nalog dodeljen vozniku ${voz(voznikId)?.ime}!`);
     } catch(err) {
       showToast("❌ Napaka!",true);
+      console.error(err);
+    }
+  };
+
+  // Dodeli voznika + takoj odpri Viber s celotnim sporočilom
+  const dodelijInPosljiViber=async(nalogId,voznikId)=>{
+    const v = voz(voznikId);
+    if (!v?.tel) return showToast(`❌ Voznik ${v?.ime||""} nima telefonske številke!`, true);
+    try {
+      const { error } = await supabase.from('nalogi').update({ voznik_id:voznikId, status:'poslan', poslan_cas:new Date().toISOString() }).eq('id',nalogId);
+      if(error) throw error;
+      // Posodobi state in pripravi nalog za Viber sporočilo
+      const updatedNalog = {...st.nalogi.find(n=>n.id===nalogId), voznikId, status:"poslan"};
+      upd(s=>({...s,nalogi:s.nalogi.map(n=>n.id===nalogId?{...n,voznikId,status:"poslan",poslanCas:new Date().toISOString()}:n)}));
+      // Odpri Viber
+      posljiViber(updatedNalog);
+      setSelNalog(null);
+    } catch(err) {
+      showToast("❌ Napaka pri dodelitvi!",true);
+      console.error(err);
     }
   };
 
@@ -400,8 +483,32 @@ const handleDrop=async(e)=>{
             <div style={{fontWeight:700,fontSize:14,color:"#0f2744",marginBottom:10}}>📤 Dodeli voznika</div>
             <select style={s.sel} value={izVoz} onChange={e=>setIzVoz(e.target.value)}><option value="">– Izberi voznika –</option>{vozniki.map(v=><option key={v.id} value={v.id}>{v.ime} · {v.vozilo}</option>)}</select>
             <button style={{...s.btnP,marginTop:10,opacity:izVoz?1:0.45}} onClick={()=>izVoz&&dodelijNalog(n.id,izVoz)}>📤 Pošlji vozniku</button>
+            <button
+              style={{
+                ...s.btnP,
+                background: izVoz && voz(izVoz)?.tel ? "#7360f2" : "#cbd5e1",
+                marginTop: 8,
+                opacity: izVoz && voz(izVoz)?.tel ? 1 : 0.45,
+                cursor: izVoz && voz(izVoz)?.tel ? "pointer" : "not-allowed"
+              }}
+              onClick={()=>izVoz && voz(izVoz)?.tel && dodelijInPosljiViber(n.id,izVoz)}
+              disabled={!izVoz || !voz(izVoz)?.tel}
+              title={izVoz ? (voz(izVoz)?.tel ? `Pošlji ${voz(izVoz)?.ime} v Viber` : "Voznik nima telefonske številke") : "Najprej izberi voznika"}
+            >
+              📤 Pošlji vozniku v Viber {izVoz && !voz(izVoz)?.tel && "(ni številke)"}
+            </button>
           </div>}
           <button style={{...s.btnP,background:"#2563eb",marginTop:8}} onClick={()=>urediNalog(n.id)}>✏️ Uredi nalog</button>
+          {n.voznikId && (
+            <button
+              style={{...s.btnP, background: voz(n.voznikId)?.tel ? "#7360f2" : "#cbd5e1", marginTop:8, cursor: voz(n.voznikId)?.tel ? "pointer" : "not-allowed"}}
+              onClick={()=>voz(n.voznikId)?.tel && posljiViber(n)}
+              disabled={!voz(n.voznikId)?.tel}
+              title={voz(n.voznikId)?.tel ? `Pošlji ${voz(n.voznikId)?.ime} na Viber` : "Voznik nima telefonske številke"}
+            >
+              📤 Pošlji v Viber {!voz(n.voznikId)?.tel && "(ni številke)"}
+            </button>
+          )}
           {(n.status==="nov"||n.status==="poslan")&&<button style={s.btnD} onClick={()=>izbrisiNalog(n.id)}>🗑️ Izbriši nalog</button>}
         </div>
       </div>
