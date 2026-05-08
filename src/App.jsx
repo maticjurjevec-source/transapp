@@ -18,6 +18,26 @@ const setPinBlockedUntil = (ts) => { try { localStorage.setItem(LS_PIN_BLOCKED, 
 const getDispBlockedUntil = () => { try { return parseInt(localStorage.getItem(LS_DISP_BLOCKED)) || 0; } catch { return 0; } };
 const setDispBlockedUntil = (ts) => { try { localStorage.setItem(LS_DISP_BLOCKED, String(ts)); } catch {} };
 
+// Pretvori ime voznika v URL slug: "Nijaz" → "nijaz", "Sulejman" → "sulejman", "Müller" → "muller"
+const imeVSlug = (ime) => {
+  if (!ime) return "";
+  return ime
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // odstrani diakritike (š→s, č→c, ž→z, ć→c, ä→a)
+    .replace(/[^a-z0-9]/g, ""); // samo črke a-z in števke
+};
+
+// Preberi slug iz URL-ja (npr. /nijaz → "nijaz")
+const getUrlSlug = () => {
+  const path = window.location.pathname;
+  if (path === "/" || path === "") return null;
+  // Preskoči rezervirane poti
+  if (path === "/vzdrzevanje" || path === "/finance") return null;
+  const slug = path.replace(/^\//, "").replace(/\/$/, "").toLowerCase();
+  return slug || null;
+};
+
 export default function App() {
   const [session, setSessionState] = useState(getSession);
   const [vozniki, setVozniki] = useState([]);
@@ -49,7 +69,19 @@ export default function App() {
 
   useEffect(() => {
     supabase.from('vozniki').select('*').eq('aktiven', true).order('priimek').then(({ data }) => {
-      if (data) setVozniki(data);
+      if (data) {
+        setVozniki(data);
+        // Če je v URL-ju slug, avtomatsko izberi voznika in pojdi na PIN screen
+        const slug = getUrlSlug();
+        if (slug && !session) {
+          const najden = data.find(v => imeVSlug(v.ime) === slug);
+          if (najden) {
+            setVloga("voznik");
+            setSel(najden.id);
+            setKorakPrijave("pin");
+          }
+        }
+      }
       setLoading(false);
     });
   }, []);
@@ -184,6 +216,12 @@ export default function App() {
     setDispGeslo("");
     setDispNapaka(false);
     setKorakPrijave("vloga");
+    // Če je voznik prišel preko slug-a, ga preusmeri nazaj na slug (da se spet avtomatsko prijavi)
+    // Sicer pa na default
+    const slug = getUrlSlug();
+    if (!slug) {
+      setKorakPrijave("vloga");
+    }
   };
 
   const nazajNaVlogo = () => {
