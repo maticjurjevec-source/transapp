@@ -229,20 +229,695 @@ export default function DispecarPlasca() {
     showToast(`📤 Odpiram Viber za ${v.ime}...`);
   };
 
+  // Pošlji nalog vozniku preko Viberja
+  const posljiViber = (n) => {
+    const v = voz(n.voznikId);
+    if (!v) return showToast("❌ Nalog nima dodeljenega voznika!", true);
+    if (!v.tel) return showToast(`❌ Voznik ${v.ime} nima telefonske številke!`, true);
 
+    // Sestavi celotno sporočilo z vsemi podatki naloga
+    const sc = SC[n.status] || {};
+    const lines = [
+      `🚛 NALOG ${n.stevilkaNaloga || n.id}`,
+      `Status: ${sc.label || n.status}`,
+      `Stranka: ${n.stranka || "–"}`,
+      ``,
+      `📦 BLAGO`,
+      `${n.blago || "–"}${n.kolicina ? ` · ${n.kolicina}` : ""}${n.teza ? ` · ${n.teza}` : ""}`,
+      ``,
+      `📍 NAKLAD`,
+      n.nakFirma || "",
+      `${n.nakKraj || ""}${n.nakNaslov ? `, ${n.nakNaslov}` : ""}`,
+      n.nakDatum ? `📅 ${fmt(n.nakDatum)}${n.nakCas ? ` ob ${n.nakCas}` : ""}` : "",
+      n.nakReferenca ? `Ref: ${n.nakReferenca}` : "",
+      ``,
+      `🏁 RAZKLAD`,
+      n.razFirma || "",
+      `${n.razKraj || ""}${n.razNaslov ? `, ${n.razNaslov}` : ""}`,
+      n.razDatum ? `📅 ${fmt(n.razDatum)}${n.razCas ? ` ob ${n.razCas}` : ""}` : "",
+      n.razReferenca ? `Ref: ${n.razReferenca}` : "",
+    ];
+    if (n.navodila) {
+      lines.push(``, `⚠️ NAVODILA`, n.navodila);
+    }
+    if (n.stevilka_narocnika || n.stevilkaNarocnika) {
+      lines.push(``, `📋 Št. naročnika: ${n.stevilka_narocnika || n.stevilkaNarocnika}`);
+    }
 
+    // Odstrani prazne vrstice na koncu in znotraj sosedov
+    const sporocilo = lines.filter((l, i, arr) => !(l === "" && arr[i-1] === "")).join("\n");
 
+    // Viber deeplink: številka brez "+" znaka
+    const tel = v.tel.replace(/^\+/, "");
+    const url = `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
 
+    window.location.href = url;
+    showToast(`📤 Odpiram Viber za ${v.ime}...`);
+  };
 
+  // Pošlji nalog vozniku preko Viberja
+  const posljiViber = (n) => {
+    const v = voz(n.voznikId);
+    if (!v) return showToast("❌ Nalog nima dodeljenega voznika!", true);
+    if (!v.tel) return showToast(`❌ Voznik ${v.ime} nima telefonske številke!`, true);
 
+    // Sestavi celotno sporočilo z vsemi podatki naloga
+    const sc = SC[n.status] || {};
+    const lines = [
+      `🚛 NALOG ${n.stevilkaNaloga || n.id}`,
+      `Status: ${sc.label || n.status}`,
+      `Stranka: ${n.stranka || "–"}`,
+      ``,
+      `📦 BLAGO`,
+      `${n.blago || "–"}${n.kolicina ? ` · ${n.kolicina}` : ""}${n.teza ? ` · ${n.teza}` : ""}`,
+      ``,
+      `📍 NAKLAD`,
+      n.nakFirma || "",
+      `${n.nakKraj || ""}${n.nakNaslov ? `, ${n.nakNaslov}` : ""}`,
+      n.nakDatum ? `📅 ${fmt(n.nakDatum)}${n.nakCas ? ` ob ${n.nakCas}` : ""}` : "",
+      n.nakReferenca ? `Ref: ${n.nakReferenca}` : "",
+      ``,
+      `🏁 RAZKLAD`,
+      n.razFirma || "",
+      `${n.razKraj || ""}${n.razNaslov ? `, ${n.razNaslov}` : ""}`,
+      n.razDatum ? `📅 ${fmt(n.razDatum)}${n.razCas ? ` ob ${n.razCas}` : ""}` : "",
+      n.razReferenca ? `Ref: ${n.razReferenca}` : "",
+    ];
+    if (n.navodila) {
+      lines.push(``, `⚠️ NAVODILA`, n.navodila);
+    }
+    if (n.stevilka_narocnika || n.stevilkaNarocnika) {
+      lines.push(``, `📋 Št. naročnika: ${n.stevilka_narocnika || n.stevilkaNarocnika}`);
+    }
 
+    // Odstrani prazne vrstice na koncu in znotraj sosedov
+    const sporocilo = lines.filter((l, i, arr) => !(l === "" && arr[i-1] === "")).join("\n");
 
+    // Viber deeplink: številka brez "+" znaka
+    const tel = v.tel.replace(/^\+/, "");
+    const url = `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
 
+    window.location.href = url;
+    showToast(`📤 Odpiram Viber za ${v.ime}...`);
+  };
 
+  // Pošlji nalog vozniku preko Viberja
+  const posljiViber = (n) => {
+    const v = voz(n.voznikId);
+    if (!v) return showToast("❌ Nalog nima dodeljenega voznika!", true);
+    if (!v.tel) return showToast(`❌ Voznik ${v.ime} nima telefonske številke!`, true);
 
+    // Sestavi celotno sporočilo z vsemi podatki naloga
+    const sc = SC[n.status] || {};
+    const lines = [
+      `🚛 NALOG ${n.stevilkaNaloga || n.id}`,
+      `Status: ${sc.label || n.status}`,
+      `Stranka: ${n.stranka || "–"}`,
+      ``,
+      `📦 BLAGO`,
+      `${n.blago || "–"}${n.kolicina ? ` · ${n.kolicina}` : ""}${n.teza ? ` · ${n.teza}` : ""}`,
+      ``,
+      `📍 NAKLAD`,
+      n.nakFirma || "",
+      `${n.nakKraj || ""}${n.nakNaslov ? `, ${n.nakNaslov}` : ""}`,
+      n.nakDatum ? `📅 ${fmt(n.nakDatum)}${n.nakCas ? ` ob ${n.nakCas}` : ""}` : "",
+      n.nakReferenca ? `Ref: ${n.nakReferenca}` : "",
+      ``,
+      `🏁 RAZKLAD`,
+      n.razFirma || "",
+      `${n.razKraj || ""}${n.razNaslov ? `, ${n.razNaslov}` : ""}`,
+      n.razDatum ? `📅 ${fmt(n.razDatum)}${n.razCas ? ` ob ${n.razCas}` : ""}` : "",
+      n.razReferenca ? `Ref: ${n.razReferenca}` : "",
+    ];
+    if (n.navodila) {
+      lines.push(``, `⚠️ NAVODILA`, n.navodila);
+    }
+    if (n.stevilka_narocnika || n.stevilkaNarocnika) {
+      lines.push(``, `📋 Št. naročnika: ${n.stevilka_narocnika || n.stevilkaNarocnika}`);
+    }
 
+    // Odstrani prazne vrstice na koncu in znotraj sosedov
+    const sporocilo = lines.filter((l, i, arr) => !(l === "" && arr[i-1] === "")).join("\n");
 
+    // Viber deeplink: številka brez "+" znaka
+    const tel = v.tel.replace(/^\+/, "");
+    const url = `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
 
+    window.location.href = url;
+    showToast(`📤 Odpiram Viber za ${v.ime}...`);
+  };
+
+  // Pošlji nalog vozniku preko Viberja
+  const posljiViber = (n) => {
+    const v = voz(n.voznikId);
+    if (!v) return showToast("❌ Nalog nima dodeljenega voznika!", true);
+    if (!v.tel) return showToast(`❌ Voznik ${v.ime} nima telefonske številke!`, true);
+
+    // Sestavi celotno sporočilo z vsemi podatki naloga
+    const sc = SC[n.status] || {};
+    const lines = [
+      `🚛 NALOG ${n.stevilkaNaloga || n.id}`,
+      `Status: ${sc.label || n.status}`,
+      `Stranka: ${n.stranka || "–"}`,
+      ``,
+      `📦 BLAGO`,
+      `${n.blago || "–"}${n.kolicina ? ` · ${n.kolicina}` : ""}${n.teza ? ` · ${n.teza}` : ""}`,
+      ``,
+      `📍 NAKLAD`,
+      n.nakFirma || "",
+      `${n.nakKraj || ""}${n.nakNaslov ? `, ${n.nakNaslov}` : ""}`,
+      n.nakDatum ? `📅 ${fmt(n.nakDatum)}${n.nakCas ? ` ob ${n.nakCas}` : ""}` : "",
+      n.nakReferenca ? `Ref: ${n.nakReferenca}` : "",
+      ``,
+      `🏁 RAZKLAD`,
+      n.razFirma || "",
+      `${n.razKraj || ""}${n.razNaslov ? `, ${n.razNaslov}` : ""}`,
+      n.razDatum ? `📅 ${fmt(n.razDatum)}${n.razCas ? ` ob ${n.razCas}` : ""}` : "",
+      n.razReferenca ? `Ref: ${n.razReferenca}` : "",
+    ];
+    if (n.navodila) {
+      lines.push(``, `⚠️ NAVODILA`, n.navodila);
+    }
+    if (n.stevilka_narocnika || n.stevilkaNarocnika) {
+      lines.push(``, `📋 Št. naročnika: ${n.stevilka_narocnika || n.stevilkaNarocnika}`);
+    }
+
+    // Odstrani prazne vrstice na koncu in znotraj sosedov
+    const sporocilo = lines.filter((l, i, arr) => !(l === "" && arr[i-1] === "")).join("\n");
+
+    // Viber deeplink: številka brez "+" znaka
+    const tel = v.tel.replace(/^\+/, "");
+    const url = `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
+
+    window.location.href = url;
+    showToast(`📤 Odpiram Viber za ${v.ime}...`);
+  };
+
+  // Pošlji nalog vozniku preko Viberja
+  const posljiViber = (n) => {
+    const v = voz(n.voznikId);
+    if (!v) return showToast("❌ Nalog nima dodeljenega voznika!", true);
+    if (!v.tel) return showToast(`❌ Voznik ${v.ime} nima telefonske številke!`, true);
+
+    // Sestavi celotno sporočilo z vsemi podatki naloga
+    const sc = SC[n.status] || {};
+    const lines = [
+      `🚛 NALOG ${n.stevilkaNaloga || n.id}`,
+      `Status: ${sc.label || n.status}`,
+      `Stranka: ${n.stranka || "–"}`,
+      ``,
+      `📦 BLAGO`,
+      `${n.blago || "–"}${n.kolicina ? ` · ${n.kolicina}` : ""}${n.teza ? ` · ${n.teza}` : ""}`,
+      ``,
+      `📍 NAKLAD`,
+      n.nakFirma || "",
+      `${n.nakKraj || ""}${n.nakNaslov ? `, ${n.nakNaslov}` : ""}`,
+      n.nakDatum ? `📅 ${fmt(n.nakDatum)}${n.nakCas ? ` ob ${n.nakCas}` : ""}` : "",
+      n.nakReferenca ? `Ref: ${n.nakReferenca}` : "",
+      ``,
+      `🏁 RAZKLAD`,
+      n.razFirma || "",
+      `${n.razKraj || ""}${n.razNaslov ? `, ${n.razNaslov}` : ""}`,
+      n.razDatum ? `📅 ${fmt(n.razDatum)}${n.razCas ? ` ob ${n.razCas}` : ""}` : "",
+      n.razReferenca ? `Ref: ${n.razReferenca}` : "",
+    ];
+    if (n.navodila) {
+      lines.push(``, `⚠️ NAVODILA`, n.navodila);
+    }
+    if (n.stevilka_narocnika || n.stevilkaNarocnika) {
+      lines.push(``, `📋 Št. naročnika: ${n.stevilka_narocnika || n.stevilkaNarocnika}`);
+    }
+
+    // Odstrani prazne vrstice na koncu in znotraj sosedov
+    const sporocilo = lines.filter((l, i, arr) => !(l === "" && arr[i-1] === "")).join("\n");
+
+    // Viber deeplink: številka brez "+" znaka
+    const tel = v.tel.replace(/^\+/, "");
+    const url = `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
+
+    window.location.href = url;
+    showToast(`📤 Odpiram Viber za ${v.ime}...`);
+  };
+
+  // Pošlji nalog vozniku preko Viberja
+  const posljiViber = (n) => {
+    const v = voz(n.voznikId);
+    if (!v) return showToast("❌ Nalog nima dodeljenega voznika!", true);
+    if (!v.tel) return showToast(`❌ Voznik ${v.ime} nima telefonske številke!`, true);
+
+    // Sestavi celotno sporočilo z vsemi podatki naloga
+    const sc = SC[n.status] || {};
+    const lines = [
+      `🚛 NALOG ${n.stevilkaNaloga || n.id}`,
+      `Status: ${sc.label || n.status}`,
+      `Stranka: ${n.stranka || "–"}`,
+      ``,
+      `📦 BLAGO`,
+      `${n.blago || "–"}${n.kolicina ? ` · ${n.kolicina}` : ""}${n.teza ? ` · ${n.teza}` : ""}`,
+      ``,
+      `📍 NAKLAD`,
+      n.nakFirma || "",
+      `${n.nakKraj || ""}${n.nakNaslov ? `, ${n.nakNaslov}` : ""}`,
+      n.nakDatum ? `📅 ${fmt(n.nakDatum)}${n.nakCas ? ` ob ${n.nakCas}` : ""}` : "",
+      n.nakReferenca ? `Ref: ${n.nakReferenca}` : "",
+      ``,
+      `🏁 RAZKLAD`,
+      n.razFirma || "",
+      `${n.razKraj || ""}${n.razNaslov ? `, ${n.razNaslov}` : ""}`,
+      n.razDatum ? `📅 ${fmt(n.razDatum)}${n.razCas ? ` ob ${n.razCas}` : ""}` : "",
+      n.razReferenca ? `Ref: ${n.razReferenca}` : "",
+    ];
+    if (n.navodila) {
+      lines.push(``, `⚠️ NAVODILA`, n.navodila);
+    }
+    if (n.stevilka_narocnika || n.stevilkaNarocnika) {
+      lines.push(``, `📋 Št. naročnika: ${n.stevilka_narocnika || n.stevilkaNarocnika}`);
+    }
+
+    // Odstrani prazne vrstice na koncu in znotraj sosedov
+    const sporocilo = lines.filter((l, i, arr) => !(l === "" && arr[i-1] === "")).join("\n");
+
+    // Viber deeplink: številka brez "+" znaka
+    const tel = v.tel.replace(/^\+/, "");
+    const url = `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
+
+    window.location.href = url;
+    showToast(`📤 Odpiram Viber za ${v.ime}...`);
+  };
+
+  // Pošlji nalog vozniku preko Viberja
+  const posljiViber = (n) => {
+    const v = voz(n.voznikId);
+    if (!v) return showToast("❌ Nalog nima dodeljenega voznika!", true);
+    if (!v.tel) return showToast(`❌ Voznik ${v.ime} nima telefonske številke!`, true);
+
+    // Sestavi celotno sporočilo z vsemi podatki naloga
+    const sc = SC[n.status] || {};
+    const lines = [
+      `🚛 NALOG ${n.stevilkaNaloga || n.id}`,
+      `Status: ${sc.label || n.status}`,
+      `Stranka: ${n.stranka || "–"}`,
+      ``,
+      `📦 BLAGO`,
+      `${n.blago || "–"}${n.kolicina ? ` · ${n.kolicina}` : ""}${n.teza ? ` · ${n.teza}` : ""}`,
+      ``,
+      `📍 NAKLAD`,
+      n.nakFirma || "",
+      `${n.nakKraj || ""}${n.nakNaslov ? `, ${n.nakNaslov}` : ""}`,
+      n.nakDatum ? `📅 ${fmt(n.nakDatum)}${n.nakCas ? ` ob ${n.nakCas}` : ""}` : "",
+      n.nakReferenca ? `Ref: ${n.nakReferenca}` : "",
+      ``,
+      `🏁 RAZKLAD`,
+      n.razFirma || "",
+      `${n.razKraj || ""}${n.razNaslov ? `, ${n.razNaslov}` : ""}`,
+      n.razDatum ? `📅 ${fmt(n.razDatum)}${n.razCas ? ` ob ${n.razCas}` : ""}` : "",
+      n.razReferenca ? `Ref: ${n.razReferenca}` : "",
+    ];
+    if (n.navodila) {
+      lines.push(``, `⚠️ NAVODILA`, n.navodila);
+    }
+    if (n.stevilka_narocnika || n.stevilkaNarocnika) {
+      lines.push(``, `📋 Št. naročnika: ${n.stevilka_narocnika || n.stevilkaNarocnika}`);
+    }
+
+    // Odstrani prazne vrstice na koncu in znotraj sosedov
+    const sporocilo = lines.filter((l, i, arr) => !(l === "" && arr[i-1] === "")).join("\n");
+
+    // Viber deeplink: številka brez "+" znaka
+    const tel = v.tel.replace(/^\+/, "");
+    const url = `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
+
+    window.location.href = url;
+    showToast(`📤 Odpiram Viber za ${v.ime}...`);
+  };
+
+  // Pošlji nalog vozniku preko Viberja
+  const posljiViber = (n) => {
+    const v = voz(n.voznikId);
+    if (!v) return showToast("❌ Nalog nima dodeljenega voznika!", true);
+    if (!v.tel) return showToast(`❌ Voznik ${v.ime} nima telefonske številke!`, true);
+
+    // Sestavi celotno sporočilo z vsemi podatki naloga
+    const sc = SC[n.status] || {};
+    const lines = [
+      `🚛 NALOG ${n.stevilkaNaloga || n.id}`,
+      `Status: ${sc.label || n.status}`,
+      `Stranka: ${n.stranka || "–"}`,
+      ``,
+      `📦 BLAGO`,
+      `${n.blago || "–"}${n.kolicina ? ` · ${n.kolicina}` : ""}${n.teza ? ` · ${n.teza}` : ""}`,
+      ``,
+      `📍 NAKLAD`,
+      n.nakFirma || "",
+      `${n.nakKraj || ""}${n.nakNaslov ? `, ${n.nakNaslov}` : ""}`,
+      n.nakDatum ? `📅 ${fmt(n.nakDatum)}${n.nakCas ? ` ob ${n.nakCas}` : ""}` : "",
+      n.nakReferenca ? `Ref: ${n.nakReferenca}` : "",
+      ``,
+      `🏁 RAZKLAD`,
+      n.razFirma || "",
+      `${n.razKraj || ""}${n.razNaslov ? `, ${n.razNaslov}` : ""}`,
+      n.razDatum ? `📅 ${fmt(n.razDatum)}${n.razCas ? ` ob ${n.razCas}` : ""}` : "",
+      n.razReferenca ? `Ref: ${n.razReferenca}` : "",
+    ];
+    if (n.navodila) {
+      lines.push(``, `⚠️ NAVODILA`, n.navodila);
+    }
+    if (n.stevilka_narocnika || n.stevilkaNarocnika) {
+      lines.push(``, `📋 Št. naročnika: ${n.stevilka_narocnika || n.stevilkaNarocnika}`);
+    }
+
+    // Odstrani prazne vrstice na koncu in znotraj sosedov
+    const sporocilo = lines.filter((l, i, arr) => !(l === "" && arr[i-1] === "")).join("\n");
+
+    // Viber deeplink: številka brez "+" znaka
+    const tel = v.tel.replace(/^\+/, "");
+    const url = `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
+
+    window.location.href = url;
+    showToast(`📤 Odpiram Viber za ${v.ime}...`);
+  };
+
+  // Pošlji nalog vozniku preko Viberja
+  const posljiViber = (n) => {
+    const v = voz(n.voznikId);
+    if (!v) return showToast("❌ Nalog nima dodeljenega voznika!", true);
+    if (!v.tel) return showToast(`❌ Voznik ${v.ime} nima telefonske številke!`, true);
+
+    // Sestavi celotno sporočilo z vsemi podatki naloga
+    const sc = SC[n.status] || {};
+    const lines = [
+      `🚛 NALOG ${n.stevilkaNaloga || n.id}`,
+      `Status: ${sc.label || n.status}`,
+      `Stranka: ${n.stranka || "–"}`,
+      ``,
+      `📦 BLAGO`,
+      `${n.blago || "–"}${n.kolicina ? ` · ${n.kolicina}` : ""}${n.teza ? ` · ${n.teza}` : ""}`,
+      ``,
+      `📍 NAKLAD`,
+      n.nakFirma || "",
+      `${n.nakKraj || ""}${n.nakNaslov ? `, ${n.nakNaslov}` : ""}`,
+      n.nakDatum ? `📅 ${fmt(n.nakDatum)}${n.nakCas ? ` ob ${n.nakCas}` : ""}` : "",
+      n.nakReferenca ? `Ref: ${n.nakReferenca}` : "",
+      ``,
+      `🏁 RAZKLAD`,
+      n.razFirma || "",
+      `${n.razKraj || ""}${n.razNaslov ? `, ${n.razNaslov}` : ""}`,
+      n.razDatum ? `📅 ${fmt(n.razDatum)}${n.razCas ? ` ob ${n.razCas}` : ""}` : "",
+      n.razReferenca ? `Ref: ${n.razReferenca}` : "",
+    ];
+    if (n.navodila) {
+      lines.push(``, `⚠️ NAVODILA`, n.navodila);
+    }
+    if (n.stevilka_narocnika || n.stevilkaNarocnika) {
+      lines.push(``, `📋 Št. naročnika: ${n.stevilka_narocnika || n.stevilkaNarocnika}`);
+    }
+
+    // Odstrani prazne vrstice na koncu in znotraj sosedov
+    const sporocilo = lines.filter((l, i, arr) => !(l === "" && arr[i-1] === "")).join("\n");
+
+    // Viber deeplink: številka brez "+" znaka
+    const tel = v.tel.replace(/^\+/, "");
+    const url = `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
+
+    window.location.href = url;
+    showToast(`📤 Odpiram Viber za ${v.ime}...`);
+  };
+
+  // Pošlji nalog vozniku preko Viberja
+  const posljiViber = (n) => {
+    const v = voz(n.voznikId);
+    if (!v) return showToast("❌ Nalog nima dodeljenega voznika!", true);
+    if (!v.tel) return showToast(`❌ Voznik ${v.ime} nima telefonske številke!`, true);
+
+    // Sestavi celotno sporočilo z vsemi podatki naloga
+    const sc = SC[n.status] || {};
+    const lines = [
+      `🚛 NALOG ${n.stevilkaNaloga || n.id}`,
+      `Status: ${sc.label || n.status}`,
+      `Stranka: ${n.stranka || "–"}`,
+      ``,
+      `📦 BLAGO`,
+      `${n.blago || "–"}${n.kolicina ? ` · ${n.kolicina}` : ""}${n.teza ? ` · ${n.teza}` : ""}`,
+      ``,
+      `📍 NAKLAD`,
+      n.nakFirma || "",
+      `${n.nakKraj || ""}${n.nakNaslov ? `, ${n.nakNaslov}` : ""}`,
+      n.nakDatum ? `📅 ${fmt(n.nakDatum)}${n.nakCas ? ` ob ${n.nakCas}` : ""}` : "",
+      n.nakReferenca ? `Ref: ${n.nakReferenca}` : "",
+      ``,
+      `🏁 RAZKLAD`,
+      n.razFirma || "",
+      `${n.razKraj || ""}${n.razNaslov ? `, ${n.razNaslov}` : ""}`,
+      n.razDatum ? `📅 ${fmt(n.razDatum)}${n.razCas ? ` ob ${n.razCas}` : ""}` : "",
+      n.razReferenca ? `Ref: ${n.razReferenca}` : "",
+    ];
+    if (n.navodila) {
+      lines.push(``, `⚠️ NAVODILA`, n.navodila);
+    }
+    if (n.stevilka_narocnika || n.stevilkaNarocnika) {
+      lines.push(``, `📋 Št. naročnika: ${n.stevilka_narocnika || n.stevilkaNarocnika}`);
+    }
+
+    // Odstrani prazne vrstice na koncu in znotraj sosedov
+    const sporocilo = lines.filter((l, i, arr) => !(l === "" && arr[i-1] === "")).join("\n");
+
+    // Viber deeplink: številka brez "+" znaka
+    const tel = v.tel.replace(/^\+/, "");
+    const url = `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
+
+    window.location.href = url;
+    showToast(`📤 Odpiram Viber za ${v.ime}...`);
+  };
+
+  // Pošlji nalog vozniku preko Viberja
+  const posljiViber = (n) => {
+    const v = voz(n.voznikId);
+    if (!v) return showToast("❌ Nalog nima dodeljenega voznika!", true);
+    if (!v.tel) return showToast(`❌ Voznik ${v.ime} nima telefonske številke!`, true);
+
+    // Sestavi celotno sporočilo z vsemi podatki naloga
+    const sc = SC[n.status] || {};
+    const lines = [
+      `🚛 NALOG ${n.stevilkaNaloga || n.id}`,
+      `Status: ${sc.label || n.status}`,
+      `Stranka: ${n.stranka || "–"}`,
+      ``,
+      `📦 BLAGO`,
+      `${n.blago || "–"}${n.kolicina ? ` · ${n.kolicina}` : ""}${n.teza ? ` · ${n.teza}` : ""}`,
+      ``,
+      `📍 NAKLAD`,
+      n.nakFirma || "",
+      `${n.nakKraj || ""}${n.nakNaslov ? `, ${n.nakNaslov}` : ""}`,
+      n.nakDatum ? `📅 ${fmt(n.nakDatum)}${n.nakCas ? ` ob ${n.nakCas}` : ""}` : "",
+      n.nakReferenca ? `Ref: ${n.nakReferenca}` : "",
+      ``,
+      `🏁 RAZKLAD`,
+      n.razFirma || "",
+      `${n.razKraj || ""}${n.razNaslov ? `, ${n.razNaslov}` : ""}`,
+      n.razDatum ? `📅 ${fmt(n.razDatum)}${n.razCas ? ` ob ${n.razCas}` : ""}` : "",
+      n.razReferenca ? `Ref: ${n.razReferenca}` : "",
+    ];
+    if (n.navodila) {
+      lines.push(``, `⚠️ NAVODILA`, n.navodila);
+    }
+    if (n.stevilka_narocnika || n.stevilkaNarocnika) {
+      lines.push(``, `📋 Št. naročnika: ${n.stevilka_narocnika || n.stevilkaNarocnika}`);
+    }
+
+    // Odstrani prazne vrstice na koncu in znotraj sosedov
+    const sporocilo = lines.filter((l, i, arr) => !(l === "" && arr[i-1] === "")).join("\n");
+
+    // Viber deeplink: številka brez "+" znaka
+    const tel = v.tel.replace(/^\+/, "");
+    const url = `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
+
+    window.location.href = url;
+    showToast(`📤 Odpiram Viber za ${v.ime}...`);
+  };
+
+  // Pošlji nalog vozniku preko Viberja
+  const posljiViber = (n) => {
+    const v = voz(n.voznikId);
+    if (!v) return showToast("❌ Nalog nima dodeljenega voznika!", true);
+    if (!v.tel) return showToast(`❌ Voznik ${v.ime} nima telefonske številke!`, true);
+
+    // Sestavi celotno sporočilo z vsemi podatki naloga
+    const sc = SC[n.status] || {};
+    const lines = [
+      `🚛 NALOG ${n.stevilkaNaloga || n.id}`,
+      `Status: ${sc.label || n.status}`,
+      `Stranka: ${n.stranka || "–"}`,
+      ``,
+      `📦 BLAGO`,
+      `${n.blago || "–"}${n.kolicina ? ` · ${n.kolicina}` : ""}${n.teza ? ` · ${n.teza}` : ""}`,
+      ``,
+      `📍 NAKLAD`,
+      n.nakFirma || "",
+      `${n.nakKraj || ""}${n.nakNaslov ? `, ${n.nakNaslov}` : ""}`,
+      n.nakDatum ? `📅 ${fmt(n.nakDatum)}${n.nakCas ? ` ob ${n.nakCas}` : ""}` : "",
+      n.nakReferenca ? `Ref: ${n.nakReferenca}` : "",
+      ``,
+      `🏁 RAZKLAD`,
+      n.razFirma || "",
+      `${n.razKraj || ""}${n.razNaslov ? `, ${n.razNaslov}` : ""}`,
+      n.razDatum ? `📅 ${fmt(n.razDatum)}${n.razCas ? ` ob ${n.razCas}` : ""}` : "",
+      n.razReferenca ? `Ref: ${n.razReferenca}` : "",
+    ];
+    if (n.navodila) {
+      lines.push(``, `⚠️ NAVODILA`, n.navodila);
+    }
+    if (n.stevilka_narocnika || n.stevilkaNarocnika) {
+      lines.push(``, `📋 Št. naročnika: ${n.stevilka_narocnika || n.stevilkaNarocnika}`);
+    }
+
+    // Odstrani prazne vrstice na koncu in znotraj sosedov
+    const sporocilo = lines.filter((l, i, arr) => !(l === "" && arr[i-1] === "")).join("\n");
+
+    // Viber deeplink: številka brez "+" znaka
+    const tel = v.tel.replace(/^\+/, "");
+    const url = `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
+
+    window.location.href = url;
+    showToast(`📤 Odpiram Viber za ${v.ime}...`);
+  };
+
+  // Pošlji nalog vozniku preko Viberja
+  const posljiViber = (n) => {
+    const v = voz(n.voznikId);
+    if (!v) return showToast("❌ Nalog nima dodeljenega voznika!", true);
+    if (!v.tel) return showToast(`❌ Voznik ${v.ime} nima telefonske številke!`, true);
+
+    // Sestavi celotno sporočilo z vsemi podatki naloga
+    const sc = SC[n.status] || {};
+    const lines = [
+      `🚛 NALOG ${n.stevilkaNaloga || n.id}`,
+      `Status: ${sc.label || n.status}`,
+      `Stranka: ${n.stranka || "–"}`,
+      ``,
+      `📦 BLAGO`,
+      `${n.blago || "–"}${n.kolicina ? ` · ${n.kolicina}` : ""}${n.teza ? ` · ${n.teza}` : ""}`,
+      ``,
+      `📍 NAKLAD`,
+      n.nakFirma || "",
+      `${n.nakKraj || ""}${n.nakNaslov ? `, ${n.nakNaslov}` : ""}`,
+      n.nakDatum ? `📅 ${fmt(n.nakDatum)}${n.nakCas ? ` ob ${n.nakCas}` : ""}` : "",
+      n.nakReferenca ? `Ref: ${n.nakReferenca}` : "",
+      ``,
+      `🏁 RAZKLAD`,
+      n.razFirma || "",
+      `${n.razKraj || ""}${n.razNaslov ? `, ${n.razNaslov}` : ""}`,
+      n.razDatum ? `📅 ${fmt(n.razDatum)}${n.razCas ? ` ob ${n.razCas}` : ""}` : "",
+      n.razReferenca ? `Ref: ${n.razReferenca}` : "",
+    ];
+    if (n.navodila) {
+      lines.push(``, `⚠️ NAVODILA`, n.navodila);
+    }
+    if (n.stevilka_narocnika || n.stevilkaNarocnika) {
+      lines.push(``, `📋 Št. naročnika: ${n.stevilka_narocnika || n.stevilkaNarocnika}`);
+    }
+
+    // Odstrani prazne vrstice na koncu in znotraj sosedov
+    const sporocilo = lines.filter((l, i, arr) => !(l === "" && arr[i-1] === "")).join("\n");
+
+    // Viber deeplink: številka brez "+" znaka
+    const tel = v.tel.replace(/^\+/, "");
+    const url = `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
+
+    window.location.href = url;
+    showToast(`📤 Odpiram Viber za ${v.ime}...`);
+  };
+
+  // Pošlji nalog vozniku preko Viberja
+  const posljiViber = (n) => {
+    const v = voz(n.voznikId);
+    if (!v) return showToast("❌ Nalog nima dodeljenega voznika!", true);
+    if (!v.tel) return showToast(`❌ Voznik ${v.ime} nima telefonske številke!`, true);
+
+    // Sestavi celotno sporočilo z vsemi podatki naloga
+    const sc = SC[n.status] || {};
+    const lines = [
+      `🚛 NALOG ${n.stevilkaNaloga || n.id}`,
+      `Status: ${sc.label || n.status}`,
+      `Stranka: ${n.stranka || "–"}`,
+      ``,
+      `📦 BLAGO`,
+      `${n.blago || "–"}${n.kolicina ? ` · ${n.kolicina}` : ""}${n.teza ? ` · ${n.teza}` : ""}`,
+      ``,
+      `📍 NAKLAD`,
+      n.nakFirma || "",
+      `${n.nakKraj || ""}${n.nakNaslov ? `, ${n.nakNaslov}` : ""}`,
+      n.nakDatum ? `📅 ${fmt(n.nakDatum)}${n.nakCas ? ` ob ${n.nakCas}` : ""}` : "",
+      n.nakReferenca ? `Ref: ${n.nakReferenca}` : "",
+      ``,
+      `🏁 RAZKLAD`,
+      n.razFirma || "",
+      `${n.razKraj || ""}${n.razNaslov ? `, ${n.razNaslov}` : ""}`,
+      n.razDatum ? `📅 ${fmt(n.razDatum)}${n.razCas ? ` ob ${n.razCas}` : ""}` : "",
+      n.razReferenca ? `Ref: ${n.razReferenca}` : "",
+    ];
+    if (n.navodila) {
+      lines.push(``, `⚠️ NAVODILA`, n.navodila);
+    }
+    if (n.stevilka_narocnika || n.stevilkaNarocnika) {
+      lines.push(``, `📋 Št. naročnika: ${n.stevilka_narocnika || n.stevilkaNarocnika}`);
+    }
+
+    // Odstrani prazne vrstice na koncu in znotraj sosedov
+    const sporocilo = lines.filter((l, i, arr) => !(l === "" && arr[i-1] === "")).join("\n");
+
+    // Viber deeplink: številka brez "+" znaka
+    const tel = v.tel.replace(/^\+/, "");
+    const url = `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
+
+    window.location.href = url;
+    showToast(`📤 Odpiram Viber za ${v.ime}...`);
+  };
+
+  // Pošlji nalog vozniku preko Viberja
+  const posljiViber = (n) => {
+    const v = voz(n.voznikId);
+    if (!v) return showToast("❌ Nalog nima dodeljenega voznika!", true);
+    if (!v.tel) return showToast(`❌ Voznik ${v.ime} nima telefonske številke!`, true);
+
+    // Sestavi celotno sporočilo z vsemi podatki naloga
+    const sc = SC[n.status] || {};
+    const lines = [
+      `🚛 NALOG ${n.stevilkaNaloga || n.id}`,
+      `Status: ${sc.label || n.status}`,
+      `Stranka: ${n.stranka || "–"}`,
+      ``,
+      `📦 BLAGO`,
+      `${n.blago || "–"}${n.kolicina ? ` · ${n.kolicina}` : ""}${n.teza ? ` · ${n.teza}` : ""}`,
+      ``,
+      `📍 NAKLAD`,
+      n.nakFirma || "",
+      `${n.nakKraj || ""}${n.nakNaslov ? `, ${n.nakNaslov}` : ""}`,
+      n.nakDatum ? `📅 ${fmt(n.nakDatum)}${n.nakCas ? ` ob ${n.nakCas}` : ""}` : "",
+      n.nakReferenca ? `Ref: ${n.nakReferenca}` : "",
+      ``,
+      `🏁 RAZKLAD`,
+      n.razFirma || "",
+      `${n.razKraj || ""}${n.razNaslov ? `, ${n.razNaslov}` : ""}`,
+      n.razDatum ? `📅 ${fmt(n.razDatum)}${n.razCas ? ` ob ${n.razCas}` : ""}` : "",
+      n.razReferenca ? `Ref: ${n.razReferenca}` : "",
+    ];
+    if (n.navodila) {
+      lines.push(``, `⚠️ NAVODILA`, n.navodila);
+    }
+    if (n.stevilka_narocnika || n.stevilkaNarocnika) {
+      lines.push(``, `📋 Št. naročnika: ${n.stevilka_narocnika || n.stevilkaNarocnika}`);
+    }
+
+    // Odstrani prazne vrstice na koncu in znotraj sosedov
+    const sporocilo = lines.filter((l, i, arr) => !(l === "" && arr[i-1] === "")).join("\n");
+
+    // Viber deeplink: številka brez "+" znaka
+    const tel = v.tel.replace(/^\+/, "");
+    const url = `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
+
+    window.location.href = url;
+    showToast(`📤 Odpiram Viber za ${v.ime}...`);
+  };
 
   const [aiParsing,setAiParsing]=useState(false);
 
@@ -296,31 +971,9 @@ je_slovenska_ddv: form.jeSlovenskaDdv!==undefined?form.jeSlovenskaDdv:null,
       const { error } = await supabase.from('nalogi').update({ voznik_id:voznikId, status:'poslan', poslan_cas:new Date().toISOString() }).eq('id',nalogId);
       if(error) throw error;
       upd(s=>({...s,nalogi:s.nalogi.map(n=>n.id===nalogId?{...n,voznikId,status:"poslan",poslanCas:new Date().toISOString()}:n)}));
-      // Posodobi tudi selNalog (da ostanemo v detail view in da se prikaže Viber gumb)
-      setSelNalog(prev => prev ? {...prev, voznikId, status:"poslan", poslanCas:new Date().toISOString()} : prev);
-      showToast(`✅ Nalog dodeljen vozniku ${voz(voznikId)?.ime}!`);
+      showToast(`✅ Nalog poslan vozniku ${voz(voznikId)?.ime}!`);setSelNalog(null);
     } catch(err) {
       showToast("❌ Napaka!",true);
-      console.error(err);
-    }
-  };
-
-  // Dodeli voznika + takoj odpri Viber s celotnim sporočilom
-  const dodelijInPosljiViber=async(nalogId,voznikId)=>{
-    const v = voz(voznikId);
-    if (!v?.tel) return showToast(`❌ Voznik ${v?.ime||""} nima telefonske številke!`, true);
-    try {
-      const { error } = await supabase.from('nalogi').update({ voznik_id:voznikId, status:'poslan', poslan_cas:new Date().toISOString() }).eq('id',nalogId);
-      if(error) throw error;
-      // Posodobi state in pripravi nalog za Viber sporočilo
-      const updatedNalog = {...st.nalogi.find(n=>n.id===nalogId), voznikId, status:"poslan"};
-      upd(s=>({...s,nalogi:s.nalogi.map(n=>n.id===nalogId?{...n,voznikId,status:"poslan",poslanCas:new Date().toISOString()}:n)}));
-      // Odpri Viber
-      posljiViber(updatedNalog);
-      setSelNalog(null);
-    } catch(err) {
-      showToast("❌ Napaka pri dodelitvi!",true);
-      console.error(err);
     }
   };
 
@@ -483,20 +1136,6 @@ const handleDrop=async(e)=>{
             <div style={{fontWeight:700,fontSize:14,color:"#0f2744",marginBottom:10}}>📤 Dodeli voznika</div>
             <select style={s.sel} value={izVoz} onChange={e=>setIzVoz(e.target.value)}><option value="">– Izberi voznika –</option>{vozniki.map(v=><option key={v.id} value={v.id}>{v.ime} · {v.vozilo}</option>)}</select>
             <button style={{...s.btnP,marginTop:10,opacity:izVoz?1:0.45}} onClick={()=>izVoz&&dodelijNalog(n.id,izVoz)}>📤 Pošlji vozniku</button>
-            <button
-              style={{
-                ...s.btnP,
-                background: izVoz && voz(izVoz)?.tel ? "#7360f2" : "#cbd5e1",
-                marginTop: 8,
-                opacity: izVoz && voz(izVoz)?.tel ? 1 : 0.45,
-                cursor: izVoz && voz(izVoz)?.tel ? "pointer" : "not-allowed"
-              }}
-              onClick={()=>izVoz && voz(izVoz)?.tel && dodelijInPosljiViber(n.id,izVoz)}
-              disabled={!izVoz || !voz(izVoz)?.tel}
-              title={izVoz ? (voz(izVoz)?.tel ? `Pošlji ${voz(izVoz)?.ime} v Viber` : "Voznik nima telefonske številke") : "Najprej izberi voznika"}
-            >
-              📤 Pošlji vozniku v Viber {izVoz && !voz(izVoz)?.tel && "(ni številke)"}
-            </button>
           </div>}
           <button style={{...s.btnP,background:"#2563eb",marginTop:8}} onClick={()=>urediNalog(n.id)}>✏️ Uredi nalog</button>
           {n.voznikId && (
@@ -1235,7 +1874,6 @@ function ProstiCMRTab({st,upd,showToast}){
   </div>);
 }
 
-// ===== EMAIL NALOG TAB - UNIVERZALEN SPREJEM (PDF, Word, Excel, Slike, Paste) =====
 function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
   const [korak, setKorak] = useState("vnos");
   const [vnosText, setVnosText] = useState("");
@@ -1244,42 +1882,17 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
   const [aiLoading, setAiLoading] = useState(false);
   const [form, setForm] = useState({});
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
- 
+
   // Outlook integracija
   const [outlookAccount, setOutlookAccount] = useState(getActiveAccount());
   const [outlookEmails, setOutlookEmails] = useState([]);
   const [outlookLoading, setOutlookLoading] = useState(false);
-  const [outlookFilter, setOutlookFilter] = useState("vsi");
- 
+  const [outlookFilter, setOutlookFilter] = useState("vsi"); // vsi | priponke | neprebrani
+
   useEffect(() => {
     setOutlookAccount(getActiveAccount());
   }, []);
- 
-  // Globalni paste listener za slike iz clipboarda (Ctrl+V z PrintScreena)
-  useEffect(() => {
-    const handlePaste = async (e) => {
-      if (korak !== "vnos") return; // samo na vnosni strani
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      for (const item of items) {
-        if (item.type.startsWith("image/")) {
-          e.preventDefault();
-          const blob = item.getAsFile();
-          if (blob) {
-            // Pretvori v File z imenom
-            const ext = item.type.split("/")[1] || "png";
-            const file = new File([blob], `screenshot-${Date.now()}.${ext}`, { type: item.type });
-            await obdelajDatoteko(file);
-            return;
-          }
-        }
-      }
-    };
-    window.addEventListener("paste", handlePaste);
-    return () => window.removeEventListener("paste", handlePaste);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [korak]);
- 
+
   const outlookPrijava = async () => {
     try {
       const acc = await loginToOutlook();
@@ -1291,7 +1904,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
       showToast("❌ Prijava v Outlook ni uspela.", true);
     }
   };
- 
+
   const outlookOdjava = async () => {
     try {
       await logoutFromOutlook();
@@ -1302,7 +1915,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
       console.error(err);
     }
   };
- 
+
   const naložiOutlookEmaile = async () => {
     setOutlookLoading(true);
     try {
@@ -1314,152 +1927,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
     }
     setOutlookLoading(false);
   };
- 
-  // ===== DINAMIČNO NALAGANJE LIBRARY-jev =====
-  const loadPdfJs = () => new Promise(res => {
-    if (window.pdfjsLib) return res(window.pdfjsLib);
-    const s = document.createElement("script");
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-    s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; res(window.pdfjsLib); };
-    document.head.appendChild(s);
-  });
- 
-  const loadMammoth = () => new Promise(res => {
-    if (window.mammoth) return res(window.mammoth);
-    const s = document.createElement("script");
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js";
-    s.onload = () => res(window.mammoth);
-    document.head.appendChild(s);
-  });
- 
-  const loadXlsx = () => new Promise(res => {
-    if (window.XLSX) return res(window.XLSX);
-    const s = document.createElement("script");
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-    s.onload = () => res(window.XLSX);
-    document.head.appendChild(s);
-  });
- 
-  // ===== UPLOAD ORIGINAL DATOTEKE V SUPABASE STORAGE =====
-  const uploadOriginalDatoteke = async (file) => {
-    try {
-      const uuid = crypto.randomUUID();
-      const fileName = `${uuid}/${Date.now()}-${file.name}`;
-      const { data, error } = await supabase.storage.from("originalni-nalogi").upload(fileName, file, { cacheControl: "3600", upsert: false });
-      if (error) throw error;
-      const { data: urlData } = supabase.storage.from("originalni-nalogi").getPublicUrl(fileName);
-      return urlData?.publicUrl || null;
-    } catch (err) {
-      console.error("Upload napaka:", err);
-      return null;
-    }
-  };
- 
-  // ===== PRETVORI File V BASE64 =====
-  const fileToBase64 = (file) => new Promise((res, rej) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result;
-      // odstrani "data:image/jpeg;base64," prefix
-      const base64 = result.split(",")[1];
-      res(base64);
-    };
-    reader.onerror = rej;
-    reader.readAsDataURL(file);
-  });
- 
-  // ===== GLAVNA FUNKCIJA: OBDELAJ DATOTEKO (KAKRŠEN KOLI TIP) =====
-  const obdelajDatoteko = async (file) => {
-    if (!file) return;
-    setAiLoading(true);
-    showToast(`⏳ Berem: ${file.name}...`);
- 
-    try {
-      const fileName = file.name.toLowerCase();
-      const mimeType = file.type || "";
-      let tekst = "";
-      let jeSlika = false;
-      let slikaBase64 = null;
-      let mediaType = "image/jpeg";
- 
-      // ===== PDF =====
-      if (mimeType === "application/pdf" || fileName.endsWith(".pdf")) {
-        const ab = await file.arrayBuffer();
-        const lib = await loadPdfJs();
-        const pdf = await lib.getDocument({ data: ab }).promise;
-        for (let i = 1; i <= Math.min(pdf.numPages, 5); i++) {
-          const p = await pdf.getPage(i);
-          const tc = await p.getTextContent();
-          tekst += tc.items.map(x => x.str).join(" ") + "\n";
-        }
-        tekst = tekst.trim();
-      }
-      // ===== WORD .docx =====
-      else if (fileName.endsWith(".docx") || mimeType.includes("wordprocessingml")) {
-        const ab = await file.arrayBuffer();
-        const mammoth = await loadMammoth();
-        const result = await mammoth.extractRawText({ arrayBuffer: ab });
-        tekst = result.value.trim();
-      }
-      // ===== EXCEL .xlsx ali .xls =====
-      else if (fileName.endsWith(".xlsx") || fileName.endsWith(".xls") || mimeType.includes("spreadsheetml") || mimeType.includes("excel")) {
-        const ab = await file.arrayBuffer();
-        const XLSX = await loadXlsx();
-        const workbook = XLSX.read(ab, { type: "array" });
-        // Združi vse sheete v en tekst
-        workbook.SheetNames.forEach(sheetName => {
-          const sheet = workbook.Sheets[sheetName];
-          const csv = XLSX.utils.sheet_to_csv(sheet);
-          tekst += `--- ${sheetName} ---\n${csv}\n\n`;
-        });
-        tekst = tekst.trim();
-      }
-      // ===== SLIKE =====
-      else if (mimeType.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName)) {
-        jeSlika = true;
-        slikaBase64 = await fileToBase64(file);
-        mediaType = mimeType || "image/jpeg";
-      }
-      // ===== TXT in ostalo (fallback) =====
-      else {
-        tekst = await file.text();
-      }
- 
-      // Preverimo, ali imamo karkoli za obdelati
-      if (!jeSlika && !tekst.trim()) {
-        showToast("❌ Datoteka je prazna ali ne moremo prebrati vsebine.", true);
-        setAiLoading(false);
-        return;
-      }
- 
-      // Shrani priponko v state in datoteko za upload
-      setPriponkaFile(file);
-      const prikazVsebine = jeSlika ? "📷 Slika (PrintScreen ali fotografija)" : tekst.slice(0, 200);
-      setPriponka({ ime: file.name, vsebina: prikazVsebine, tip: jeSlika ? "image" : "text" });
-      showToast(`✅ Datoteka naložena: ${file.name}. Pošljemo v AI razčlenitev...`);
- 
-      // ===== POŠLJI V AI =====
-      const body = jeSlika
-        ? { tip: "image", slikaBase64, mediaType }
-        : { tip: "tekst", tekst };
- 
-      const { data, error } = await supabase.functions.invoke("ai-razcleni", { body });
-      if (error) throw error;
- 
-      const txt = data.content?.map(i => i.text || "").join("").replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(txt);
-      setForm({ ...parsed, voznikId: "" });
-      setKorak("forma");
-      showToast("✅ AI je razčlenil! Preveri in potrdi.");
-    } catch (err) {
-      console.error(err);
-      showToast("❌ AI napaka — izpolni ročno.", true);
-      setForm({ stranka: "", nakKraj: "", razKraj: "", voznikId: "" });
-      setKorak("forma");
-    }
-    setAiLoading(false);
-  };
- 
+
   // Uvozi izbran email iz Outlooka — pridobi priponke (PDF) in pošlje v AI parser
   const uvoziOutlookEmail = async (msgId, subject) => {
     setAiLoading(true);
@@ -1510,7 +1978,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
       // Pošlji AI v razčlenitev
       showToast("⏳ AI razčlenjuje...");
       const { data, error } = await supabase.functions.invoke("ai-razcleni", {
-        body: { tip: "tekst", tekst: vir }
+        body: { tekst: vir }
       });
       if (error) throw error;
       const txt = data.content?.map(i => i.text || "").join("").replace(/```json|```/g, "").trim();
@@ -1524,27 +1992,50 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
     }
     setAiLoading(false);
   };
- 
-  // Drag & drop ali izbira datoteke - kliče glavno funkcijo
+
+  const loadPdfJs = () => new Promise(res => {
+    if (window.pdfjsLib) return res(window.pdfjsLib);
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+    s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; res(window.pdfjsLib); };
+    document.head.appendChild(s);
+  });
+
   const naložiPriponko = async (e) => {
-    const file = e.target?.files?.[0];
-    if (!file) return;
-    await obdelajDatoteko(file);
-    if (e.target) e.target.value = "";
-  };
- 
-  // Razčleni samo tekst iz textarea (brez priponke)
-  const razcleni = async () => {
-    if (priponka && !vnosText.trim()) {
-      // Če je priponka že obdelana, samo pojdi naprej - obdelajDatoteko je že shranil v form
-      return;
+    const file = e.target.files[0]; if (!file) return;
+    showToast(`⏳ Berem: ${file.name}...`);
+    try {
+      if (file.type === "application/pdf") {
+        const ab = await file.arrayBuffer();
+        const lib = await loadPdfJs();
+        const pdf = await lib.getDocument({data:ab}).promise;
+        let txt = "";
+        for (let i=1;i<=Math.min(pdf.numPages,5);i++) {
+          const p = await pdf.getPage(i);
+          const tc = await p.getTextContent();
+          txt += tc.items.map(x=>x.str).join(" ") + "\n";
+        }
+        setPriponkaFile(file);
+        setPriponka({ ime: file.name, vsebina: txt.trim(), tip: "pdf" });
+      } else {
+        const txt = await file.text();
+        setPriponka({ ime: file.name, vsebina: txt, tip: "text" });
+      }
+      showToast(`✅ Priponka naložena: ${file.name}`);
+    } catch(err) {
+      showToast("❌ Napaka pri branju priponke.", true);
     }
-    if (!vnosText.trim()) return showToast("Vnesi besedilo emaila ali naloži priponko!", true);
+    e.target.value = "";
+  };
+
+  const razcleni = async () => {
+    const vir = priponka?.vsebina || vnosText;
+    if (!vir.trim()) return showToast("Vnesi besedilo emaila ali naloži priponko!", true);
     setAiLoading(true);
     showToast("⏳ AI razčlenjuje...");
     try {
       const { data, error } = await supabase.functions.invoke("ai-razcleni", {
-        body: { tip: "tekst", tekst: vnosText }
+        body: { tekst: vir }
       });
       if (error) throw error;
       const txt = data.content?.map(i=>i.text||"").join("").replace(/```json|```/g,"").trim();
@@ -1559,14 +2050,14 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
     }
     setAiLoading(false);
   };
- 
+
   const ustvariNalog = async () => {
     if (!form.stranka||!form.nakKraj||!form.razKraj) return showToast("Izpolni obvezna polja!", true);
     try {
       let pdfUrl=null;
       if(priponkaFile){
-        showToast("⏳ Nalagam original...");
-        pdfUrl=await uploadOriginalDatoteke(priponkaFile);
+        showToast("⏳ Nalagam PDF...");
+        pdfUrl=await uploadOriginalPdf(priponkaFile);
       }
       const { data, error } = await supabase.from('nalogi').insert([{
         stevilka_naloga: '',
@@ -1595,7 +2086,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
         je_slovenska_ddv: form.jeSlovenskaDdv!==undefined?form.jeSlovenskaDdv:null,
       }]).select().single();
       if (error) throw error;
- 
+
       // Če je email iz Outlooka — označi kot prebran
       if (form._outlookMsgId) {
         try {
@@ -1604,34 +2095,33 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
           console.warn("Mark as read failed:", e);
         }
       }
- 
+
       await naložiPodatke();
       showToast(`✅ Nalog ${data.stevilka_naloga} ustvarjen!`);
       setKorak("vnos");
       setVnosText("");
       setPriponka(null);
-      setPriponkaFile(null);
       setForm({});
     } catch(err) {
       showToast("❌ Napaka pri shranjevanju!", true);
       console.error(err);
     }
   };
- 
+
   // Filter za Outlook emaile
   const filtriraniEmaili = outlookEmails.filter(em => {
     if (outlookFilter === "priponke") return em.hasAttachments;
     if (outlookFilter === "neprebrani") return !em.isRead;
     return true;
   });
- 
+
   if (korak==="vnos") return (
     <div>
       <div style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:14,padding:18,color:"#fff",marginBottom:14}}>
         <div style={{fontWeight:800,fontSize:16,marginBottom:6}}>🤖 Email → Nalog</div>
-        <div style={{fontSize:13,opacity:0.85}}>Poveži Outlook, naloži PDF/Word/Excel/sliko ali pritisni <strong>Ctrl+V</strong> za prilepiti PrintScreen — AI bo avtomatsko izpolnil nalog.</div>
+        <div style={{fontSize:13,opacity:0.85}}>Poveži Outlook za avtomatski uvoz, prilepi besedilo emaila ali naloži PDF priponko — AI bo avtomatsko izpolnil nalog.</div>
       </div>
- 
+
       {/* OUTLOOK SEKCIJA */}
       <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:outlookAccount?"2px solid #16a34a":"2px solid #e2e8f0"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:outlookAccount?12:0}}>
@@ -1647,7 +2137,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
             </button>
           )}
         </div>
- 
+
         {outlookAccount && (
           <>
             <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
@@ -1658,7 +2148,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
                 {outlookLoading?"⏳":"🔄"} Osveži
               </button>
             </div>
- 
+
             {outlookLoading && outlookEmails.length===0 ? (
               <div style={{textAlign:"center",padding:20,color:"#94a3b8",fontSize:13}}>⏳ Nalagam emaile...</div>
             ) : filtriraniEmaili.length===0 ? (
@@ -1685,16 +2175,15 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
           </>
         )}
       </div>
- 
+
       <div style={{textAlign:"center",fontSize:11,color:"#94a3b8",margin:"8px 0"}}>— ALI ROČNO —</div>
- 
-      {/* UNIVERZALNA DROPZONE */}
+
       <div style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
-        <div style={{fontWeight:700,fontSize:14,color:"#0f2744",marginBottom:8}}>📎 Naloži dokument (PDF · Word · Excel · Slika)</div>
+        <div style={{fontWeight:700,fontSize:14,color:"#0f2744",marginBottom:8}}>📎 Naloži priponko iz emaila</div>
         {priponka ? (
           <div style={{background:"#f0fdf4",borderRadius:10,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div><div style={{fontWeight:700,fontSize:13,color:"#16a34a"}}>{priponka.tip==="image"?"🖼️":"📄"} {priponka.ime}</div><div style={{fontSize:11,color:"#64748b"}}>{priponka.vsebina.slice(0,80)}...</div></div>
-            <button style={{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:18}} onClick={()=>{setPriponka(null);setPriponkaFile(null);}}>✕</button>
+            <div><div style={{fontWeight:700,fontSize:13,color:"#16a34a"}}>📄 {priponka.ime}</div><div style={{fontSize:11,color:"#64748b"}}>{priponka.vsebina.slice(0,80)}...</div></div>
+            <button style={{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:18}} onClick={()=>setPriponka(null)}>✕</button>
           </div>
         ) : (
           <div
@@ -1706,16 +2195,16 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
               e.currentTarget.style.background="#f8fafc";
               const file = e.dataTransfer.files[0];
               if (file) {
-                await obdelajDatoteko(file);
+                const fakeEvent = { target: { files: [file], value: "" } };
+                await naložiPriponko(fakeEvent);
               }
             }}
             style={{border:"2px dashed #cbd5e1",borderRadius:10,padding:"24px 16px",cursor:"pointer",textAlign:"center",background:"#f8fafc",transition:"all 0.2s"}}
           >
             <div style={{fontSize:32,marginBottom:8}}>📂</div>
-            <div style={{fontWeight:700,fontSize:14,color:"#0f2744",marginBottom:4}}>Povleci dokument sem</div>
-            <div style={{fontSize:12,color:"#64748b",marginBottom:6}}>PDF · Word (.docx) · Excel (.xlsx) · Slika (.jpg, .png)</div>
-            <div style={{fontSize:11,color:"#1d4ed8",marginBottom:12,fontWeight:600}}>💡 ALI pritisni <kbd style={{background:"#e2e8f0",padding:"2px 6px",borderRadius:4,fontSize:10,fontFamily:"monospace"}}>Ctrl+V</kbd> za prilepiti PrintScreen</div>
-            <input type="file" id="email-pdf" accept=".pdf,.txt,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp" style={{display:"none"}} onChange={naložiPriponko}/>
+            <div style={{fontWeight:700,fontSize:14,color:"#0f2744",marginBottom:4}}>Povleci priponko sem</div>
+            <div style={{fontSize:12,color:"#64748b",marginBottom:12}}>PDF · Word · TXT — povleci direktno iz Outlooka ali Gmaila</div>
+            <input type="file" id="email-pdf" accept=".pdf,.txt,.doc,.docx" style={{display:"none"}} onChange={naložiPriponko}/>
             <label htmlFor="email-pdf" style={{background:"#0f2744",color:"#fff",padding:"8px 18px",borderRadius:10,fontWeight:700,fontSize:13,cursor:"pointer"}}>
               📂 Ali izberi datoteko
             </label>
@@ -1736,7 +2225,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
       </button>
     </div>
   );
- 
+
   if (korak==="forma") return (
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
@@ -1781,10 +2270,10 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
       </button>
     </div>
   );
- 
+
   return null;
 }
- 
+
 // ===== KOMUNIKACIJA TAB =====
 function KomunikacijaTab({ showToast }) {
   const [korak, setKorak] = useState("vnos"); // vnos | rezultat
