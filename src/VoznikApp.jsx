@@ -5,19 +5,78 @@ const pad = (n) => String(n).padStart(2, "0");
 const fmt = (iso) => { if (!iso) return "–"; const d = new Date(iso); return `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()}`; };
 const fmtT = (iso) => { if (!iso) return ""; const d = new Date(iso); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 
-const optimizejSliko = (dataUrl) => new Promise((resolve) => {
+// ===== JSCANIFY + OPENCV NALAGANJE (CamScanner stil obdelava) =====
+const loadJscanify = () => new Promise((resolve, reject) => {
+  if (window.jscanify && window.cv && window.cv.Mat) return resolve(window.jscanify);
+  
+  const loadOpenCV = () => new Promise((res, rej) => {
+    if (window.cv && window.cv.Mat) return res();
+    const cvScript = document.createElement("script");
+    cvScript.src = "https://docs.opencv.org/4.8.0/opencv.js";
+    cvScript.async = true;
+    cvScript.onload = () => {
+      let attempts = 0;
+      const checkReady = () => {
+        attempts++;
+        if (window.cv && window.cv.Mat) {
+          res();
+        } else if (attempts < 100) {
+          setTimeout(checkReady, 100);
+        } else {
+          rej(new Error("OpenCV se ni naložil"));
+        }
+      };
+      checkReady();
+    };
+    cvScript.onerror = () => rej(new Error("OpenCV CDN napaka"));
+    document.head.appendChild(cvScript);
+  });
+  
+  loadOpenCV().then(() => {
+    if (window.jscanify) return resolve(window.jscanify);
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/gh/puffinsoft/jscanify@master/src/jscanify.min.js";
+    script.onload = () => resolve(window.jscanify);
+    script.onerror = () => reject(new Error("jscanify se ni naložil"));
+    document.head.appendChild(script);
+  }).catch(reject);
+});
+ 
+const skenirjsanify = async (dataUrl) => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = async () => {
+      try {
+        const scanner = new window.jscanify();
+        const targetWidth = Math.min(img.width, 2000);
+        const targetHeight = Math.round(targetWidth * 1.414);
+        const extractedCanvas = scanner.extractPaper(img, targetWidth, targetHeight);
+        resolve(extractedCanvas.toDataURL("image/jpeg", 0.92));
+      } catch (err) {
+        console.warn("jscanify napaka, vracam original:", err);
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+};
+ 
+const filterCMR = (dataUrl) => new Promise((resolve) => {
   const img = new Image();
   img.onload = () => {
     const canvas = document.createElement("canvas");
-    canvas.width = img.width; canvas.height = img.height;
+    canvas.width = img.width;
+    canvas.height = img.height;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(img, 0, 0);
     const id = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const d = id.data;
     for (let i = 0; i < d.length; i += 4) {
       const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
-      const c = (gray - 128) * 1.45 + 128;
-      const v = Math.max(0, Math.min(255, c < 100 ? c - 18 : c + 12));
+      const c = (gray - 128) * 1.5 + 128;
+      const v = Math.max(0, Math.min(255, c < 100 ? c - 20 : c + 15));
       d[i] = d[i+1] = d[i+2] = v;
     }
     ctx.putImageData(id, 0, 0);
@@ -25,7 +84,10 @@ const optimizejSliko = (dataUrl) => new Promise((resolve) => {
   };
   img.src = dataUrl;
 });
-
+ 
+const optimizejSliko = async (dataUrl) => {
+  return await filterCMR(dataUrl);
+};
 const initState = () => ({ voznik: { ime: "Voznik", vozilo: "" }, nalogi: [], prostiCMR: [] });
 
 export default function App({ voznikId:propVoznikId=null, voznikIme='', voznikVozilo='', onOdjava=null }) {
@@ -43,7 +105,41 @@ export default function App({ voznikId:propVoznikId=null, voznikIme='', voznikVo
   const showToast = (txt, err) => { setToast({txt,err}); setTimeout(()=>setToast(null),3500); };
   const closeModal = () => { setModal(null); setForm({}); };
   const sprejmiNalog = async (nalog) => { try { const { error } = await supabase.from('nalogi').update({ status: 'sprejet', sprejet_cas: new Date().toISOString() }).eq('id', nalog.id); if (error) throw error; upd(s=>({...s, nalogi:s.nalogi.map(n=>n.id===nalog.id?{...n,status:"sprejet",sprejetCas:new Date().toISOString()}:n)})); if (selectedNalog) setSelectedNalog(n=>({...n,status:"sprejet",sprejetCas:new Date().toISOString()})); showToast("✅ Nalog sprejet!"); } catch(err) { showToast("❌ Napaka!", true); } };
-  const zacniZakljucitev = (nalog) => { const slike = nalog.cmrSlike?.filter(Boolean)||[]; if(slike.length>0){ setForm({nalogId:nalog.id, slike}); potrdiZakljucitev(); } else { setForm({nalogId:nalog.id, slike:[]}); setModal("zakljuci"); } };
+  const zacniZakljucitev = async (nalog) => {
+    const slike = nalog.cmrSlike?.filter(Boolean) || [];
+    if (slike.length > 0) {
+      // Direkt zaključi z že obstoječimi slikami (brez modala)
+      await zakljuciNalogDirektno(nalog, slike);
+    } else {
+      // Odpri modal za dodajanje slik
+      setForm({ nalogId: nalog.id, slike: [] });
+      setModal("zakljuci");
+    }
+  };
+
+  const zakljuciNalogDirektno = async (nalog, slike) => {
+    try {
+      for (const sl of slike) {
+        // Skip že naložene slike (imajo .pot)
+        if (sl.pot) continue;
+        const base64 = sl.img.split(',')[1];
+        const byteArr = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+        const blob = new Blob([byteArr], { type: 'image/jpeg' });
+        const pot = `${nalog.id}/${Date.now()}-${sl.ime || 'cmr.jpg'}`;
+        const { error: upErr } = await supabase.storage.from('cmr-dokumenti').upload(pot, blob, { contentType: 'image/jpeg', upsert: false });
+        if (upErr) throw upErr;
+        await supabase.from('cmr_dokumenti').insert([{ nalog_id: nalog.id, ime_datoteke: sl.ime || 'cmr.jpg', storage_pot: pot }]);
+      }
+      const { error } = await supabase.from('nalogi').update({ status: 'zakljucen', zakljucen_cas: new Date().toISOString() }).eq('id', nalog.id);
+      if (error) throw error;
+      upd(s => ({ ...s, nalogi: s.nalogi.map(n => n.id === nalog.id ? { ...n, status: "zakljucen", zakljucenCas: new Date().toISOString() } : n) }));
+      setSelectedNalog(null);
+      showToast("✅ Nalog zaključen!");
+    } catch (err) {
+      showToast("❌ Napaka!", true);
+      console.error(err);
+    }
+  };
   const dodajSlikoCMR = async (e) => { const file = e.target.files[0]; if (!file) return; showToast("⏳ Optimizacija slike..."); const reader = new FileReader(); reader.onload = async (ev) => { const optimized = await optimizejSliko(ev.target.result); setForm(f => ({...f, slike:[...(f.slike||[]), {img:optimized, ime:file.name, cas:new Date().toISOString()}]})); showToast("✅ Slika optimizirana!"); }; reader.readAsDataURL(file); e.target.value=""; };
   const odstraniSliko = (idx) => setForm(f=>({...f, slike:(f.slike||[]).filter((_,i)=>i!==idx)}));
   const potrdiZakljucitev = async () => { const nalog = st.nalogi.find(n=>n.id===form.nalogId); const slike = (form.slike||[]).filter(Boolean); try { for (const sl of slike) { const base64 = sl.img.split(',')[1]; const byteArr = Uint8Array.from(atob(base64), c => c.charCodeAt(0)); const blob = new Blob([byteArr], { type: 'image/jpeg' }); const pot = `${nalog.id}/${Date.now()}-${sl.ime||'cmr.jpg'}`; const { error: upErr } = await supabase.storage.from('cmr-dokumenti').upload(pot, blob, { contentType:'image/jpeg', upsert:false }); if (upErr) throw upErr; await supabase.from('cmr_dokumenti').insert([{ nalog_id: nalog.id, ime_datoteke: sl.ime||'cmr.jpg', storage_pot: pot }]); } const { error } = await supabase.from('nalogi').update({ status: 'zakljucen', zakljucen_cas: new Date().toISOString() }).eq('id', nalog.id); if (error) throw error; upd(s=>({...s, nalogi:s.nalogi.map(n=>n.id===nalog.id?{...n,status:"zakljucen",zakljucenCas:new Date().toISOString(),cmrSlike:slike}:n)})); closeModal(); setSelectedNalog(null); showToast("✅ Nalog zaključen!"); } catch(err) { showToast("❌ Napaka!", true); console.error(err); } };
