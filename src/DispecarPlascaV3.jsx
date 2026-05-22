@@ -382,16 +382,35 @@ const handleDrop=async(e)=>{
     }
     try{
       let txt="";
+      let slikaB64=null;
       if(file.type==="application/pdf"){
         try{
           const lib=await new Promise(res=>{if(window.pdfjsLib)return res(window.pdfjsLib);const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";s.onload=()=>{window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";res(window.pdfjsLib);};document.head.appendChild(s);});
           const ab=await file.arrayBuffer();
           const pdf=await lib.getDocument({data:ab}).promise;
           for(let i=1;i<=Math.min(pdf.numPages,4);i++){const p=await pdf.getPage(i);const tc=await p.getTextContent();txt+=tc.items.map(x=>x.str).join(" ")+"\n";}
+          // Če je scan (brez teksta), prerendiraj prvo stran v sliko
+          if(!txt.trim()||txt.trim().length<30){
+            showToast("📷 PDF je scan — pretvarjam v sliko za AI...");
+            const page=await pdf.getPage(1);
+            const viewport=page.getViewport({scale:2.0});
+            const canvas=document.createElement("canvas");
+            canvas.width=viewport.width;canvas.height=viewport.height;
+            const ctx=canvas.getContext("2d");
+            await page.render({canvasContext:ctx,viewport}).promise;
+            slikaB64=canvas.toDataURL("image/jpeg",0.85).split(",")[1];
+            txt="";
+          }
         }catch(e){txt="";}
+      }else if(file.type.startsWith("image/")){
+        slikaB64=await new Promise((res)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.readAsDataURL(file);});
       }
-      if(!txt)txt=await file.text().catch(()=>file.name);
-      const res=await fetch("/api/parse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:`Iz tega transportnega naloga izvleci podatke. POZOR za polje "stranka": stranka je ŠPEDICIJA ali LOGISTIČNO PODJETJE ki je poslalo ta nalog (npr. Cargo Partner, DHL, Rooskens, ROCS Trading, Fersped ipd.) — torej tisti ki naroča prevoz. NI nakladna firma, NI razkladna firma, NI prevoznik (JURJEVEC). Poišči logo, glavo dokumenta ali polje "ordered by/Auftraggeber/naročnik" da najdeš pravo stranko. Poišči tudi ceno prevoza (price/rate/freight/Preis/Fracht) in jo vpiši v polje znesek kot število. Vrni SAMO JSON:\n{"stranka":"","stevilkaNarocnika":"","blago":"","kolicina":"","teza":"","nakFirma":"","nakKraj":"","nakNaslov":"","nakReferenca":"","nakDatum":"","nakCas":"","razFirma":"","razKraj":"","razNaslov":"","razReferenca":"","razDatum":"","razCas":"","navodila":"","kontaktEmail":"","znesek":"","jeSlovenskaDdv":true}\n\nPolja:\n- znesek: cena prevoza v EUR (samo število, npr "850.00"). Poišči v dokumentu besede kot price, rate, freight, Preis, cena.\n- jeSlovenskaDdv: true če je naročnik iz Slovenije, false če je tuj (glede na državo naročnika).\n- kontaktEmail: email za pošiljanje računa (poišči besede invoice, Rechnung, račun, faktura).\n- navodila: vse posebne zahteve in navodila iz dokumenta.\nDatumi: YYYY-MM-DD, casi: HH:MM.\n\nDokument:\n${txt}`}]})});
+      if(!txt&&!slikaB64)txt=await file.text().catch(()=>file.name);
+      const promptTekst=`Iz tega transportnega naloga izvleci podatke. POZOR za polje "stranka": stranka je ŠPEDICIJA ali LOGISTIČNO PODJETJE ki je poslalo ta nalog (npr. Cargo Partner, DHL, Rooskens, ROCS Trading, Fersped ipd.) — torej tisti ki naroča prevoz. NI nakladna firma, NI razkladna firma, NI prevoznik (JURJEVEC). Poišči logo, glavo dokumenta ali polje "ordered by/Auftraggeber/naročnik" da najdeš pravo stranko. Poišči tudi ceno prevoza (price/rate/freight/Preis/Fracht) in jo vpiši v polje znesek kot število. Vrni SAMO JSON:\n{"stranka":"","stevilkaNarocnika":"","blago":"","kolicina":"","teza":"","nakFirma":"","nakKraj":"","nakNaslov":"","nakReferenca":"","nakDatum":"","nakCas":"","razFirma":"","razKraj":"","razNaslov":"","razReferenca":"","razDatum":"","razCas":"","navodila":"","kontaktEmail":"","znesek":"","jeSlovenskaDdv":true}\n\nPolja:\n- znesek: cena prevoza v EUR (samo število, npr "850.00"). Poišči v dokumentu besede kot price, rate, freight, Preis, cena.\n- jeSlovenskaDdv: true če je naročnik iz Slovenije, false če je tuj (glede na državo naročnika).\n- kontaktEmail: email za pošiljanje računa (poišči besede invoice, Rechnung, račun, faktura).\n- navodila: vse posebne zahteve in navodila iz dokumenta.\nDatumi: YYYY-MM-DD, casi: HH:MM.`;
+      const userContent=slikaB64
+        ?[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:slikaB64}},{type:"text",text:promptTekst}]
+        :promptTekst+"\n\nDokument:\n"+txt;
+      const res=await fetch("/api/parse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:userContent}]})}); Cargo Partner, DHL, Rooskens, ROCS Trading, Fersped ipd.) — torej tisti ki naroča prevoz. NI nakladna firma, NI razkladna firma, NI prevoznik (JURJEVEC). Poišči logo, glavo dokumenta ali polje "ordered by/Auftraggeber/naročnik" da najdeš pravo stranko. Poišči tudi ceno prevoza (price/rate/freight/Preis/Fracht) in jo vpiši v polje znesek kot število. Vrni SAMO JSON:\n{"stranka":"","stevilkaNarocnika":"","blago":"","kolicina":"","teza":"","nakFirma":"","nakKraj":"","nakNaslov":"","nakReferenca":"","nakDatum":"","nakCas":"","razFirma":"","razKraj":"","razNaslov":"","razReferenca":"","razDatum":"","razCas":"","navodila":"","kontaktEmail":"","znesek":"","jeSlovenskaDdv":true}\n\nPolja:\n- znesek: cena prevoza v EUR (samo število, npr "850.00"). Poišči v dokumentu besede kot price, rate, freight, Preis, cena.\n- jeSlovenskaDdv: true če je naročnik iz Slovenije, false če je tuj (glede na državo naročnika).\n- kontaktEmail: email za pošiljanje računa (poišči besede invoice, Rechnung, račun, faktura).\n- navodila: vse posebne zahteve in navodila iz dokumenta.\nDatumi: YYYY-MM-DD, casi: HH:MM.\n\nDokument:\n${txt}`}]})});
       const data=await res.json();
       const parsed=JSON.parse(data.content?.map(i=>i.text||"").join("").replace(/```json|```/g,"").trim());
       setForm(f=>({...f,...parsed,originalPdfUrl:pdfUrl||""}));setModal("nalog");showToast("✅ AI izpolnil nalog!");
@@ -1393,6 +1412,22 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
           tekst += tc.items.map(x => x.str).join(" ") + "\n";
         }
         tekst = tekst.trim();
+        // Če PDF nima teksta (scan/slika), prerendiramo prvo stran kot sliko
+        if (!tekst || tekst.length < 30) {
+          showToast("📷 PDF je scan — pretvarjam v sliko za AI...");
+          const page = await pdf.getPage(1);
+          const viewport = page.getViewport({ scale: 2.0 });
+          const canvas = document.createElement("canvas");
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          const ctx = canvas.getContext("2d");
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+          slikaBase64 = dataUrl.split(",")[1];
+          mediaType = "image/jpeg";
+          jeSlika = true;
+          tekst = "";
+        }
       }
       // ===== WORD .docx =====
       else if (fileName.endsWith(".docx") || mimeType.includes("wordprocessingml")) {
