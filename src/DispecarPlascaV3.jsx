@@ -566,8 +566,8 @@ const handleDrop=async(e)=>{
             <button key={id} style={{...s.tab,...(tab===id?s.tabOn:{})}} onClick={()=>setTab(id)}>{label}</button>
           ))}
         </div>
-        {tab==="pregled"&&<PregledTab stats={stats} nalogi={st.nalogi} obracuni={st.obracuni} onSelNalog={odpriNalog} onSelOb={setSelObracun}/>}
-        {tab==="nalogi"&&<NalogiTab nalogi={st.nalogi} onSelect={odpriNalog} openNovNalog={openNovNalog}/>}
+        {tab==="pregled"&&<PregledTab stats={stats} nalogi={st.nalogi} obracuni={st.obracuni} vozniki={vozniki} onSelNalog={odpriNalog} onSelOb={setSelObracun}/>}
+        {tab==="nalogi"&&<NalogiTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog} openNovNalog={openNovNalog}/>}
         {tab==="vozniki"&&<VoznikiTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog}/>}
         {tab==="obracuni"&&<ObracuniTab obracuni={st.obracuni} onSelect={setSelObracun}/>}
         {tab==="finance"&&<FinanceTab st={st} upd={upd} showToast={showToast} supabase={supabase} setActiveTab={setTab}/>}
@@ -614,7 +614,7 @@ const handleDrop=async(e)=>{
   );
 }
 
-function PregledTab({stats,nalogi,obracuni,onSelNalog,onSelOb}){
+function PregledTab({stats,nalogi,obracuni,vozniki,onSelNalog,onSelOb}){
   const novi=nalogi.filter(n=>n.status==="nov");
   const aktivni=nalogi.filter(n=>["poslan","sprejet"].includes(n.status));
   const zaFakturo=nalogi.filter(n=>n.status==="za_fakturo");
@@ -629,14 +629,14 @@ function PregledTab({stats,nalogi,obracuni,onSelNalog,onSelOb}){
         </div>
       ))}
     </div>
-    {novi.length>0&&<><div style={{fontWeight:700,fontSize:15,color:"#0f2744",marginBottom:10}}>🔘 Novi nalogi</div>{novi.map(n=><NC key={n.id} n={n} onClick={()=>onSelNalog(n)}/>)}</>}
-    {aktivni.length>0&&<><div style={{fontWeight:700,fontSize:15,color:"#0f2744",marginBottom:10,marginTop:12}}>🚛 Aktivni nalogi</div>{aktivni.map(n=><NC key={n.id} n={n} onClick={()=>onSelNalog(n)}/>)}</>}
-    {zaFakturo.length>0&&<><div style={{fontWeight:700,fontSize:15,color:"#9333ea",marginBottom:10,marginTop:12}}>💶 Za fakturo</div>{zaFakturo.map(n=><NC key={n.id} n={n} onClick={()=>onSelNalog(n)}/>)}</>}
+    {novi.length>0&&<><div style={{fontWeight:700,fontSize:15,color:"#0f2744",marginBottom:10}}>🔘 Novi nalogi</div>{novi.map(n=><NC key={n.id} n={n} vozniki={vozniki} onClick={()=>onSelNalog(n)}/>)}</>}
+    {aktivni.length>0&&<><div style={{fontWeight:700,fontSize:15,color:"#0f2744",marginBottom:10,marginTop:12}}>🚛 Aktivni nalogi</div>{aktivni.map(n=><NC key={n.id} n={n} vozniki={vozniki} onClick={()=>onSelNalog(n)}/>)}</>}
+    {zaFakturo.length>0&&<><div style={{fontWeight:700,fontSize:15,color:"#9333ea",marginBottom:10,marginTop:12}}>💶 Za fakturo</div>{zaFakturo.map(n=><NC key={n.id} n={n} vozniki={vozniki} onClick={()=>onSelNalog(n)}/>)}</>}
     {noviOb.length>0&&<><div style={{fontWeight:700,fontSize:15,color:"#0f2744",marginBottom:10,marginTop:12}}>💶 Obračuni voznikov</div>{noviOb.map(o=><OC key={o.id} o={o} onClick={()=>onSelOb(o)}/>)}</>}
   </div>);
 }
 
-function NalogiTab({nalogi,onSelect,openNovNalog}){
+function NalogiTab({nalogi,vozniki,onSelect,openNovNalog}){
   const [f,setF]=useState("vsi");
   const [q,setQ]=useState("");
   const list=nalogi.filter(n=>f==="vsi"||n.status===f).filter(n=>!q||n.stranka.toLowerCase().includes(q.toLowerCase())||n.stevilkaNaloga.includes(q));
@@ -651,7 +651,7 @@ function NalogiTab({nalogi,onSelect,openNovNalog}){
       ))}
     </div>
     {list.length===0&&<div style={s.empty}>Ni nalogov.</div>}
-    {list.map(n=><NC key={n.id} n={n} onClick={()=>onSelect(n)}/>)}
+    {list.map(n=><NC key={n.id} n={n} vozniki={vozniki} onClick={()=>onSelect(n)}/>)}
   </div>);
 }
 
@@ -2138,7 +2138,7 @@ function KomunikacijaTab({ showToast }) {
 const s2={lbl:{display:"block",fontSize:12,fontWeight:600,color:"#475569",marginBottom:4},inp:{width:"100%",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"9px 10px",fontSize:13,outline:"none",boxSizing:"border-box",background:"#f8fafc"},sel:{width:"100%",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"9px 10px",fontSize:13,outline:"none",background:"#f8fafc",boxSizing:"border-box"}};
 const Fi2=({l,v,s,ph,t="text"})=><div><label style={s2.lbl}>{l}</label><input style={s2.inp} type={t} value={v||""} onChange={e=>s(e.target.value)} placeholder={ph||""}/></div>;
 
-const NC=({n,onClick})=>{const sc=SC[n.status]||{};return(<button style={{width:"100%",background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:9,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:"none",cursor:"pointer",textAlign:"left"}} onClick={onClick}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}><span style={{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700,background:sc.bg,color:sc.color}}>{sc.label}</span><span style={{fontSize:11,fontFamily:"monospace",color:"#2563eb",fontWeight:700}}>{n.stevilkaNaloga}</span><span style={{fontSize:11,color:"#94a3b8",marginLeft:"auto"}}>{fmt(n.poslan)} ob {fmtT(n.poslan)}</span></div><div style={{fontSize:16,fontWeight:800,color:"#0f2744",marginBottom:2}}>{n.nakKraj} → {n.razKraj}</div><div style={{fontSize:13,color:"#64748b"}}>{n.stranka} · {n.blago}</div></button>);};
+const NC=({n,onClick,vozniki:vl})=>{const sc=SC[n.status]||{};const v=(vl||VOZNIKI).find(x=>x.id===n.voznikId);return(<button style={{width:"100%",background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:9,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:"none",cursor:"pointer",textAlign:"left"}} onClick={onClick}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5,flexWrap:"wrap"}}><span style={{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700,background:sc.bg,color:sc.color}}>{sc.label}</span><span style={{fontSize:11,fontFamily:"monospace",color:"#2563eb",fontWeight:700}}>{n.stevilkaNaloga}</span>{v&&<span style={{fontSize:11,fontWeight:700,color:"#7c3aed",background:"#f5f3ff",padding:"2px 8px",borderRadius:20}}>🚛 {v.ime}</span>}{!v&&n.status!=="nov"&&<span style={{fontSize:11,fontWeight:600,color:"#94a3b8",background:"#f1f5f9",padding:"2px 8px",borderRadius:20}}>– ni voznika</span>}<span style={{fontSize:11,color:"#94a3b8",marginLeft:"auto"}}>{fmt(n.poslan)} ob {fmtT(n.poslan)}</span></div><div style={{fontSize:16,fontWeight:800,color:"#0f2744",marginBottom:2}}>{n.nakKraj} → {n.razKraj}</div><div style={{fontSize:13,color:"#64748b"}}>{n.stranka} · {n.blago}</div></button>);};
 const OC=({o,onClick,vozniki:vl})=>{const v=(vl||VOZNIKI).find(x=>x.id===o.voznikId);const z=(o.km||0)*0.18+(o.stranke||0)*20+(o.stroski||[]).reduce((a,x)=>a+(parseFloat(x.znesek)||0),0);return(<button style={{width:"100%",background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:9,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:"none",cursor:"pointer",textAlign:"left"}} onClick={onClick}><div style={{display:"flex",justifyContent:"space-between"}}><div><div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{v?.ime}</div><div style={{fontSize:12,color:"#64748b"}}>{fmt(o.datZac+"T00:00:00")} – {fmt(o.datKon+"T00:00:00")} · {v?.vozilo}</div></div><div style={{fontWeight:800,fontSize:18,color:"#16a34a"}}>{z.toFixed(2)} €</div></div></button>);};
 const Sec=({title,children})=><div style={{background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:11,fontWeight:700,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}}>{title}</div>{children}</div>;
 const R=({label,val,bold,mono})=><div style={{display:"flex",justifyContent:"space-between",paddingBottom:5,marginBottom:5,borderBottom:"1px solid #f8fafc"}}><span style={{fontSize:12,color:"#94a3b8"}}>{label}</span><span style={{fontSize:13,color:"#1e293b",textAlign:"right",...(bold?{fontWeight:700,color:"#0f2744"}:{}),...(mono?{fontFamily:"monospace",color:"#2563eb",fontSize:12}:{})}}>{val||"–"}</span></div>;
