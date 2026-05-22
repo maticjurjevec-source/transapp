@@ -55,6 +55,18 @@ export default function VzdrzevanjeApp(){
     return vozVzdz.filter(vz=>vz.voznik_id===id).sort((a,b)=>new Date(b.datum)-new Date(a.datum));
   };
 
+  const podaljsajRegistracijo=async(w)=>{
+    const novDatum=new Date();
+    novDatum.setFullYear(novDatum.getFullYear()+1);
+    const isoDatum=novDatum.toISOString().split("T")[0];
+    const polje=w.tip==="vozilo"?"registracija_pretek":"registracija_prikolica_pretek";
+    const {error}=await supabase.from("vozniki").update({[polje]:isoDatum}).eq("id",w.id);
+    if(error){showToast("❌ Napaka pri shranjevanju!",true);return false;}
+    setVozniki(x=>x.map(z=>z.id===w.id?{...z,[polje]:isoDatum}:z));
+    showToast(`✅ Registracija ${w.tip==="vozilo"?"vozila":"prikolice"} podaljšana za 1 leto!`);
+    return true;
+  };
+
   const toggleServisStatus=async(id,novStatus)=>{
     await supabase.from("vozilo_vzdrzevanje").update({status:novStatus}).eq("id",id);
     setVozVzdz(x=>x.map(s=>s.id===id?{...s,status:novStatus}:s));
@@ -175,10 +187,22 @@ export default function VzdrzevanjeApp(){
     <div style={st.content}>
       {opozorila.length>0&&<div style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:14,padding:14,marginBottom:14}}>
         <div style={{fontWeight:700,fontSize:14,color:"#dc2626",marginBottom:10}}>⚠️ Registracije — opozorila</div>
+        <div style={{fontSize:11,color:"#94a3b8",marginBottom:8,fontStyle:"italic"}}>Obkljukaj, ko je registracija opravljena (podaljša se za 1 leto)</div>
         {opozorila.map((w,i)=>(
-          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #fee2e2",cursor:"pointer"}} onClick={()=>setSel(vozniki.find(v=>v.id===w.id))}>
-            <div><div style={{fontWeight:600,color:"#0f2744"}}>{w.ime} {w.priimek}</div><div style={{fontSize:11,color:"#64748b"}}>{w.vozilo} · {w.tip==="vozilo"?"Vozilo":"Prikolica"}</div></div>
-            <div style={{textAlign:"right"}}><div style={{fontWeight:700,color:w.dni<=0?"#dc2626":"#d97706"}}>{w.dni<=0?"Potekla!":`Še ${w.dni} dni`}</div><div style={{fontSize:11,color:"#94a3b8"}}>{fmt(w.datum+"T00:00:00")}</div></div>
+          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #fee2e2"}}>
+            <input type="checkbox" onChange={async(e)=>{
+              if(!e.target.checked)return;
+              const ok=await podaljsajRegistracijo(w);
+              if(!ok)e.target.checked=false;
+            }} style={{width:20,height:20,cursor:"pointer",flexShrink:0,accentColor:"#16a34a"}}/>
+            <div style={{flex:1,cursor:"pointer"}} onClick={()=>setSel(vozniki.find(v=>v.id===w.id))}>
+              <div style={{fontWeight:600,color:"#0f2744"}}>{w.ime} {w.priimek}</div>
+              <div style={{fontSize:11,color:"#64748b"}}>{w.vozilo} · {w.tip==="vozilo"?"Vozilo":"Prikolica"}</div>
+            </div>
+            <div style={{textAlign:"right",cursor:"pointer"}} onClick={()=>setSel(vozniki.find(v=>v.id===w.id))}>
+              <div style={{fontWeight:700,color:w.dni<=0?"#dc2626":"#d97706"}}>{w.dni<=0?"Potekla!":`Še ${w.dni} dni`}</div>
+              <div style={{fontSize:11,color:"#94a3b8"}}>{fmt(w.datum+"T00:00:00")}</div>
+            </div>
           </div>))}
       </div>}
 
