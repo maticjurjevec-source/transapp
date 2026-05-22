@@ -8,6 +8,7 @@ const daysUntil=(iso)=>{if(!iso)return null;const d=new Date(iso);const now=new 
 export default function VzdrzevanjeApp(){
   const [vozniki,setVozniki]=useState([]);
   const [obracuni,setObracuni]=useState([]);
+  const [vozVzdz,setVozVzdz]=useState([]);
   const [loading,setLoading]=useState(true);
   const [sel,setSel]=useState(null);
   const [editReg,setEditReg]=useState({});
@@ -19,9 +20,11 @@ export default function VzdrzevanjeApp(){
     Promise.all([
       supabase.from("vozniki").select("*").eq("aktiven",true).order("priimek"),
       supabase.from("tedenski_obracuni").select("*").order("datum_od",{ascending:false}).limit(100),
-    ]).then(([{data:v},{data:o}])=>{
+      supabase.from("vozilo_vzdrzevanje").select("*").order("datum",{ascending:false}).limit(200),
+    ]).then(([{data:v},{data:o},{data:vvz}])=>{
       if(v)setVozniki(v);
       if(o)setObracuni(o);
+      if(vvz)setVozVzdz(vvz);
       setLoading(false);
     });
   },[]);
@@ -48,6 +51,9 @@ export default function VzdrzevanjeApp(){
     const ob=voznikObracuni(id);
     return ob.filter(o=>o.opombe).map(o=>({opomba:o.opombe,datum_od:o.datum_od,datum_do:o.datum_do}));
   };
+  const voznikServis=(id)=>{
+    return vozVzdz.filter(vz=>vz.voznik_id===id).sort((a,b)=>new Date(b.datum)-new Date(a.datum));
+  };
 
   if(loading)return(<div style={st.wrap}><div style={st.header}><div style={st.logo}>🔧 Vzdrževanje</div><div style={st.sub}>Jurjevec Transport</div></div><div style={{textAlign:"center",padding:60,color:"#94a3b8"}}>⏳ Nalagam...</div></div>);
 
@@ -58,6 +64,7 @@ export default function VzdrzevanjeApp(){
     const regPrik=daysUntil(v.registracija_prikolica_pretek);
     const str=voznikStoritve(v.id);
     const opm=voznikOpombe(v.id);
+    const srv=voznikServis(v.id);
 
     return(<div style={st.wrap}>
       <div style={st.header}><button style={st.backBtn} onClick={()=>setSel(null)}>← Nazaj</button>
@@ -97,8 +104,20 @@ export default function VzdrzevanjeApp(){
           </div>
         </div>
 
+        {/* SERVIS & NAPAKE */}
+        <div style={st.card}><div style={st.cardTitle}>🔧 Servis & napake ({srv.length})</div>
+          {srv.length===0&&<div style={{fontSize:13,color:"#94a3b8",padding:8}}>Ni servisov.</div>}
+          {srv.map((s,i)=><div key={i} style={{background:"#f9fafb",borderRadius:8,padding:"10px 12px",marginBottom:8,border:"1px solid #e5e7eb"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div><div style={{fontSize:13,color:"#0f2744",fontWeight:600}}>{s.tip||"Servis"}</div><div style={{fontSize:11,color:"#64748b"}}>{fmt(s.datum+"T00:00:00")}</div></div>
+              {s.znesek&&<div style={{fontWeight:700,color:"#2563eb"}}>{parseFloat(s.znesek).toFixed(2)} €</div>}
+            </div>
+            {s.opis&&<div style={{fontSize:12,color:"#64748b",marginTop:6}}>{s.opis}</div>}
+          </div>)}
+        </div>
+
         {/* STORITVE */}
-        <div style={st.card}><div style={st.cardTitle}>🔧 Druge storitve ({str.length})</div>
+        <div style={st.card}><div style={st.cardTitle}>🏥 Druge storitve ({str.length})</div>
           {str.length===0&&<div style={{fontSize:13,color:"#94a3b8",padding:8}}>Ni storitev.</div>}
           {str.map((s,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #f1f5f9"}}>
             <div><div style={{fontSize:13,color:"#0f2744",fontWeight:600}}>{s.opis||"Storitev"}</div><div style={{fontSize:11,color:"#94a3b8"}}>{fmt(s.datum_od+"T00:00:00")} – {fmt(s.datum_do+"T00:00:00")}</div></div>
@@ -140,13 +159,14 @@ export default function VzdrzevanjeApp(){
         const minReg=Math.min(regV!==null?regV:999,regP!==null?regP:999);
         const ob=voznikObracuni(v.id);
         const str=voznikStoritve(v.id);
+        const srv=voznikServis(v.id);
         return(<div key={v.id} onClick={()=>setSel(v)} style={{background:"#fff",borderRadius:14,padding:14,marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",cursor:"pointer",borderLeft:`4px solid ${minReg<=30?"#d97706":"#e2e8f0"}`}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div><div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{v.ime} {v.priimek}</div><div style={{fontSize:12,color:"#64748b"}}>{v.vozilo}{v.prikolica?` · Prik: ${v.prikolica}`:""}</div></div>
             <div style={{textAlign:"right"}}>
               {v.registracija_pretek?<div style={{fontSize:11,fontWeight:600,color:regV<=0?"#dc2626":regV<=30?"#d97706":"#16a34a"}}>Vozilo: {fmt(v.registracija_pretek+"T00:00:00")}</div>:<div style={{fontSize:11,color:"#94a3b8"}}>Vozilo: –</div>}
               {v.registracija_prikolica_pretek?<div style={{fontSize:11,fontWeight:600,color:regP<=0?"#dc2626":regP<=30?"#d97706":"#16a34a"}}>Prikolica: {fmt(v.registracija_prikolica_pretek+"T00:00:00")}</div>:<div style={{fontSize:11,color:"#94a3b8"}}>Prikolica: –</div>}
-              <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>{str.length} storitev</div>
+              <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>{srv.length} servisov · {str.length} storitev</div>
             </div>
           </div>
         </div>);
