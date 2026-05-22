@@ -55,6 +55,19 @@ export default function VzdrzevanjeApp(){
     return vozVzdz.filter(vz=>vz.voznik_id===id).sort((a,b)=>new Date(b.datum)-new Date(a.datum));
   };
 
+  const toggleServisStatus=async(id,novStatus)=>{
+    await supabase.from("vozilo_vzdrzevanje").update({status:novStatus}).eq("id",id);
+    setVozVzdz(x=>x.map(s=>s.id===id?{...s,status:novStatus}:s));
+    showToast(novStatus==="opravljeno"?"✅ Servis označen kot opravljeno!":"🔄 Servis je odprt!");
+  };
+
+  const brisiServis=async(id)=>{
+    if(!window.confirm("Ali si prepričan da želiš izbrisati ta servis?"))return;
+    await supabase.from("vozilo_vzdrzevanje").delete().eq("id",id);
+    setVozVzdz(x=>x.filter(s=>s.id!==id));
+    showToast("🗑️ Servis izbrisan!");
+  };
+
   if(loading)return(<div style={st.wrap}><div style={st.header}><div style={st.logo}>🔧 Vzdrževanje</div><div style={st.sub}>Jurjevec Transport</div></div><div style={{textAlign:"center",padding:60,color:"#94a3b8"}}>⏳ Nalagam...</div></div>);
 
   // DETAIL VOZNIKA
@@ -105,19 +118,35 @@ export default function VzdrzevanjeApp(){
         </div>
 
         {/* SERVIS & NAPAKE */}
-        <div style={st.card}><div style={st.cardTitle}>🔧 Servis & napake ({srv.length})</div>
-          {srv.length===0&&<div style={{fontSize:13,color:"#94a3b8",padding:8}}>Ni servisov.</div>}
-          {srv.map((s,i)=><div key={i} style={{background:"#f9fafb",borderRadius:8,padding:"10px 12px",marginBottom:8,border:"1px solid #e5e7eb"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div><div style={{fontSize:13,color:"#0f2744",fontWeight:600}}>{s.tip||"Servis"}</div><div style={{fontSize:11,color:"#64748b"}}>{fmt(s.datum+"T00:00:00")}</div></div>
-              {s.znesek&&<div style={{fontWeight:700,color:"#2563eb"}}>{parseFloat(s.znesek).toFixed(2)} €</div>}
+        <div style={st.card}>
+          <div style={st.cardTitle}>🔧 Servis & napake ({srv.filter(s=>s.status!=="opravljeno").length})</div>
+          {srv.filter(s=>s.status!=="opravljeno").length===0&&<div style={{fontSize:13,color:"#94a3b8",padding:8}}>Ni odprtih servisov.</div>}
+          {srv.filter(s=>s.status!=="opravljeno").map((s,i)=><div key={i} style={{background:"#f9fafb",borderRadius:8,padding:"10px 12px",marginBottom:8,border:"1px solid #e5e7eb",display:"flex",alignItems:"flex-start",gap:10}}>
+            <input type="checkbox" checked={s.status==="opravljeno"} onChange={()=>toggleServisStatus(s.id,s.status==="opravljeno"?"odprto":"opravljeno")} style={{marginTop:4,cursor:"pointer",width:18,height:18}}/>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,color:"#0f2744",fontWeight:600}}>{s.tip||"Servis"}</div>
+              <div style={{fontSize:11,color:"#64748b"}}>{fmt(s.datum+"T00:00:00")}</div>
+              {s.opis&&<div style={{fontSize:12,color:"#64748b",marginTop:4}}>{s.opis}</div>}
+              {s.znesek&&<div style={{fontWeight:700,color:"#2563eb",marginTop:4}}>{parseFloat(s.znesek).toFixed(2)} €</div>}
             </div>
-            {s.opis&&<div style={{fontSize:12,color:"#64748b",marginTop:6}}>{s.opis}</div>}
+            <button onClick={()=>brisiServis(s.id)} style={{background:"#dc2626",color:"#fff",border:"none",borderRadius:6,padding:"4px 10px",fontSize:12,cursor:"pointer",fontWeight:600,flexShrink:0}}>🗑️</button>
           </div>)}
+          {srv.filter(s=>s.status==="opravljeno").length>0&&<div style={{marginTop:16,paddingTop:16,borderTop:"1px solid #e5e7eb"}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#64748b",marginBottom:8}}>✅ Opravljeno ({srv.filter(s=>s.status==="opravljeno").length})</div>
+            {srv.filter(s=>s.status==="opravljeno").map((s,i)=><div key={i} style={{background:"#f0fdf4",borderRadius:8,padding:"8px 10px",marginBottom:6,border:"1px solid #d1fae5",display:"flex",alignItems:"center",gap:10,opacity:0.7}}>
+              <input type="checkbox" checked={true} onChange={()=>toggleServisStatus(s.id,"odprto")} style={{cursor:"pointer",width:16,height:16}}/>
+              <div style={{flex:1}}>
+                <div style={{fontSize:12,color:"#16a34a",fontWeight:600}}>{s.tip||"Servis"}</div>
+                <div style={{fontSize:10,color:"#86efac"}}>{fmt(s.datum+"T00:00:00")}</div>
+              </div>
+              <button onClick={()=>brisiServis(s.id)} style={{background:"#dc2626",color:"#fff",border:"none",borderRadius:6,padding:"3px 8px",fontSize:11,cursor:"pointer",fontWeight:600,flexShrink:0}}>🗑️</button>
+            </div>)}
+          </div>}
         </div>
 
         {/* STORITVE */}
-        <div style={st.card}><div style={st.cardTitle}>🏥 Druge storitve ({str.length})</div>
+        <div style={st.card}>
+          <div style={st.cardTitle}>🏥 Druge storitve ({str.length})</div>
           {str.length===0&&<div style={{fontSize:13,color:"#94a3b8",padding:8}}>Ni storitev.</div>}
           {str.map((s,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #f1f5f9"}}>
             <div><div style={{fontSize:13,color:"#0f2744",fontWeight:600}}>{s.opis||"Storitev"}</div><div style={{fontSize:11,color:"#94a3b8"}}>{fmt(s.datum_od+"T00:00:00")} – {fmt(s.datum_do+"T00:00:00")}</div></div>
@@ -126,7 +155,8 @@ export default function VzdrzevanjeApp(){
         </div>
 
         {/* OPOMBE */}
-        <div style={st.card}><div style={st.cardTitle}>📝 Opombe ({opm.length})</div>
+        <div style={st.card}>
+          <div style={st.cardTitle}>📝 Opombe ({opm.length})</div>
           {opm.length===0&&<div style={{fontSize:13,color:"#94a3b8",padding:8}}>Ni opomb.</div>}
           {opm.map((o,i)=><div key={i} style={{background:"#fffbeb",borderRadius:8,padding:"10px 12px",marginBottom:8,border:"1px solid #fde68a"}}>
             <div style={{fontSize:13,color:"#0f2744"}}>{o.opomba}</div>
@@ -166,7 +196,7 @@ export default function VzdrzevanjeApp(){
             <div style={{textAlign:"right"}}>
               {v.registracija_pretek?<div style={{fontSize:11,fontWeight:600,color:regV<=0?"#dc2626":regV<=30?"#d97706":"#16a34a"}}>Vozilo: {fmt(v.registracija_pretek+"T00:00:00")}</div>:<div style={{fontSize:11,color:"#94a3b8"}}>Vozilo: –</div>}
               {v.registracija_prikolica_pretek?<div style={{fontSize:11,fontWeight:600,color:regP<=0?"#dc2626":regP<=30?"#d97706":"#16a34a"}}>Prikolica: {fmt(v.registracija_prikolica_pretek+"T00:00:00")}</div>:<div style={{fontSize:11,color:"#94a3b8"}}>Prikolica: –</div>}
-              <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>{srv.length} servisov · {str.length} storitev</div>
+              <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>{srv.filter(s=>s.status!=="opravljeno").length} servisov · {str.length} storitev</div>
             </div>
           </div>
         </div>);
