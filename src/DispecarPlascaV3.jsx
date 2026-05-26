@@ -410,7 +410,7 @@ const handleDrop=async(e)=>{
       const userContent=slikaB64
         ?[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:slikaB64}},{type:"text",text:promptTekst}]
         :promptTekst+"\n\nDokument:\n"+txt;
-      const res=await fetch("/api/parse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:userContent}]})}); Cargo Partner, DHL, Rooskens, ROCS Trading, Fersped ipd.) — torej tisti ki naroča prevoz. NI nakladna firma, NI razkladna firma, NI prevoznik (JURJEVEC). Poišči logo, glavo dokumenta ali polje "ordered by/Auftraggeber/naročnik" da najdeš pravo stranko. Poišči tudi ceno prevoza (price/rate/freight/Preis/Fracht) in jo vpiši v polje znesek kot število. Vrni SAMO JSON:\n{"stranka":"","stevilkaNarocnika":"","blago":"","kolicina":"","teza":"","nakFirma":"","nakKraj":"","nakNaslov":"","nakReferenca":"","nakDatum":"","nakCas":"","razFirma":"","razKraj":"","razNaslov":"","razReferenca":"","razDatum":"","razCas":"","navodila":"","kontaktEmail":"","znesek":"","jeSlovenskaDdv":true}\n\nPolja:\n- znesek: cena prevoza v EUR (samo število, npr "850.00"). Poišči v dokumentu besede kot price, rate, freight, Preis, cena.\n- jeSlovenskaDdv: true če je naročnik iz Slovenije, false če je tuj (glede na državo naročnika).\n- kontaktEmail: email za pošiljanje računa (poišči besede invoice, Rechnung, račun, faktura).\n- navodila: vse posebne zahteve in navodila iz dokumenta.\nDatumi: YYYY-MM-DD, casi: HH:MM.\n\nDokument:\n${txt}`}]})});
+      const res=await fetch("/api/parse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:userContent}]})});
       const data=await res.json();
       const parsed=JSON.parse(data.content?.map(i=>i.text||"").join("").replace(/```json|```/g,"").trim());
       setForm(f=>({...f,...parsed,originalPdfUrl:pdfUrl||""}));setModal("nalog");showToast("✅ AI izpolnil nalog!");
@@ -729,8 +729,14 @@ function ObracuniTab({obracuni,onSelect}){
     const o=selOb;const v=o.vozniki;const prevozi=o.prevozi||[];const tankanja=o.tankanja||[];const stroski=o.drugi_stroski||[];
     const zaslKm=(o.km_prevozeni||0)*TARIFA_KM;const zaslStr=(o.stevilo_strank||0)*TARIFA_STR;const zaslDop=(o.dopust_dni||0)*TARIFA_DOPUST;
     const zaslStr2=stroski.reduce((a,x)=>a+(parseFloat(x.znesek)||0),0);
+    const natisniObracun=()=>{window.print();};
     return(<div>
-      <button style={{...s.fBtn,marginBottom:12}} onClick={()=>setSelOb(null)}>← Nazaj</button>
+      <style>{`@media print { body * { visibility: hidden; } .print-area, .print-area * { visibility: visible; } .print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; } .no-print { display: none !important; } }`}</style>
+      <div className="no-print" style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
+        <button style={s.fBtn} onClick={()=>setSelOb(null)}>← Nazaj</button>
+        <button style={{...s.btnSm,marginLeft:"auto",background:"#16a34a"}} onClick={natisniObracun}>🖨️ Natisni / Shrani PDF</button>
+      </div>
+      <div className="print-area">
       <div style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:14,padding:18,color:"#fff",marginBottom:14}}>
         <div style={{fontSize:18,fontWeight:800}}>{v?`${v.ime} ${v.priimek}`:"Voznik"}</div>
         <div style={{fontSize:12,opacity:0.7,marginTop:2}}>{v?.vozilo||""} · {fmt(o.datum_od+"T00:00:00")} – {fmt(o.datum_do+"T00:00:00")}</div>
@@ -752,6 +758,7 @@ function ObracuniTab({obracuni,onSelect}){
         {zaslDop>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:14,opacity:0.85,padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.1)"}}><span>Dopust</span><span>{zaslDop.toFixed(2)} €</span></div>}
         {zaslStr2>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:14,opacity:0.85,padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.1)"}}><span>Drugi stroški</span><span>+ {zaslStr2.toFixed(2)} €</span></div>}
         <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:22,paddingTop:12}}><span>SEŠTEVEK</span><span>{(o.sestevek||0).toFixed(2)} €</span></div>
+      </div>
       </div>
     </div>);
   }
