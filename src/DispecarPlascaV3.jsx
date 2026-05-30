@@ -581,18 +581,19 @@ const handleDrop=async(e)=>{
         </div>
         {/* Tabs */}
         <div style={s.tabs}>
-          {[["pregled","📊 Pregled"],["nalogi","📋 Nalogi"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["finance","🧾 Finance"],["komunikacija","📨 Komunikacija"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`]].map(([id,label])=>(
+          {[["pregled","📊 Pregled"],["nalogi","📋 Nalogi"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["finance","🧾 Finance"],["komunikacija","📨 Komunikacija"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`]].map(([id,label])=>(
             <button key={id} style={{...s.tab,...(tab===id?s.tabOn:{})}} onClick={()=>setTab(id)}>{label}</button>
           ))}
         </div>
         {tab==="pregled"&&<PregledTab stats={stats} nalogi={st.nalogi} obracuni={st.obracuni} vozniki={vozniki} onSelNalog={odpriNalog} onSelOb={setSelObracun}/>}
-        {tab==="nalogi"&&<NalogiTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog} openNovNalog={openNovNalog}/>}
+        {tab==="nalogi"&&<NalogiTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog} openNovNalog={openNovNalog} onEdit={urediNalog} onDelete={izbrisiNalog}/>}
         {tab==="vozniki"&&<VoznikiTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog}/>}
         {tab==="obracuni"&&<ObracuniTab obracuni={st.obracuni} onSelect={setSelObracun}/>}
         {tab==="finance"&&<FinanceTab st={st} upd={upd} showToast={showToast} supabase={supabase} setActiveTab={setTab}/>}
         {tab==="prosticmr"&&<ProstiCMRTab st={st} upd={upd} showToast={showToast}/>}
         {tab==="email"&&<EmailNalogTab upd={upd} showToast={showToast} naložiPodatke={naložiPodatke} vozniki={vozniki}/>}
         {tab==="komunikacija"&&<KomunikacijaTab showToast={showToast}/>}
+        {tab==="dopusti"&&<DopustiTab vozniki={vozniki} showToast={showToast}/>}
       </div>
       {/* Nov nalog modal */}
       {modal==="nalog"&&(
@@ -655,7 +656,7 @@ function PregledTab({stats,nalogi,obracuni,vozniki,onSelNalog,onSelOb}){
   </div>);
 }
 
-function NalogiTab({nalogi,vozniki,onSelect,openNovNalog}){
+function NalogiTab({nalogi,vozniki,onSelect,openNovNalog,onEdit,onDelete}){
   const [f,setF]=useState("vsi");
   const [q,setQ]=useState("");
   const list=nalogi.filter(n=>f==="vsi"||n.status===f).filter(n=>!q||n.stranka.toLowerCase().includes(q.toLowerCase())||n.stevilkaNaloga.includes(q));
@@ -670,12 +671,19 @@ function NalogiTab({nalogi,vozniki,onSelect,openNovNalog}){
       ))}
     </div>
     {list.length===0&&<div style={s.empty}>Ni nalogov.</div>}
-    {list.map(n=><NC key={n.id} n={n} vozniki={vozniki} onClick={()=>onSelect(n)}/>)}
+    {list.map(n=><NC key={n.id} n={n} vozniki={vozniki} onClick={()=>onSelect(n)} onEdit={onEdit} onDelete={onDelete}/>)}
   </div>);
 }
 
 function VoznikiTab({nalogi,vozniki,onSelect}){
   const [selVoznik,setSelVoznik]=useState(null);
+  const [naDopustu,setNaDopustu]=useState(new Set());
+  useEffect(()=>{
+    const danes=new Date().toISOString().slice(0,10);
+    supabase.from("dopusti").select("voznik_id").lte("datum_od",danes).gte("datum_do",danes).then(({data})=>{
+      if(data)setNaDopustu(new Set(data.map(d=>d.voznik_id)));
+    });
+  },[]);
   if(selVoznik){
     const vn=nalogi.filter(n=>n.voznikId===selVoznik.id).sort((a,b)=>new Date(b.poslan)-new Date(a.poslan));
     return(<div>
@@ -697,7 +705,7 @@ function VoznikiTab({nalogi,vozniki,onSelect}){
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
           <div style={{width:40,height:40,borderRadius:"50%",background:"linear-gradient(135deg,#0f2744,#1d4ed8)",color:"#fff",fontSize:16,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{v.ime.charAt(0)}</div>
           <div style={{flex:1}}><div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{v.ime}</div><div style={{fontSize:12,color:"#64748b"}}>{v.vozilo}</div></div>
-          <div style={{padding:"4px 10px",borderRadius:20,fontSize:12,fontWeight:700,background:ak.length>0?"#fffbeb":"#f0fdf4",color:ak.length>0?"#d97706":"#16a34a"}}>{ak.length>0?`🟡 ${ak.length} aktiven`:"✅ Prost"}</div>
+          <div style={{padding:"4px 10px",borderRadius:20,fontSize:12,fontWeight:700,background:naDopustu.has(v.id)?"#dcfce7":ak.length>0?"#fffbeb":"#f0fdf4",color:naDopustu.has(v.id)?"#15803d":ak.length>0?"#d97706":"#16a34a"}}>{naDopustu.has(v.id)?"🌴 Na dopustu":ak.length>0?`🟡 ${ak.length} aktiven`:"✅ Prost"}</div>
         </div>
         <div style={{display:"flex",borderTop:"1px solid #f1f5f9",paddingTop:10}}>
           {[["Nalogov",vn.length],["Aktivnih",ak.length],["Zaključenih",vn.filter(n=>n.status==="zakljucen").length]].map(([l,val])=>(
@@ -1197,6 +1205,185 @@ function FinanceTab({st,upd,showToast,supabase:supabaseProp,setActiveTab}){
   </div>);
 }
 
+
+// ===== DOPUSTI TAB (DISPEČER) =====
+function DopustiTab({ vozniki, showToast }) {
+  const [dopusti, setDopusti] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modal, setModal] = useState(null);
+  const [form, setForm] = useState({ voznik_id: "", datum_od: "", datum_do: "", opomba: "" });
+  const [saving, setSaving] = useState(false);
+  const [showPretekli, setShowPretekli] = useState(false);
+
+  const naložiDopuste = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from("dopusti").select("*").order("datum_od", { ascending: false });
+    if (data) setDopusti(data);
+    if (error) console.error("Dopusti napaka:", error);
+    setLoading(false);
+  };
+
+  useEffect(() => { naložiDopuste(); }, []);
+
+  const odpriNovi = () => {
+    const danes = new Date().toISOString().slice(0, 10);
+    setForm({ voznik_id: "", datum_od: danes, datum_do: danes, opomba: "" });
+    setModal("novi");
+  };
+
+  const odpriUredi = (d) => {
+    setForm({ voznik_id: d.voznik_id, datum_od: d.datum_od, datum_do: d.datum_do, opomba: d.opomba || "" });
+    setModal(d.id);
+  };
+
+  const shrani = async () => {
+    if (!form.voznik_id) return showToast("Izberi voznika!", true);
+    if (!form.datum_od || !form.datum_do) return showToast("Izberi datume!", true);
+    if (form.datum_do < form.datum_od) return showToast("Datum 'do' mora biti za datumom 'od'!", true);
+    setSaving(true);
+    try {
+      if (modal === "novi") {
+        const { error } = await supabase.from("dopusti").insert([{
+          voznik_id: form.voznik_id,
+          datum_od: form.datum_od,
+          datum_do: form.datum_do,
+          opomba: form.opomba || null,
+        }]);
+        if (error) throw error;
+        showToast("✅ Dopust dodan!");
+      } else {
+        const { error } = await supabase.from("dopusti").update({
+          voznik_id: form.voznik_id,
+          datum_od: form.datum_od,
+          datum_do: form.datum_do,
+          opomba: form.opomba || null,
+        }).eq("id", modal);
+        if (error) throw error;
+        showToast("✅ Dopust posodobljen!");
+      }
+      setModal(null);
+      await naložiDopuste();
+    } catch (err) {
+      showToast("❌ Napaka: " + err.message, true);
+    }
+    setSaving(false);
+  };
+
+  const izbrisi = async (id, ime) => {
+    if (!window.confirm(`Izbrišem dopust ${ime ? "za " + ime : ""}?`)) return;
+    try {
+      const { error } = await supabase.from("dopusti").delete().eq("id", id);
+      if (error) throw error;
+      showToast("🗑️ Dopust izbrisan.");
+      await naložiDopuste();
+    } catch (err) {
+      showToast("❌ Napaka!", true);
+    }
+  };
+
+  const steviloDni = (od, do_) => Math.floor((new Date(do_) - new Date(od)) / 86400000) + 1;
+  const dniLabel = (n) => n === 1 ? "dan" : n === 2 ? "dneva" : n < 5 ? "dni" : "dni";
+  const voznikIme = (id) => vozniki.find(v => v.id === id)?.ime || "Neznan voznik";
+  const voznikVozilo = (id) => vozniki.find(v => v.id === id)?.vozilo || "";
+
+  const danes = new Date().toISOString().slice(0, 10);
+  const trenutni = dopusti.filter(d => d.datum_od <= danes && d.datum_do >= danes);
+  const prihodnji = dopusti.filter(d => d.datum_od > danes);
+  const pretekli = dopusti.filter(d => d.datum_do < danes);
+
+  if (loading) return <div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>⏳ Nalagam dopuste...</div>;
+
+  const renderRow = (d, theme) => {
+    const dniSkupaj = steviloDni(d.datum_od, d.datum_do);
+    const ime = voznikIme(d.voznik_id);
+    return (
+      <div key={d.id} style={{background:theme.bg,borderRadius:10,padding:12,marginBottom:8,borderLeft:`4px solid ${theme.color}`,opacity:theme.opacity||1}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>🚛 {ime}</div>
+            <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{voznikVozilo(d.voznik_id)}</div>
+            <div style={{fontWeight:600,fontSize:13,color:theme.color,marginTop:6}}>{fmt(d.datum_od+"T00:00:00")} – {fmt(d.datum_do+"T00:00:00")} <span style={{fontWeight:500,color:"#64748b"}}>({dniSkupaj} {dniLabel(dniSkupaj)})</span></div>
+            {d.opomba && <div style={{fontSize:12,color:"#64748b",marginTop:4}}>📝 {d.opomba}</div>}
+          </div>
+          <div style={{display:"flex",gap:4}}>
+            <button style={{background:"none",border:"none",color:"#2563eb",cursor:"pointer",fontSize:16,padding:4}} onClick={()=>odpriUredi(d)}>✏️</button>
+            <button style={{background:"none",border:"none",color:"#dc2626",cursor:"pointer",fontSize:16,padding:4}} onClick={()=>izbrisi(d.id, ime)}>🗑️</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (<div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+      <div style={{fontWeight:700,fontSize:16,color:"#0f2744"}}>🌴 Dopusti voznikov</div>
+      <button style={s.btnSm} onClick={odpriNovi}>+ Dodaj dopust</button>
+    </div>
+
+    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
+      <div style={{background:"#fff",borderRadius:12,padding:"12px 10px",textAlign:"center",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:20}}>🔴</div><div style={{fontSize:22,fontWeight:800,color:"#dc2626"}}>{trenutni.length}</div><div style={{fontSize:11,color:"#94a3b8"}}>Danes</div></div>
+      <div style={{background:"#fff",borderRadius:12,padding:"12px 10px",textAlign:"center",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:20}}>📅</div><div style={{fontSize:22,fontWeight:800,color:"#16a34a"}}>{prihodnji.length}</div><div style={{fontSize:11,color:"#94a3b8"}}>Prihodnji</div></div>
+      <div style={{background:"#fff",borderRadius:12,padding:"12px 10px",textAlign:"center",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:20}}>📋</div><div style={{fontSize:22,fontWeight:800,color:"#94a3b8"}}>{pretekli.length}</div><div style={{fontSize:11,color:"#94a3b8"}}>Pretekli</div></div>
+    </div>
+
+    {dopusti.length === 0 && <div style={s.empty}>Ni vpisanih dopustov. Klikni "+ Dodaj dopust".</div>}
+
+    {trenutni.length > 0 && <>
+      <div style={{fontSize:11,fontWeight:700,color:"#dc2626",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>🔴 Trenutno na dopustu ({trenutni.length})</div>
+      {trenutni.map(d => renderRow(d, {bg:"#fef2f2",color:"#dc2626"}))}
+    </>}
+
+    {prihodnji.length > 0 && <>
+      <div style={{fontSize:11,fontWeight:700,color:"#16a34a",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,marginTop:14}}>📅 Prihodnji dopusti ({prihodnji.length})</div>
+      {prihodnji.sort((a,b)=>a.datum_od.localeCompare(b.datum_od)).map(d => renderRow(d, {bg:"#f0fdf4",color:"#16a34a"}))}
+    </>}
+
+    {pretekli.length > 0 && <>
+      <button style={{...s.fBtn,marginTop:14,marginBottom:8,width:"100%"}} onClick={()=>setShowPretekli(!showPretekli)}>{showPretekli?"▲ Skrij":"▼ Prikaži"} pretekle dopuste ({pretekli.length})</button>
+      {showPretekli && pretekli.map(d => renderRow(d, {bg:"#f8fafc",color:"#94a3b8",opacity:0.85}))}
+    </>}
+
+    {modal && <div style={s.overlay} onClick={()=>setModal(null)}>
+      <div style={{...s.mbox,maxWidth:500}} onClick={e=>e.stopPropagation()}>
+        <div style={s.mhead}>
+          <span style={s.mtitle}>{modal==="novi" ? "🌴 Nov dopust" : "✏️ Uredi dopust"}</span>
+          <button style={s.mcls} onClick={()=>setModal(null)}>✕</button>
+        </div>
+        <div style={s.mbody}>
+          <div style={{marginBottom:14}}>
+            <label style={s.lbl}>🚛 Voznik *</label>
+            <select style={s.sel} value={form.voznik_id} onChange={e=>setForm(f=>({...f,voznik_id:e.target.value}))}>
+              <option value="">– Izberi voznika –</option>
+              {vozniki.map(v => <option key={v.id} value={v.id}>{v.ime} · {v.vozilo}</option>)}
+            </select>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+            <div>
+              <label style={s.lbl}>📅 Datum od *</label>
+              <input style={s.inp} type="date" value={form.datum_od} onChange={e=>setForm(f=>({...f,datum_od:e.target.value}))}/>
+            </div>
+            <div>
+              <label style={s.lbl}>📅 Datum do *</label>
+              <input style={s.inp} type="date" value={form.datum_do} onChange={e=>setForm(f=>({...f,datum_do:e.target.value}))}/>
+            </div>
+          </div>
+          {form.datum_od && form.datum_do && form.datum_do >= form.datum_od && (
+            <div style={{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,fontWeight:700,color:"#16a34a",textAlign:"center"}}>
+              ⏱️ {steviloDni(form.datum_od, form.datum_do)} {dniLabel(steviloDni(form.datum_od, form.datum_do))}
+            </div>
+          )}
+          <div style={{marginBottom:14}}>
+            <label style={s.lbl}>📝 Opomba (opcijsko)</label>
+            <input style={s.inp} placeholder="npr. družinski dogodek" value={form.opomba} onChange={e=>setForm(f=>({...f,opomba:e.target.value}))}/>
+          </div>
+          <button style={{...s.btnP,opacity:saving?0.5:1}} onClick={shrani} disabled={saving}>
+            {saving ? "⏳ Shranjevanje..." : (modal==="novi" ? "💾 Dodaj dopust" : "💾 Shrani spremembe")}
+          </button>
+        </div>
+      </div>
+    </div>}
+  </div>);
+}
 
 function ProstiCMRTab({st,upd,showToast}){
   const [prostiCmr,setProstiCmr]=useState([]);
@@ -2180,7 +2367,7 @@ function KomunikacijaTab({ showToast }) {
 const s2={lbl:{display:"block",fontSize:12,fontWeight:600,color:"#475569",marginBottom:4},inp:{width:"100%",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"9px 10px",fontSize:13,outline:"none",boxSizing:"border-box",background:"#f8fafc"},sel:{width:"100%",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"9px 10px",fontSize:13,outline:"none",background:"#f8fafc",boxSizing:"border-box"}};
 const Fi2=({l,v,s,ph,t="text"})=><div><label style={s2.lbl}>{l}</label><input style={s2.inp} type={t} value={v||""} onChange={e=>s(e.target.value)} placeholder={ph||""}/></div>;
 
-const NC=({n,onClick,vozniki:vl})=>{const sc=SC[n.status]||{};const v=(vl||VOZNIKI).find(x=>x.id===n.voznikId);return(<button style={{width:"100%",background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:9,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:"none",cursor:"pointer",textAlign:"left"}} onClick={onClick}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5,flexWrap:"wrap"}}><span style={{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700,background:sc.bg,color:sc.color}}>{sc.label}</span><span style={{fontSize:11,fontFamily:"monospace",color:"#2563eb",fontWeight:700}}>{n.stevilkaNaloga}</span>{v&&<span style={{fontSize:11,fontWeight:700,color:"#7c3aed",background:"#f5f3ff",padding:"2px 8px",borderRadius:20}}>🚛 {v.ime}</span>}{!v&&n.status!=="nov"&&<span style={{fontSize:11,fontWeight:600,color:"#94a3b8",background:"#f1f5f9",padding:"2px 8px",borderRadius:20}}>– ni voznika</span>}<span style={{fontSize:11,color:"#94a3b8",marginLeft:"auto"}}>{fmt(n.poslan)} ob {fmtT(n.poslan)}</span></div><div style={{fontSize:16,fontWeight:800,color:"#0f2744",marginBottom:2}}>{n.nakKraj} → {n.razKraj}</div><div style={{fontSize:13,color:"#64748b"}}>{n.stranka} · {n.blago}</div></button>);};
+const NC=({n,onClick,vozniki:vl,onEdit,onDelete})=>{const sc=SC[n.status]||{};const v=(vl||VOZNIKI).find(x=>x.id===n.voznikId);return(<div style={{width:"100%",background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:9,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:"none",textAlign:"left",position:"relative"}}><div onClick={onClick} style={{cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5,flexWrap:"wrap"}}><span style={{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700,background:sc.bg,color:sc.color}}>{sc.label}</span><span style={{fontSize:11,fontFamily:"monospace",color:"#2563eb",fontWeight:700}}>{n.stevilkaNaloga}</span>{v&&<span style={{fontSize:11,fontWeight:700,color:"#7c3aed",background:"#f5f3ff",padding:"2px 8px",borderRadius:20}}>🚛 {v.ime}</span>}{!v&&n.status!=="nov"&&<span style={{fontSize:11,fontWeight:600,color:"#94a3b8",background:"#f1f5f9",padding:"2px 8px",borderRadius:20}}>– ni voznika</span>}<span style={{fontSize:11,color:"#94a3b8",marginLeft:"auto"}}>{fmt(n.poslan)} ob {fmtT(n.poslan)}</span></div><div style={{fontSize:16,fontWeight:800,color:"#0f2744",marginBottom:2}}>{n.nakKraj} → {n.razKraj}</div><div style={{fontSize:13,color:"#64748b"}}>{n.stranka} · {n.blago}</div></div>{(onEdit||onDelete)&&<div style={{display:"flex",gap:6,marginTop:10,paddingTop:10,borderTop:"1px solid #f1f5f9"}}>{onEdit&&<button style={{background:"#eff6ff",color:"#2563eb",border:"1px solid #bfdbfe",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}} onClick={(e)=>{e.stopPropagation();onEdit(n.id);}}>✏️ Uredi</button>}{onDelete&&<button style={{background:"#fef2f2",color:"#dc2626",border:"1px solid #fecaca",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}} onClick={(e)=>{e.stopPropagation();if(window.confirm(`Ali res želiš izbrisati nalog ${n.stevilkaNaloga}?\n\n${n.nakKraj} → ${n.razKraj}\n${n.stranka}\n\nTo dejanje je nepovratno.`)){onDelete(n.id);}}}>🗑️ Izbriši</button>}</div>}</div>);};
 const OC=({o,onClick,vozniki:vl})=>{const v=(vl||VOZNIKI).find(x=>x.id===o.voznikId);const z=(o.km||0)*0.18+(o.stranke||0)*20+(o.stroski||[]).reduce((a,x)=>a+(parseFloat(x.znesek)||0),0);return(<button style={{width:"100%",background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:9,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:"none",cursor:"pointer",textAlign:"left"}} onClick={onClick}><div style={{display:"flex",justifyContent:"space-between"}}><div><div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{v?.ime}</div><div style={{fontSize:12,color:"#64748b"}}>{fmt(o.datZac+"T00:00:00")} – {fmt(o.datKon+"T00:00:00")} · {v?.vozilo}</div></div><div style={{fontWeight:800,fontSize:18,color:"#16a34a"}}>{z.toFixed(2)} €</div></div></button>);};
 const Sec=({title,children})=><div style={{background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:11,fontWeight:700,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}}>{title}</div>{children}</div>;
 const R=({label,val,bold,mono})=><div style={{display:"flex",justifyContent:"space-between",paddingBottom:5,marginBottom:5,borderBottom:"1px solid #f8fafc"}}><span style={{fontSize:12,color:"#94a3b8"}}>{label}</span><span style={{fontSize:13,color:"#1e293b",textAlign:"right",...(bold?{fontWeight:700,color:"#0f2744"}:{}),...(mono?{fontFamily:"monospace",color:"#2563eb",fontSize:12}:{})}}>{val||"–"}</span></div>;

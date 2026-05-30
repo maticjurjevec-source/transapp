@@ -154,12 +154,14 @@ export default function App({ voznikId:propVoznikId=null, voznikIme='', voznikVo
       {tab==="obracun" && <ObracunTab st={st} showToast={showToast} voznikId={voznikId}/>}
       {tab==="nalogi" && <NalogiTab nalogi={st.nalogi} onSelect={setSelectedNalog}/>}
       {tab==="vzdrzevanje" && <VzdrzevanjeTab voznikId={voznikId} showToast={showToast}/>}
+      {tab==="dopust" && <DopustTab voznikId={voznikId} showToast={showToast}/>}
       {tab==="prosticmr" && <ProstiCMRTab st={st} upd={upd} showToast={showToast}/>}
     </div>
     <div style={s.nav}>
       <NavBtn active={tab==="obracun"} onClick={()=>setTab("obracun")} icon="💶" label="Obračun"/>
       <NavBtn active={tab==="nalogi"} onClick={()=>setTab("nalogi")} icon="📋" label={`Nalogi${novihNalogov?` (${novihNalogov})`:""}`}/>
       <NavBtn active={tab==="vzdrzevanje"} onClick={()=>setTab("vzdrzevanje")} icon="🔧" label="Vzdrževanje"/>
+      <NavBtn active={tab==="dopust"} onClick={()=>setTab("dopust")} icon="🌴" label="Dopust"/>
       <NavBtn active={tab==="prosticmr"} onClick={()=>setTab("prosticmr")} icon="📸" label={`CMR${nepovezanihCMR>0?` (${nepovezanihCMR})`:""}`}/>
     </div>
   </div>);
@@ -435,6 +437,169 @@ function VzdrzevanjeTab({ voznikId, showToast }) {
 
           <button style={{...s.btnPrimary,opacity:savingVnos?0.5:1}} onClick={shraniVnos} disabled={savingVnos}>
             {savingVnos?"⏳ Shranjevanje...":"💾 Shrani vnos"}
+          </button>
+        </div>
+      </div>
+    </div>}
+  </div>);
+}
+
+/* ===== DOPUST TAB ===== */
+function DopustTab({ voznikId, showToast }) {
+  const [dopusti, setDopusti] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modal, setModal] = useState(null);
+  const [form, setForm] = useState({ datum_od: "", datum_do: "", opomba: "" });
+  const [saving, setSaving] = useState(false);
+
+  const naložiDopuste = async () => {
+    if (!voznikId) return;
+    setLoading(true);
+    const { data, error } = await supabase.from("dopusti").select("*").eq("voznik_id", voznikId).order("datum_od", { ascending: false });
+    if (data) setDopusti(data);
+    if (error) console.error("Dopusti napaka:", error);
+    setLoading(false);
+  };
+
+  useEffect(() => { naložiDopuste(); /* eslint-disable-next-line */ }, [voznikId]);
+
+  const odpriNovi = () => {
+    const danes = new Date().toISOString().slice(0, 10);
+    setForm({ datum_od: danes, datum_do: danes, opomba: "" });
+    setModal("novi");
+  };
+
+  const odpriUredi = (d) => {
+    setForm({ datum_od: d.datum_od, datum_do: d.datum_do, opomba: d.opomba || "" });
+    setModal(d.id);
+  };
+
+  const shrani = async () => {
+    if (!form.datum_od || !form.datum_do) return showToast("Izberi datume!", true);
+    if (form.datum_do < form.datum_od) return showToast("Datum 'do' mora biti za datumom 'od'!", true);
+    setSaving(true);
+    try {
+      if (modal === "novi") {
+        const { error } = await supabase.from("dopusti").insert([{
+          voznik_id: voznikId,
+          datum_od: form.datum_od,
+          datum_do: form.datum_do,
+          opomba: form.opomba || null,
+        }]);
+        if (error) throw error;
+        showToast("✅ Dopust vpisan!");
+      } else {
+        const { error } = await supabase.from("dopusti").update({
+          datum_od: form.datum_od,
+          datum_do: form.datum_do,
+          opomba: form.opomba || null,
+        }).eq("id", modal);
+        if (error) throw error;
+        showToast("✅ Dopust posodobljen!");
+      }
+      setModal(null);
+      await naložiDopuste();
+    } catch (err) {
+      showToast("❌ Napaka: " + err.message, true);
+    }
+    setSaving(false);
+  };
+
+  const izbrisi = async (id) => {
+    if (!window.confirm("Izbrišem ta dopust?")) return;
+    try {
+      const { error } = await supabase.from("dopusti").delete().eq("id", id);
+      if (error) throw error;
+      showToast("🗑️ Dopust izbrisan.");
+      await naložiDopuste();
+    } catch (err) {
+      showToast("❌ Napaka!", true);
+    }
+  };
+
+  const steviloDni = (od, do_) => Math.floor((new Date(do_) - new Date(od)) / 86400000) + 1;
+  const dniLabel = (n) => n === 1 ? "dan" : n === 2 ? "dneva" : n < 5 ? "dni" : "dni";
+
+  const danes = new Date().toISOString().slice(0, 10);
+  const prihodnji = dopusti.filter(d => d.datum_do >= danes);
+  const pretekli = dopusti.filter(d => d.datum_do < danes);
+
+  if (loading) return <div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>⏳ Nalagam...</div>;
+
+  return (<div>
+    <div style={s.card}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+        <div style={{...s.cardTitle,marginBottom:0}}>🌴 Moji dopusti</div>
+        <button style={{background:"#0f2744",color:"#fff",border:"none",borderRadius:10,padding:"8px 14px",fontSize:13,fontWeight:700,cursor:"pointer"}} onClick={odpriNovi}>+ Vpiši</button>
+      </div>
+
+      {dopusti.length === 0 && <div style={{fontSize:13,color:"#94a3b8",textAlign:"center",padding:16}}>Ni vpisanih dopustov. Klikni "+ Vpiši" da dodaš.</div>}
+
+      {prihodnji.length > 0 && <>
+        <div style={{fontSize:11,fontWeight:700,color:"#16a34a",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>📅 Aktualni / prihodnji</div>
+        {prihodnji.map(d => (
+          <div key={d.id} style={{background:"#f0fdf4",borderRadius:10,padding:12,marginBottom:8,borderLeft:"4px solid #16a34a"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700,fontSize:14,color:"#0f2744"}}>{fmt(d.datum_od+"T00:00:00")} – {fmt(d.datum_do+"T00:00:00")}</div>
+                <div style={{fontSize:12,color:"#16a34a",marginTop:2,fontWeight:600}}>{steviloDni(d.datum_od, d.datum_do)} {dniLabel(steviloDni(d.datum_od, d.datum_do))}</div>
+                {d.opomba && <div style={{fontSize:12,color:"#64748b",marginTop:4}}>📝 {d.opomba}</div>}
+              </div>
+              <div style={{display:"flex",gap:4}}>
+                <button style={{background:"none",border:"none",color:"#2563eb",cursor:"pointer",fontSize:16,padding:4}} onClick={()=>odpriUredi(d)}>✏️</button>
+                <button style={{background:"none",border:"none",color:"#dc2626",cursor:"pointer",fontSize:16,padding:4}} onClick={()=>izbrisi(d.id)}>🗑️</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </>}
+
+      {pretekli.length > 0 && <>
+        <div style={{fontSize:11,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,marginTop:14}}>📋 Pretekli</div>
+        {pretekli.map(d => (
+          <div key={d.id} style={{background:"#f8fafc",borderRadius:10,padding:12,marginBottom:8,borderLeft:"4px solid #94a3b8",opacity:0.85}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:600,fontSize:14,color:"#475569"}}>{fmt(d.datum_od+"T00:00:00")} – {fmt(d.datum_do+"T00:00:00")}</div>
+                <div style={{fontSize:12,color:"#94a3b8",marginTop:2}}>{steviloDni(d.datum_od, d.datum_do)} {dniLabel(steviloDni(d.datum_od, d.datum_do))}</div>
+                {d.opomba && <div style={{fontSize:12,color:"#94a3b8",marginTop:4}}>📝 {d.opomba}</div>}
+              </div>
+              <div style={{display:"flex",gap:4}}>
+                <button style={{background:"none",border:"none",color:"#2563eb",cursor:"pointer",fontSize:16,padding:4}} onClick={()=>odpriUredi(d)}>✏️</button>
+                <button style={{background:"none",border:"none",color:"#dc2626",cursor:"pointer",fontSize:16,padding:4}} onClick={()=>izbrisi(d.id)}>🗑️</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </>}
+    </div>
+
+    {modal && <div style={s.overlay} onClick={()=>setModal(null)}>
+      <div style={{...s.modalBox,maxHeight:"85vh"}} onClick={e=>e.stopPropagation()}>
+        <div style={s.modalHead}>
+          <span style={s.modalTitle}>{modal==="novi" ? "🌴 Vpiši dopust" : "✏️ Uredi dopust"}</span>
+          <button style={s.closeBtn} onClick={()=>setModal(null)}>✕</button>
+        </div>
+        <div style={s.modalBody}>
+          <div style={{marginBottom:14}}>
+            <label style={s.label}>📅 Datum od *</label>
+            <input style={s.input} type="date" value={form.datum_od} onChange={e=>setForm(f=>({...f,datum_od:e.target.value}))}/>
+          </div>
+          <div style={{marginBottom:14}}>
+            <label style={s.label}>📅 Datum do *</label>
+            <input style={s.input} type="date" value={form.datum_do} onChange={e=>setForm(f=>({...f,datum_do:e.target.value}))}/>
+          </div>
+          {form.datum_od && form.datum_do && form.datum_do >= form.datum_od && (
+            <div style={{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,fontWeight:700,color:"#16a34a",textAlign:"center"}}>
+              ⏱️ {steviloDni(form.datum_od, form.datum_do)} {dniLabel(steviloDni(form.datum_od, form.datum_do))}
+            </div>
+          )}
+          <div style={{marginBottom:14}}>
+            <label style={s.label}>📝 Opomba (opcijsko)</label>
+            <input style={s.input} placeholder="npr. družinski dogodek" value={form.opomba} onChange={e=>setForm(f=>({...f,opomba:e.target.value}))}/>
+          </div>
+          <button style={{...s.btnPrimary,opacity:saving?0.5:1}} onClick={shrani} disabled={saving}>
+            {saving ? "⏳ Shranjevanje..." : (modal==="novi" ? "💾 Vpiši dopust" : "💾 Shrani spremembe")}
           </button>
         </div>
       </div>

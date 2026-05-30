@@ -128,8 +128,12 @@ export default function FinanceApp(){
           <button onClick={()=>setTab("fakturirano")} style={{padding:"10px 20px",borderRadius:10,border:"none",background:tab==="fakturirano"?"#16a34a":"#fff",color:tab==="fakturirano"?"#fff":"#64748b",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
             ✅ Fakturirano ({fakturirano.length})
           </button>
+          <button onClick={()=>setTab("dopusti")} style={{padding:"10px 20px",borderRadius:10,border:"none",background:tab==="dopusti"?"#15803d":"#fff",color:tab==="dopusti"?"#fff":"#64748b",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+            🌴 Dopusti
+          </button>
         </div>
 
+        {tab !== "dopusti" && <>
         {/* ISKALNIK */}
         <div style={{position:"relative",marginBottom:16}}>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Išči po stranki, številki naloga, referenci, kraju..." style={{width:"100%",padding:"10px 14px",border:"1px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",boxSizing:"border-box",background:"#fff"}}/>
@@ -171,6 +175,8 @@ export default function FinanceApp(){
             );
           })}
         </div>
+        </>}
+        {tab === "dopusti" && <DopustiPanel/>}
       </div>
 
       {/* DETAIL MODAL */}
@@ -299,6 +305,171 @@ export default function FinanceApp(){
           >🔗 Nov zavihek</a>
         </div>
         <button style={{position:"absolute",top:20,right:20,background:"rgba(255,255,255,0.2)",border:"none",color:"#fff",width:40,height:40,borderRadius:20,fontSize:18,cursor:"pointer"}} onClick={()=>setImgPreview(null)}>✕</button>
+      </div>}
+    </div>
+  );
+}
+
+function DopustiPanel(){
+  const [dopusti,setDopusti]=useState([]);
+  const [vozniki,setVozniki]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [modal,setModal]=useState(null);
+  const [form,setForm]=useState({voznik_id:"",datum_od:"",datum_do:"",opomba:""});
+  const [saving,setSaving]=useState(false);
+  const [showPretekli,setShowPretekli]=useState(false);
+
+  async function load(){
+    setLoading(true);
+    const [{data:dop},{data:voz}]=await Promise.all([
+      supabase.from("dopusti").select("*").order("datum_od",{ascending:false}),
+      supabase.from("vozniki").select("id,ime,priimek,vozilo").eq("aktiven",true).order("priimek"),
+    ]);
+    if(dop)setDopusti(dop);
+    if(voz)setVozniki(voz);
+    setLoading(false);
+  }
+  useEffect(()=>{ load(); },[]);
+
+  const danes=new Date().toISOString().slice(0,10);
+  const trenutni=dopusti.filter(d=>d.datum_od<=danes&&d.datum_do>=danes);
+  const prihodnji=dopusti.filter(d=>d.datum_od>danes);
+  const pretekli=dopusti.filter(d=>d.datum_do<danes);
+
+  const steviloDni=(od,do_)=>Math.floor((new Date(do_)-new Date(od))/86400000)+1;
+  const dniLabel=(n)=>n===1?"dan":n===2?"dneva":"dni";
+  const voznikIme=(id)=>{const v=vozniki.find(x=>x.id===id);return v?`${v.ime} ${v.priimek}`:"Neznan voznik";};
+  const voznikVozilo=(id)=>vozniki.find(x=>x.id===id)?.vozilo||"";
+
+  const odpriNovi=()=>{setForm({voznik_id:"",datum_od:danes,datum_do:danes,opomba:""});setModal("novi");};
+  const odpriUredi=(d)=>{setForm({voznik_id:d.voznik_id,datum_od:d.datum_od,datum_do:d.datum_do,opomba:d.opomba||""});setModal(d.id);};
+
+  async function shrani(){
+    if(!form.voznik_id) return alert("Izberi voznika!");
+    if(!form.datum_od||!form.datum_do) return alert("Izberi datume!");
+    if(form.datum_do<form.datum_od) return alert("Datum 'do' mora biti za datumom 'od'!");
+    setSaving(true);
+    try{
+      if(modal==="novi"){
+        const{error}=await supabase.from("dopusti").insert([{voznik_id:form.voznik_id,datum_od:form.datum_od,datum_do:form.datum_do,opomba:form.opomba||null}]);
+        if(error) throw error;
+      }else{
+        const{error}=await supabase.from("dopusti").update({voznik_id:form.voznik_id,datum_od:form.datum_od,datum_do:form.datum_do,opomba:form.opomba||null}).eq("id",modal);
+        if(error) throw error;
+      }
+      setModal(null);
+      await load();
+    }catch(err){alert("Napaka: "+err.message);}
+    setSaving(false);
+  }
+
+  async function izbrisi(id,ime){
+    if(!window.confirm(`Izbrišem dopust ${ime?"za "+ime:""}?`)) return;
+    const{error}=await supabase.from("dopusti").delete().eq("id",id);
+    if(error){alert("Napaka pri brisanju!");return;}
+    await load();
+  }
+
+  const renderRow=(d,theme)=>{
+    const dniSkupaj=steviloDni(d.datum_od,d.datum_do);
+    const ime=voznikIme(d.voznik_id);
+    return(
+      <div key={d.id} style={{background:theme.bg,borderRadius:10,padding:14,marginBottom:8,borderLeft:`4px solid ${theme.color}`,opacity:theme.opacity||1}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>🚛 {ime}</div>
+            <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{voznikVozilo(d.voznik_id)}</div>
+            <div style={{fontWeight:600,fontSize:13,color:theme.color,marginTop:6}}>{fmt(d.datum_od)} – {fmt(d.datum_do)} <span style={{fontWeight:500,color:"#64748b"}}>({dniSkupaj} {dniLabel(dniSkupaj)})</span></div>
+            {d.opomba&&<div style={{fontSize:12,color:"#64748b",marginTop:4}}>📝 {d.opomba}</div>}
+          </div>
+          <div style={{display:"flex",gap:4}}>
+            <button style={{background:"none",border:"none",color:"#2563eb",cursor:"pointer",fontSize:16,padding:4}} onClick={()=>odpriUredi(d)}>✏️</button>
+            <button style={{background:"none",border:"none",color:"#dc2626",cursor:"pointer",fontSize:16,padding:4}} onClick={()=>izbrisi(d.id,ime)}>🗑️</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  if(loading) return <div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>⏳ Nalagam dopuste...</div>;
+
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div style={{fontWeight:700,fontSize:16,color:"#0f2744"}}>🌴 Dopusti voznikov</div>
+        <button onClick={odpriNovi} style={{background:"#15803d",color:"#fff",border:"none",borderRadius:10,padding:"8px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}}>+ Dodaj dopust</button>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
+        <div style={{background:"#fff",borderRadius:12,padding:"14px 10px",textAlign:"center",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+          <div style={{fontSize:24,fontWeight:800,color:"#dc2626"}}>{trenutni.length}</div>
+          <div style={{fontSize:11,color:"#94a3b8"}}>🔴 Danes</div>
+        </div>
+        <div style={{background:"#fff",borderRadius:12,padding:"14px 10px",textAlign:"center",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+          <div style={{fontSize:24,fontWeight:800,color:"#16a34a"}}>{prihodnji.length}</div>
+          <div style={{fontSize:11,color:"#94a3b8"}}>📅 Prihodnji</div>
+        </div>
+        <div style={{background:"#fff",borderRadius:12,padding:"14px 10px",textAlign:"center",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+          <div style={{fontSize:24,fontWeight:800,color:"#94a3b8"}}>{pretekli.length}</div>
+          <div style={{fontSize:11,color:"#94a3b8"}}>📋 Pretekli</div>
+        </div>
+      </div>
+
+      {dopusti.length===0&&<div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>Ni vpisanih dopustov.</div>}
+
+      {trenutni.length>0&&<>
+        <div style={{fontSize:11,fontWeight:700,color:"#dc2626",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>🔴 Trenutno na dopustu</div>
+        {trenutni.map(d=>renderRow(d,{bg:"#fef2f2",color:"#dc2626"}))}
+      </>}
+
+      {prihodnji.length>0&&<>
+        <div style={{fontSize:11,fontWeight:700,color:"#16a34a",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8,marginTop:14}}>📅 Prihodnji dopusti</div>
+        {prihodnji.sort((a,b)=>a.datum_od.localeCompare(b.datum_od)).map(d=>renderRow(d,{bg:"#f0fdf4",color:"#16a34a"}))}
+      </>}
+
+      {pretekli.length>0&&<>
+        <button style={{marginTop:14,marginBottom:8,width:"100%",padding:"8px 14px",borderRadius:10,border:"1px solid #e2e8f0",background:"#fff",fontSize:12,fontWeight:600,color:"#64748b",cursor:"pointer"}} onClick={()=>setShowPretekli(!showPretekli)}>{showPretekli?"▲ Skrij":"▼ Prikaži"} pretekle dopuste ({pretekli.length})</button>
+        {showPretekli&&pretekli.map(d=>renderRow(d,{bg:"#f8fafc",color:"#94a3b8",opacity:0.85}))}
+      </>}
+
+      {modal&&<div style={{position:"fixed",inset:0,zIndex:100,background:"rgba(0,0,0,0.5)",display:"flex",justifyContent:"center",alignItems:"center",padding:"24px 16px"}} onClick={()=>setModal(null)}>
+        <div style={{background:"#fff",borderRadius:16,maxWidth:500,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}} onClick={e=>e.stopPropagation()}>
+          <div style={{background:"linear-gradient(135deg, #1e3a5f 0%, #0f2744 100%)",color:"#fff",padding:"18px 20px",borderRadius:"16px 16px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{fontSize:16,fontWeight:800}}>{modal==="novi"?"🌴 Nov dopust":"✏️ Uredi dopust"}</div>
+            <button onClick={()=>setModal(null)} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",width:30,height:30,borderRadius:8,fontSize:14,cursor:"pointer"}}>✕</button>
+          </div>
+          <div style={{padding:20}}>
+            <div style={{marginBottom:14}}>
+              <label style={{display:"block",fontSize:12,fontWeight:600,color:"#475569",marginBottom:5}}>🚛 Voznik *</label>
+              <select value={form.voznik_id} onChange={e=>setForm(f=>({...f,voznik_id:e.target.value}))} style={{width:"100%",border:"1px solid #e2e8f0",borderRadius:8,padding:"10px 12px",fontSize:13,background:"#fff",boxSizing:"border-box"}}>
+                <option value="">– Izberi voznika –</option>
+                {vozniki.map(v=><option key={v.id} value={v.id}>{v.ime} {v.priimek} · {v.vozilo}</option>)}
+              </select>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+              <div>
+                <label style={{display:"block",fontSize:12,fontWeight:600,color:"#475569",marginBottom:5}}>📅 Datum od *</label>
+                <input type="date" value={form.datum_od} onChange={e=>setForm(f=>({...f,datum_od:e.target.value}))} style={{width:"100%",border:"1px solid #e2e8f0",borderRadius:8,padding:"10px 12px",fontSize:13,boxSizing:"border-box"}}/>
+              </div>
+              <div>
+                <label style={{display:"block",fontSize:12,fontWeight:600,color:"#475569",marginBottom:5}}>📅 Datum do *</label>
+                <input type="date" value={form.datum_do} onChange={e=>setForm(f=>({...f,datum_do:e.target.value}))} style={{width:"100%",border:"1px solid #e2e8f0",borderRadius:8,padding:"10px 12px",fontSize:13,boxSizing:"border-box"}}/>
+              </div>
+            </div>
+            {form.datum_od&&form.datum_do&&form.datum_do>=form.datum_od&&(
+              <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,fontWeight:700,color:"#16a34a",textAlign:"center"}}>
+                ⏱️ {steviloDni(form.datum_od,form.datum_do)} {dniLabel(steviloDni(form.datum_od,form.datum_do))}
+              </div>
+            )}
+            <div style={{marginBottom:16}}>
+              <label style={{display:"block",fontSize:12,fontWeight:600,color:"#475569",marginBottom:5}}>📝 Opomba (opcijsko)</label>
+              <input value={form.opomba} onChange={e=>setForm(f=>({...f,opomba:e.target.value}))} placeholder="npr. družinski dogodek" style={{width:"100%",border:"1px solid #e2e8f0",borderRadius:8,padding:"10px 12px",fontSize:13,boxSizing:"border-box"}}/>
+            </div>
+            <button onClick={shrani} disabled={saving} style={{width:"100%",background:"#16a34a",color:"#fff",border:"none",borderRadius:10,padding:"12px",fontSize:14,fontWeight:700,cursor:"pointer",opacity:saving?0.5:1}}>
+              {saving?"⏳ Shranjevanje...":(modal==="novi"?"💾 Dodaj dopust":"💾 Shrani spremembe")}
+            </button>
+          </div>
+        </div>
       </div>}
     </div>
   );
