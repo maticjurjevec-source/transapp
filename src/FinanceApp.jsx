@@ -128,12 +128,15 @@ export default function FinanceApp(){
           <button onClick={()=>setTab("fakturirano")} style={{padding:"10px 20px",borderRadius:10,border:"none",background:tab==="fakturirano"?"#16a34a":"#fff",color:tab==="fakturirano"?"#fff":"#64748b",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
             ✅ Fakturirano ({fakturirano.length})
           </button>
+          <button onClick={()=>setTab("obracuni")} style={{padding:"10px 20px",borderRadius:10,border:"none",background:tab==="obracuni"?"#1d4ed8":"#fff",color:tab==="obracuni"?"#fff":"#64748b",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+            💶 Obračuni
+          </button>
           <button onClick={()=>setTab("dopusti")} style={{padding:"10px 20px",borderRadius:10,border:"none",background:tab==="dopusti"?"#15803d":"#fff",color:tab==="dopusti"?"#fff":"#64748b",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
             🌴 Dopusti
           </button>
         </div>
 
-        {tab !== "dopusti" && <>
+        {(tab === "za_fakturo" || tab === "fakturirano") && <>
         {/* ISKALNIK */}
         <div style={{position:"relative",marginBottom:16}}>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Išči po stranki, številki naloga, referenci, kraju..." style={{width:"100%",padding:"10px 14px",border:"1px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",boxSizing:"border-box",background:"#fff"}}/>
@@ -176,6 +179,7 @@ export default function FinanceApp(){
           })}
         </div>
         </>}
+        {tab === "obracuni" && <ObracuniPanel/>}
         {tab === "dopusti" && <DopustiPanel/>}
       </div>
 
@@ -308,6 +312,190 @@ export default function FinanceApp(){
       </div>}
     </div>
   );
+}
+
+function ObracuniPanel(){
+  const [obracuni,setObracuni]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [selOb,setSelOb]=useState(null);
+  const [filter,setFilter]=useState("vsi");
+  const [search,setSearch]=useState("");
+
+  useEffect(()=>{
+    setLoading(true);
+    supabase.from("tedenski_obracuni").select("*, vozniki(id,ime,priimek,vozilo)").order("datum_od",{ascending:false}).then(({data})=>{
+      if(data)setObracuni(data);
+      setLoading(false);
+    });
+  },[]);
+
+  const TARIFA_KM=0.185;
+  const TARIFA_STR=20;
+  const TARIFA_DOPUST=40;
+
+  const filtered=obracuni.filter(o=>{
+    if(filter==="osnutek" && o.status!=="osnutek") return false;
+    if(filter==="poslan" && o.status!=="poslan") return false;
+    if(!search.trim()) return true;
+    const q=search.toLowerCase();
+    const v=o.vozniki;
+    const ime=v?`${v.ime} ${v.priimek}`.toLowerCase():"";
+    const vozilo=v?.vozilo?.toLowerCase()||"";
+    return ime.includes(q)||vozilo.includes(q);
+  });
+
+  const skupajKm=filtered.reduce((a,o)=>a+(o.km_prevozeni||0),0);
+  const skupajZnesek=filtered.reduce((a,o)=>a+(o.sestevek||0),0);
+
+  if(selOb){
+    const o=selOb;
+    const v=o.vozniki;
+    const prevozi=o.prevozi||[];
+    const tankanja=o.tankanja||[];
+    const stroski=o.drugi_stroski||[];
+    const zaslKm=(o.km_prevozeni||0)*TARIFA_KM;
+    const zaslStr=(o.stevilo_strank||0)*TARIFA_STR;
+    const zaslDop=(o.dopust_dni||0)*TARIFA_DOPUST;
+    const zaslStr2=stroski.reduce((a,x)=>a+(parseFloat(x.znesek)||0),0);
+
+    return(
+      <div>
+        <style>{`@media print { body * { visibility: hidden; } .print-area, .print-area * { visibility: visible; } .print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; } .no-print { display: none !important; } }`}</style>
+
+        <div className="no-print" style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
+          <button onClick={()=>setSelOb(null)} style={{padding:"8px 14px",borderRadius:10,border:"1px solid #e2e8f0",background:"#fff",fontSize:13,fontWeight:600,color:"#64748b",cursor:"pointer"}}>← Nazaj</button>
+          <button onClick={()=>window.print()} style={{marginLeft:"auto",padding:"8px 16px",borderRadius:10,border:"none",background:"#16a34a",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>🖨️ Natisni / PDF</button>
+        </div>
+
+        <div className="print-area">
+          <div style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:14,padding:18,color:"#fff",marginBottom:14}}>
+            <div style={{fontSize:18,fontWeight:800}}>{v?`${v.ime} ${v.priimek}`:"Voznik"}</div>
+            <div style={{fontSize:12,opacity:0.7,marginTop:2}}>{v?.vozilo||""} · {fmt(o.datum_od)} – {fmt(o.datum_do)}</div>
+            <div style={{fontSize:10,marginTop:6,padding:"3px 10px",borderRadius:20,display:"inline-block",background:o.status==="poslan"?"rgba(22,163,74,0.3)":"rgba(255,255,255,0.15)",color:o.status==="poslan"?"#86efac":"#fff"}}>{o.status==="poslan"?"✅ Poslan":"⏳ Osnutek"}</div>
+          </div>
+
+          <Sec2 title="🛣️ Kilometri">
+            <R2 label="Začetni km" val={o.km_zacetek?.toLocaleString()||"–"}/>
+            <R2 label="Končni km" val={o.km_konec?.toLocaleString()||"–"}/>
+            <R2 label="Prevoženi km" val={`${(o.km_prevozeni||0).toLocaleString()} km`} bold/>
+            <R2 label={`× ${TARIFA_KM} €`} val={`${zaslKm.toFixed(2)} €`} bold/>
+          </Sec2>
+
+          <Sec2 title="👥 Stranke">
+            <R2 label="Število strank" val={o.stevilo_strank||0}/>
+            <R2 label={`× ${TARIFA_STR} €`} val={`${zaslStr.toFixed(2)} €`} bold/>
+          </Sec2>
+
+          {prevozi.length>0 && <Sec2 title="🚛 Prevozi">
+            {prevozi.map((p,i)=><R2 key={i} label={`#${p.st||i+1}`} val={`${p.nakKraj||""} → ${p.razKraj||""}`}/>)}
+          </Sec2>}
+
+          {tankanja.length>0 && <Sec2 title="⛽ Tankanja">
+            {tankanja.map((t,i)=><R2 key={i} label={t.dan?fmt(t.dan):`#${i+1}`} val={`${t.kolicina||"?"} L · ${t.lokacija||"?"}`}/>)}
+          </Sec2>}
+
+          {(o.dopust_dni>0||o.bolniska_dni>0||o.cakanje_opis) && <Sec2 title="📋 Ostalo">
+            {o.dopust_dni>0 && <R2 label="Dopust" val={`${o.dopust_dni} dni × ${TARIFA_DOPUST} € = ${zaslDop.toFixed(2)} €`}/>}
+            {o.bolniska_dni>0 && <R2 label="Bolniška" val={`${o.bolniska_dni} dni`}/>}
+            {o.cakanje_opis && <R2 label="Čakanje" val={o.cakanje_opis}/>}
+          </Sec2>}
+
+          {stroski.length>0 && <Sec2 title="🧾 Drugi stroški">
+            {stroski.map((x,i)=><R2 key={i} label={x.opis||"Strošek"} val={`${parseFloat(x.znesek).toFixed(2)} €`}/>)}
+          </Sec2>}
+
+          <div style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:14,padding:18,color:"#fff",marginTop:8}}>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:14,opacity:0.85,padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
+              <span>Km ({(o.km_prevozeni||0).toLocaleString()} × {TARIFA_KM} €)</span>
+              <span>{zaslKm.toFixed(2)} €</span>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:14,opacity:0.85,padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
+              <span>Stranke ({o.stevilo_strank||0} × {TARIFA_STR} €)</span>
+              <span>{zaslStr.toFixed(2)} €</span>
+            </div>
+            {zaslDop>0 && <div style={{display:"flex",justifyContent:"space-between",fontSize:14,opacity:0.85,padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
+              <span>Dopust</span>
+              <span>{zaslDop.toFixed(2)} €</span>
+            </div>}
+            {zaslStr2>0 && <div style={{display:"flex",justifyContent:"space-between",fontSize:14,opacity:0.85,padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
+              <span>Drugi stroški</span>
+              <span>+ {zaslStr2.toFixed(2)} €</span>
+            </div>}
+            <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:22,paddingTop:12}}>
+              <span>SEŠTEVEK</span>
+              <span>{(o.sestevek||0).toFixed(2)} €</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+        <div style={{fontWeight:700,fontSize:16,color:"#0f2744"}}>💶 Obračuni voznikov</div>
+      </div>
+
+      <div style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:14,padding:"16px 20px",marginBottom:14,color:"#fff",display:"flex",justifyContent:"space-around"}}>
+        <div style={{textAlign:"center"}}>
+          <div style={{fontSize:20,fontWeight:800}}>{filtered.length}</div>
+          <div style={{fontSize:11,opacity:0.7}}>Obračunov</div>
+        </div>
+        <div style={{textAlign:"center"}}>
+          <div style={{fontSize:20,fontWeight:800}}>{skupajKm.toLocaleString()} km</div>
+          <div style={{fontSize:11,opacity:0.7}}>Skupaj km</div>
+        </div>
+        <div style={{textAlign:"center"}}>
+          <div style={{fontSize:20,fontWeight:800,color:"#86efac"}}>{skupajZnesek.toFixed(0)} €</div>
+          <div style={{fontSize:11,opacity:0.7}}>Za izplačilo</div>
+        </div>
+      </div>
+
+      <div style={{position:"relative",marginBottom:10}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Išči po vozniku ali vozilu..." style={{width:"100%",padding:"10px 14px",border:"1px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",boxSizing:"border-box",background:"#fff"}}/>
+        {search && <button onClick={()=>setSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"#e2e8f0",border:"none",borderRadius:"50%",width:20,height:20,fontSize:11,cursor:"pointer",color:"#64748b"}}>✕</button>}
+      </div>
+
+      <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+        {[["vsi","Vsi"],["poslan","✅ Poslani"],["osnutek","⏳ Osnutki"]].map(([v,l])=>(
+          <button key={v} onClick={()=>setFilter(v)} style={{padding:"6px 12px",borderRadius:20,border:"1.5px solid #e2e8f0",background:filter===v?"#0f2744":"#fff",color:filter===v?"#fff":"#475569",fontSize:12,fontWeight:filter===v?700:500,cursor:"pointer"}}>{l}</button>
+        ))}
+      </div>
+
+      {loading && <div style={{textAlign:"center",padding:20,color:"#94a3b8"}}>⏳ Nalagam...</div>}
+      {!loading && filtered.length===0 && <div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>Ni obračunov za prikaz.</div>}
+      {filtered.map(o=>{
+        const v=o.vozniki;
+        return(
+          <button key={o.id} onClick={()=>setSelOb(o)} style={{width:"100%",background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:9,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:"none",cursor:"pointer",textAlign:"left",borderLeft:`4px solid ${o.status==="poslan"?"#16a34a":"#d97706"}`}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{v?`${v.ime} ${v.priimek}`:"Voznik"}</div>
+                <div style={{fontSize:12,color:"#64748b"}}>{fmt(o.datum_od)} – {fmt(o.datum_do)} · {v?.vozilo||""}</div>
+                <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{(o.km_prevozeni||0).toLocaleString()} km · {o.stevilo_strank||0} strank · {o.status==="poslan"?"✅ Poslan":"⏳ Osnutek"}</div>
+              </div>
+              <div style={{fontWeight:800,fontSize:18,color:"#16a34a"}}>{(o.sestevek||0).toFixed(2)} €</div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Sec2({title,children}){
+  return(<div style={{background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+    <div style={{fontSize:11,fontWeight:700,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}}>{title}</div>
+    {children}
+  </div>);
+}
+
+function R2({label,val,bold}){
+  return(<div style={{display:"flex",justifyContent:"space-between",paddingBottom:5,marginBottom:5,borderBottom:"1px solid #f8fafc"}}>
+    <span style={{fontSize:12,color:"#94a3b8"}}>{label}</span>
+    <span style={{fontSize:13,color:"#1e293b",textAlign:"right",...(bold?{fontWeight:700,color:"#0f2744"}:{})}}>{val||"–"}</span>
+  </div>);
 }
 
 function DopustiPanel(){
