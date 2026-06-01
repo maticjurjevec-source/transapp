@@ -659,11 +659,10 @@ function ProstiCMRTab({st,upd,showToast}){
     });
   },[]);
 
-  // Naloži VSE aktivne naloge (ne samo svojih) za dropdown
+  // Naloži VSE naloge (vključno z zaključenimi/fakturiranimi) za dropdown
   useEffect(()=>{
     supabase.from("nalogi")
       .select("id,stevilka_naloga,stranka,nak_kraj,raz_kraj,nak_datum,raz_datum,status,voznik_id")
-      .in("status",["nov","poslan","sprejet","zakljucen"])
       .order("created_at",{ascending:false})
       .limit(200)
       .then(({data,error})=>{
