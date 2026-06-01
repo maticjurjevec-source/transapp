@@ -81,7 +81,7 @@ export default function DispecarPlasca() {
 
   // ===== REALTIME SYNC =====
   useEffect(() => {
-    const channel = supabase.channel("dispatcher-realtime")
+    const channel = supabase.channel(`dispatcher-${Math.random().toString(36).slice(2,10)}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "nalogi" }, (payload) => {
         console.log("🔄 Realtime: nalogi", payload.eventType, payload.new?.stevilka_naloga || payload.old?.stevilka_naloga);
         naložiPodatke();
