@@ -245,6 +245,25 @@ export default function DispecarPlasca() {
 
 
   const [aiParsing,setAiParsing]=useState(false);
+  const [duplikatOpozorilo,setDuplikatOpozorilo]=useState(null);
+
+  // Preveri podvajanje naloga (po številki naročnika ali referenci naklada)
+  useEffect(()=>{
+    if(modal!=="nalog"){setDuplikatOpozorilo(null);return;}
+    const stNarocnika=(form.stevilkaNarocnika||"").trim();
+    const refNaklada=(form.nakReferenca||"").trim();
+    if(!stNarocnika && !refNaklada){setDuplikatOpozorilo(null);return;}
+    const editId=form.editId;
+    const najden=st.nalogi.find(n=>{
+      if(editId && n.id===editId)return false;
+      const nStNar=(n.stevilka_narocnika||n.stevilkaNarocnika||"").trim();
+      const nRef=(n.nak_referenca||n.nakReferenca||"").trim();
+      if(stNarocnika && nStNar && nStNar.toLowerCase()===stNarocnika.toLowerCase())return true;
+      if(refNaklada && nRef && nRef.toLowerCase()===refNaklada.toLowerCase())return true;
+      return false;
+    });
+    setDuplikatOpozorilo(najden||null);
+  },[form.stevilkaNarocnika,form.nakReferenca,modal,st.nalogi]);
 
   const upd=(fn)=>{const ns=fn(st);setSt(ns);save(ns);};
   const showToast=(txt,err)=>{setToast({txt,err});setTimeout(()=>setToast(null),3500);};
@@ -601,6 +620,17 @@ const handleDrop=async(e)=>{
           <div style={{...s.mbox,maxWidth:680}}>
             <div style={s.mhead}><span style={s.mtitle}>Nov nalog</span><button style={s.mcls} onClick={closeModal}>✕</button></div>
             <div style={s.mbody}>
+              {duplikatOpozorilo && <div style={{background:"#fef3c7",border:"1.5px solid #fde68a",borderRadius:10,padding:"12px 14px",marginBottom:12,fontSize:13}}>
+                <div style={{fontWeight:700,color:"#92400e",marginBottom:4}}>⚠️ Možno podvajanje naloga!</div>
+                <div style={{color:"#78350f",fontSize:12,marginBottom:6}}>Najden obstoječi nalog z isto številko naročnika ali referenco naklada:</div>
+                <div style={{background:"#fff",borderRadius:8,padding:10,fontSize:12,border:"1px solid #fde68a"}}>
+                  <div style={{fontWeight:700,color:"#0f2744"}}>{duplikatOpozorilo.stevilkaNaloga} · {duplikatOpozorilo.stranka}</div>
+                  <div style={{color:"#64748b",marginTop:2}}>{duplikatOpozorilo.nakKraj} → {duplikatOpozorilo.razKraj}</div>
+                  {(duplikatOpozorilo.stevilka_narocnika||duplikatOpozorilo.stevilkaNarocnika) && <div style={{color:"#64748b",fontSize:11,marginTop:3}}>📋 Št. naročnika: <b>{duplikatOpozorilo.stevilka_narocnika||duplikatOpozorilo.stevilkaNarocnika}</b></div>}
+                  {duplikatOpozorilo.nakReferenca && <div style={{color:"#64748b",fontSize:11}}>🏷️ Ref. naklada: <b>{duplikatOpozorilo.nakReferenca}</b></div>}
+                </div>
+                <div style={{color:"#78350f",fontSize:11,marginTop:8,fontStyle:"italic"}}>💡 Lahko vseeno nadaljuješ — to je samo opozorilo.</div>
+              </div>}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px",marginBottom:12}}>
                 <div style={{gridColumn:"1/-1"}}><label style={s.lbl}>Voznik</label><select style={s.sel} value={form.voznikId||""} onChange={e=>setForm(f=>({...f,voznikId:e.target.value}))}><option value="">– Dodeli pozneje –</option>{vozniki.map(v=><option key={v.id} value={v.id}>{v.ime} · {v.vozilo}</option>)}</select></div>
                 <div style={{gridColumn:"1/-1"}}><label style={s.lbl}>Stranka *</label><input style={s.inp} value={form.stranka||""} onChange={e=>setForm(f=>({...f,stranka:e.target.value}))} placeholder="Ime stranke"/></div>
@@ -1456,7 +1486,34 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
   const [priponkaFile, setPriponkaFile] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [form, setForm] = useState({});
+  const [duplikatOpozorilo, setDuplikatOpozorilo] = useState(null);
+  const [vsiNalogi, setVsiNalogi] = useState([]);
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
+
+  // Naloži obstoječe naloge za preverjanje podvajanja
+  useEffect(() => {
+    supabase.from("nalogi")
+      .select("id,stevilka_naloga,stranka,nak_kraj,raz_kraj,stevilka_narocnika,nak_referenca,created_at")
+      .order("created_at", { ascending: false })
+      .limit(500)
+      .then(({ data }) => { if (data) setVsiNalogi(data); });
+  }, []);
+
+  // Preveri podvajanje (po številki naročnika ali referenci naklada)
+  useEffect(() => {
+    if (korak !== "forma") { setDuplikatOpozorilo(null); return; }
+    const stNarocnika = (form.stevilkaNarocnika || "").trim();
+    const refNaklada = (form.nakReferenca || "").trim();
+    if (!stNarocnika && !refNaklada) { setDuplikatOpozorilo(null); return; }
+    const najden = vsiNalogi.find(n => {
+      const nStNar = (n.stevilka_narocnika || "").trim();
+      const nRef = (n.nak_referenca || "").trim();
+      if (stNarocnika && nStNar && nStNar.toLowerCase() === stNarocnika.toLowerCase()) return true;
+      if (refNaklada && nRef && nRef.toLowerCase() === refNaklada.toLowerCase()) return true;
+      return false;
+    });
+    setDuplikatOpozorilo(najden || null);
+  }, [form.stevilkaNarocnika, form.nakReferenca, korak, vsiNalogi]);
  
   // Outlook integracija
   const [outlookAccount, setOutlookAccount] = useState(getActiveAccount());
@@ -1975,6 +2032,17 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
       <div style={{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#16a34a",fontWeight:600}}>
         🤖 AI je izpolnil podatke — preveri in popravi po potrebi
       </div>
+      {duplikatOpozorilo && <div style={{background:"#fef3c7",border:"1.5px solid #fde68a",borderRadius:10,padding:"12px 14px",marginBottom:14,fontSize:13}}>
+        <div style={{fontWeight:700,color:"#92400e",marginBottom:4}}>⚠️ Možno podvajanje naloga!</div>
+        <div style={{color:"#78350f",fontSize:12,marginBottom:6}}>Najden obstoječi nalog z isto številko naročnika ali referenco naklada:</div>
+        <div style={{background:"#fff",borderRadius:8,padding:10,fontSize:12,border:"1px solid #fde68a"}}>
+          <div style={{fontWeight:700,color:"#0f2744"}}>{duplikatOpozorilo.stevilka_naloga} · {duplikatOpozorilo.stranka}</div>
+          <div style={{color:"#64748b",marginTop:2}}>{duplikatOpozorilo.nak_kraj} → {duplikatOpozorilo.raz_kraj}</div>
+          {duplikatOpozorilo.stevilka_narocnika && <div style={{color:"#64748b",fontSize:11,marginTop:3}}>📋 Št. naročnika: <b>{duplikatOpozorilo.stevilka_narocnika}</b></div>}
+          {duplikatOpozorilo.nak_referenca && <div style={{color:"#64748b",fontSize:11}}>🏷️ Ref. naklada: <b>{duplikatOpozorilo.nak_referenca}</b></div>}
+        </div>
+        <div style={{color:"#78350f",fontSize:11,marginTop:8,fontStyle:"italic"}}>💡 Lahko vseeno nadaljuješ — to je samo opozorilo.</div>
+      </div>}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px",marginBottom:14}}>
         <div style={{gridColumn:"1/-1"}}>
           <label style={s2.lbl}>Voznik</label>
