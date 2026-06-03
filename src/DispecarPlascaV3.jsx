@@ -796,6 +796,7 @@ function ObracuniTab({obracuni,onSelect}){
   const [iskanje,setIskanje]=useState("");
   const [statusF,setStatusF]=useState("vsi");
   const [odprtiVozniki,setOdprtiVozniki]=useState({});
+  const [mesec,setMesec]=useState(()=>new Date().toISOString().slice(0,7));
 
   useEffect(()=>{
     supabase.from("tedenski_obracuni").select("*, vozniki(id,ime,priimek,vozilo)").order("datum_od",{ascending:false}).then(({data})=>{
@@ -805,8 +806,21 @@ function ObracuniTab({obracuni,onSelect}){
   },[]);
 
   const TARIFA_KM=0.185;const TARIFA_STR=20;const TARIFA_DOPUST=40;
-  const skupajKm=tedenskiOb.reduce((a,o)=>a+(o.km_prevozeni||0),0);
-  const skupajZnesek=tedenskiOb.reduce((a,o)=>a+(o.sestevek||0),0);
+  const MESECI_IMENA=["Januar","Februar","Marec","April","Maj","Junij","Julij","Avgust","September","Oktober","November","December"];
+  const mesecLabel=(ym)=>{const[y,m]=ym.split("-");return`${MESECI_IMENA[parseInt(m,10)-1]} ${y}`;};
+  const razpolozljiviMeseci=[...new Set(tedenskiOb.map(o=>(o.datum_od||"").slice(0,7)).filter(Boolean))].sort().reverse();
+  const filtriraniVsi=tedenskiOb.filter(o=>{
+    if(mesec!=="vsi" && (o.datum_od||"").slice(0,7)!==mesec) return false;
+    if(statusF!=="vsi" && o.status!==statusF) return false;
+    if(iskanje.trim()){
+      const v=o.vozniki; const ime=v?`${v.ime} ${v.priimek}`.toLowerCase():"";
+      const q=iskanje.toLowerCase().trim();
+      if(!ime.includes(q) && !(v?.vozilo||"").toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+  const skupajKm=filtriraniVsi.reduce((a,o)=>a+(o.km_prevozeni||0),0);
+  const skupajZnesek=filtriraniVsi.reduce((a,o)=>a+(o.sestevek||0),0);
 
   if(selOb){
     const o=selOb;const v=o.vozniki;const prevozi=o.prevozi||[];const tankanja=o.tankanja||[];const stroski=o.drugi_stroski||[];
@@ -848,13 +862,19 @@ function ObracuniTab({obracuni,onSelect}){
 
   return(<div>
     <div style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:14,padding:"16px 20px",marginBottom:14,color:"#fff",display:"flex",justifyContent:"space-around"}}>
-      <div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:800}}>{tedenskiOb.length}</div><div style={{fontSize:11,opacity:0.7}}>Obračunov</div></div>
+      <div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:800}}>{filtriraniVsi.length}</div><div style={{fontSize:11,opacity:0.7}}>Obračunov</div></div>
       <div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:800}}>{skupajKm.toLocaleString()} km</div><div style={{fontSize:11,opacity:0.7}}>Skupaj km</div></div>
       <div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:800,color:"#86efac"}}>{skupajZnesek.toFixed(0)} €</div><div style={{fontSize:11,opacity:0.7}}>Za izplačilo</div></div>
     </div>
     <div style={{position:"relative",marginBottom:10}}>
       <input style={{...s.inp,paddingLeft:34}} placeholder="🔍 Išči voznika..." value={iskanje} onChange={e=>setIskanje(e.target.value)}/>
       <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:14,color:"#94a3b8",pointerEvents:"none"}}>🔍</span>
+    </div>
+    <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap",overflowX:"auto"}}>
+      <button style={{...s.fBtn,...(mesec==="vsi"?s.fOn:{})}} onClick={()=>setMesec("vsi")}>📅 Vsi meseci</button>
+      {razpolozljiviMeseci.map(ym=>(
+        <button key={ym} style={{...s.fBtn,...(mesec===ym?s.fOn:{}),whiteSpace:"nowrap"}} onClick={()=>setMesec(ym)}>{mesecLabel(ym)}</button>
+      ))}
     </div>
     <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
       {[["vsi","Vsi"],["poslan","✅ Poslani"],["osnutek","⏳ Osnutki"]].map(([val,lab])=>(
@@ -864,15 +884,7 @@ function ObracuniTab({obracuni,onSelect}){
     {loading&&<div style={{textAlign:"center",padding:20,color:"#94a3b8"}}>⏳ Nalagam...</div>}
     {!loading&&tedenskiOb.length===0&&<div style={s.empty}>Ni tedenskih obračunov.</div>}
     {!loading&&tedenskiOb.length>0&&(()=>{
-      const filtrirani=tedenskiOb.filter(o=>{
-        if(statusF!=="vsi" && o.status!==statusF) return false;
-        if(iskanje.trim()){
-          const v=o.vozniki; const ime=v?`${v.ime} ${v.priimek}`.toLowerCase():"";
-          const q=iskanje.toLowerCase().trim();
-          if(!ime.includes(q) && !(v?.vozilo||"").toLowerCase().includes(q)) return false;
-        }
-        return true;
-      });
+      const filtrirani=filtriraniVsi;
       const skupine={};
       filtrirani.forEach(o=>{
         const vid=o.voznik_id||o.vozniki?.id||"neznan";
