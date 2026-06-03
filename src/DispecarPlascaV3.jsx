@@ -832,6 +832,9 @@ function ObracuniTab({obracuni,onSelect}){
   const [tedenskiOb,setTedenskiOb]=useState([]);
   const [loading,setLoading]=useState(true);
   const [selOb,setSelOb]=useState(null);
+  const [iskanje,setIskanje]=useState("");
+  const [statusF,setStatusF]=useState("vsi");
+  const [odprtiVozniki,setOdprtiVozniki]=useState({});
 
   useEffect(()=>{
     supabase.from("tedenski_obracuni").select("*, vozniki(id,ime,priimek,vozilo)").order("datum_od",{ascending:false}).then(({data})=>{
@@ -888,20 +891,74 @@ function ObracuniTab({obracuni,onSelect}){
       <div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:800}}>{skupajKm.toLocaleString()} km</div><div style={{fontSize:11,opacity:0.7}}>Skupaj km</div></div>
       <div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:800,color:"#86efac"}}>{skupajZnesek.toFixed(0)} €</div><div style={{fontSize:11,opacity:0.7}}>Za izplačilo</div></div>
     </div>
+    <div style={{position:"relative",marginBottom:10}}>
+      <input style={{...s.inp,paddingLeft:34}} placeholder="🔍 Išči voznika..." value={iskanje} onChange={e=>setIskanje(e.target.value)}/>
+      <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:14,color:"#94a3b8",pointerEvents:"none"}}>🔍</span>
+    </div>
+    <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+      {[["vsi","Vsi"],["poslan","✅ Poslani"],["osnutek","⏳ Osnutki"]].map(([val,lab])=>(
+        <button key={val} style={{...s.fBtn,...(statusF===val?s.fOn:{})}} onClick={()=>setStatusF(val)}>{lab}</button>
+      ))}
+    </div>
     {loading&&<div style={{textAlign:"center",padding:20,color:"#94a3b8"}}>⏳ Nalagam...</div>}
     {!loading&&tedenskiOb.length===0&&<div style={s.empty}>Ni tedenskih obračunov.</div>}
-    {tedenskiOb.map(o=>{const v=o.vozniki;return(
-      <button key={o.id} onClick={()=>setSelOb(o)} style={{width:"100%",background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:9,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:"none",cursor:"pointer",textAlign:"left",borderLeft:`4px solid ${o.status==="poslan"?"#16a34a":"#d97706"}`}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div>
-            <div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{v?`${v.ime} ${v.priimek}`:"Voznik"}</div>
-            <div style={{fontSize:12,color:"#64748b"}}>{fmt(o.datum_od+"T00:00:00")} – {fmt(o.datum_do+"T00:00:00")} · {v?.vozilo||""}</div>
-            <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{(o.km_prevozeni||0).toLocaleString()} km · {o.stevilo_strank||0} strank {o.status==="poslan"?"· ✅":"· ⏳"}</div>
-          </div>
-          <div style={{fontWeight:800,fontSize:18,color:"#16a34a"}}>{(o.sestevek||0).toFixed(2)} €</div>
-        </div>
-      </button>
-    );})}
+    {!loading&&tedenskiOb.length>0&&(()=>{
+      const filtrirani=tedenskiOb.filter(o=>{
+        if(statusF!=="vsi" && o.status!==statusF) return false;
+        if(iskanje.trim()){
+          const v=o.vozniki; const ime=v?`${v.ime} ${v.priimek}`.toLowerCase():"";
+          const q=iskanje.toLowerCase().trim();
+          if(!ime.includes(q) && !(v?.vozilo||"").toLowerCase().includes(q)) return false;
+        }
+        return true;
+      });
+      const skupine={};
+      filtrirani.forEach(o=>{
+        const vid=o.voznik_id||o.vozniki?.id||"neznan";
+        if(!skupine[vid]) skupine[vid]={voznik:o.vozniki,obracuni:[]};
+        skupine[vid].obracuni.push(o);
+      });
+      const seznam=Object.entries(skupine).map(([vid,g])=>({
+        vid, voznik:g.voznik,
+        obracuni:g.obracuni.sort((a,b)=>b.datum_od.localeCompare(a.datum_od)),
+        skupajZnesek:g.obracuni.reduce((a,o)=>a+(o.sestevek||0),0),
+        skupajKm:g.obracuni.reduce((a,o)=>a+(o.km_prevozeni||0),0),
+      })).sort((a,b)=>{
+        const an=a.voznik?`${a.voznik.ime} ${a.voznik.priimek}`:""; const bn=b.voznik?`${b.voznik.ime} ${b.voznik.priimek}`:"";
+        return an.localeCompare(bn);
+      });
+      if(seznam.length===0) return <div style={s.empty}>Ni rezultatov za iskanje/filter.</div>;
+      return seznam.map(g=>{
+        const odprt=odprtiVozniki[g.vid];
+        const v=g.voznik;
+        return(<div key={g.vid} style={{background:"#fff",borderRadius:12,marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",overflow:"hidden"}}>
+          <button onClick={()=>setOdprtiVozniki(p=>({...p,[g.vid]:!p[g.vid]}))} style={{width:"100%",background:"none",border:"none",cursor:"pointer",textAlign:"left",padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:38,height:38,borderRadius:"50%",background:"linear-gradient(135deg,#0f2744,#1d4ed8)",color:"#fff",fontSize:15,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{v?v.ime.charAt(0):"?"}</div>
+              <div>
+                <div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{v?`${v.ime} ${v.priimek}`:"Voznik"} <span style={{fontSize:11,color:"#94a3b8",fontWeight:500}}>· {v?.vozilo||""}</span></div>
+                <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{g.obracuni.length} {g.obracuni.length===1?"obračun":g.obracuni.length<5?"obračuni":"obračunov"} · {g.skupajKm.toLocaleString()} km</div>
+              </div>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{fontWeight:800,fontSize:17,color:"#16a34a"}}>{g.skupajZnesek.toFixed(2)} €</div>
+              <span style={{fontSize:16,color:"#94a3b8",transform:odprt?"rotate(180deg)":"none",transition:"transform 0.15s"}}>▼</span>
+            </div>
+          </button>
+          {odprt&&<div style={{borderTop:"1px solid #f1f5f9"}}>
+            {g.obracuni.map(o=>(
+              <button key={o.id} onClick={()=>setSelOb(o)} style={{width:"100%",background:"#f8fafc",border:"none",borderBottom:"1px solid #f1f5f9",cursor:"pointer",textAlign:"left",padding:"11px 16px 11px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",borderLeft:`4px solid ${o.status==="poslan"?"#16a34a":"#d97706"}`}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:600,color:"#0f2744"}}>{fmt(o.datum_od+"T00:00:00")} – {fmt(o.datum_do+"T00:00:00")}</div>
+                  <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{(o.km_prevozeni||0).toLocaleString()} km · {o.stevilo_strank||0} strank · {o.status==="poslan"?"✅ Poslan":"⏳ Osnutek"}</div>
+                </div>
+                <div style={{fontWeight:700,fontSize:15,color:"#16a34a"}}>{(o.sestevek||0).toFixed(2)} €</div>
+              </button>
+            ))}
+          </div>}
+        </div>);
+      });
+    })()}
   </div>);
 }
 
