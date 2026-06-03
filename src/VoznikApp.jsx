@@ -105,40 +105,80 @@ export default function App({ voznikId:propVoznikId=null, voznikIme='', voznikVo
   const showToast = (txt, err) => { setToast({txt,err}); setTimeout(()=>setToast(null),3500); };
   const closeModal = () => { setModal(null); setForm({}); };
   const sprejmiNalog = async (nalog) => { try { const { error } = await supabase.from('nalogi').update({ status: 'sprejet', sprejet_cas: new Date().toISOString() }).eq('id', nalog.id); if (error) throw error; upd(s=>({...s, nalogi:s.nalogi.map(n=>n.id===nalog.id?{...n,status:"sprejet",sprejetCas:new Date().toISOString()}:n)})); if (selectedNalog) setSelectedNalog(n=>({...n,status:"sprejet",sprejetCas:new Date().toISOString()})); showToast("✅ Nalog sprejet!"); } catch(err) { showToast("❌ Napaka!", true); } };
-  const zacniZakljucitev = async (nalog) => {
-    const slike = nalog.cmrSlike?.filter(Boolean) || [];
-    if (slike.length > 0) {
-      // Direkt zaključi z že obstoječimi slikami (brez modala)
-      await zakljuciNalogDirektno(nalog, slike);
-    } else {
-      // Odpri modal za dodajanje slik
-      setForm({ nalogId: nalog.id, slike: [] });
-      setModal("zakljuci");
-    }
+  // Naloži CMR dokumente iz baze za določen nalog
+  const naložiCMRizBaze = async (nalogId) => {
+    try {
+      const { data, error } = await supabase.from('cmr_dokumenti').select('*').eq('nalog_id', nalogId).order('created_at');
+      if (error || !data) return [];
+      return data.map(d => {
+        const { data: urlData } = supabase.storage.from('cmr-dokumenti').getPublicUrl(d.storage_pot);
+        return { id: d.id, url: urlData?.publicUrl, ime: d.ime_datoteke, pot: d.storage_pot };
+      });
+    } catch (err) { console.error('naložiCMRizBaze napaka:', err); return []; }
   };
 
-  const zakljuciNalogDirektno = async (nalog, slike) => {
-    try {
-      for (const sl of slike) {
-        // Skip že naložene slike (imajo .pot)
-        if (sl.pot) continue;
-        const base64 = sl.img.split(',')[1];
+  // Odpri nalog + naloži obstoječe CMR slike iz baze
+  const odpriNalog = async (nalog) => {
+    setSelectedNalog({ ...nalog, cmrSlike: [], _cmrLoading: true });
+    const cmr = await naložiCMRizBaze(nalog.id);
+    setSelectedNalog(prev => (prev && prev.id === nalog.id) ? { ...prev, cmrSlike: cmr, _cmrLoading: false } : prev);
+  };
+
+  // Osveži CMR slike v odprtem nalogu
+  const osveziCMR = async () => {
+    if (!selectedNalog) return;
+    const cmr = await naložiCMRizBaze(selectedNalog.id);
+    setSelectedNalog(prev => prev ? { ...prev, cmrSlike: cmr } : prev);
+  };
+
+  // Dodaj CMR sliko — TAKOJ naloži v bazo (deluje za sprejet IN zaključen nalog)
+  const dodajCMRvNalog = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !selectedNalog) return;
+    const nalogId = selectedNalog.id;
+    showToast("⏳ Optimizacija slike...");
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const optimized = await optimizejSliko(ev.target.result);
+        const base64 = optimized.split(',')[1];
         const byteArr = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
         const blob = new Blob([byteArr], { type: 'image/jpeg' });
-        const pot = `${nalog.id}/${Date.now()}-${sl.ime || 'cmr.jpg'}`;
+        const pot = `${nalogId}/${Date.now()}-${file.name || 'cmr.jpg'}`;
         const { error: upErr } = await supabase.storage.from('cmr-dokumenti').upload(pot, blob, { contentType: 'image/jpeg', upsert: false });
         if (upErr) throw upErr;
-        await supabase.from('cmr_dokumenti').insert([{ nalog_id: nalog.id, ime_datoteke: sl.ime || 'cmr.jpg', storage_pot: pot }]);
-      }
+        const { error: insErr } = await supabase.from('cmr_dokumenti').insert([{ nalog_id: nalogId, ime_datoteke: file.name || 'cmr.jpg', storage_pot: pot }]);
+        if (insErr) throw insErr;
+        await osveziCMR();
+        showToast("✅ CMR naložen!");
+      } catch (err) { showToast("❌ Napaka pri nalaganju CMR!", true); console.error(err); }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  // Izbriši CMR sliko — iz baze IN iz storage
+  const izbrisiCMRizNaloga = async (cmr) => {
+    if (!cmr?.id) return;
+    if (!window.confirm("Izbrišem ta CMR dokument? Tega ni mogoče razveljaviti.")) return;
+    try {
+      if (cmr.pot) { await supabase.storage.from('cmr-dokumenti').remove([cmr.pot]); }
+      const { error } = await supabase.from('cmr_dokumenti').delete().eq('id', cmr.id);
+      if (error) throw error;
+      await osveziCMR();
+      showToast("🗑️ CMR izbrisan.");
+    } catch (err) { showToast("❌ Napaka pri brisanju!", true); console.error(err); }
+  };
+
+  // Zaključi nalog (CMR-ji se nalagajo sproti, zato samo nastavimo status)
+  const zakljuciNalog = async (nalog) => {
+    try {
       const { error } = await supabase.from('nalogi').update({ status: 'zakljucen', zakljucen_cas: new Date().toISOString() }).eq('id', nalog.id);
       if (error) throw error;
       upd(s => ({ ...s, nalogi: s.nalogi.map(n => n.id === nalog.id ? { ...n, status: "zakljucen", zakljucenCas: new Date().toISOString() } : n) }));
-      setSelectedNalog(null);
+      setSelectedNalog(prev => prev ? { ...prev, status: "zakljucen", zakljucenCas: new Date().toISOString() } : prev);
       showToast("✅ Nalog zaključen!");
-    } catch (err) {
-      showToast("❌ Napaka!", true);
-      console.error(err);
-    }
+    } catch (err) { showToast("❌ Napaka!", true); console.error(err); }
   };
   const dodajSlikoCMR = async (e) => { const file = e.target.files[0]; if (!file) return; showToast("⏳ Optimizacija slike..."); const reader = new FileReader(); reader.onload = async (ev) => { const optimized = await optimizejSliko(ev.target.result); setForm(f => ({...f, slike:[...(f.slike||[]), {img:optimized, ime:file.name, cas:new Date().toISOString()}]})); showToast("✅ Slika optimizirana!"); }; reader.readAsDataURL(file); e.target.value=""; };
   const odstraniSliko = (idx) => setForm(f=>({...f, slike:(f.slike||[]).filter((_,i)=>i!==idx)}));
@@ -146,13 +186,13 @@ export default function App({ voznikId:propVoznikId=null, voznikIme='', voznikVo
   const novihNalogov = st.nalogi.filter(n=>n.status==="nov"||n.status==="poslan").length;
   const nepovezanihCMR = (st.prostiCMR||[]).filter(c=>!c.povezan).length;
   if (!voznikId) return null;
-  if (selectedNalog) { const live = st.nalogi.find(n=>n.id===selectedNalog.id); return (<div style={s.wrap}><NalogDetail nalog={live} onBack={()=>setSelectedNalog(null)} onSprejmi={()=>sprejmiNalog(live)} onZakljuci={()=>zacniZakljucitev(live)} onDodajCMR={async(e)=>{ const file=e.target.files[0]; if(!file)return; showToast("⏳ Optimizacija..."); const reader=new FileReader(); reader.onload=async(ev)=>{ const optimized=await optimizejSliko(ev.target.result); const novaSlika={img:optimized,ime:file.name,cas:new Date().toISOString()}; upd(s=>({...s,nalogi:s.nalogi.map(n=>n.id===live.id?{...n,cmrSlike:[...(n.cmrSlike||[]),novaSlika]}:n)})); setSelectedNalog(prev=>({...prev,cmrSlike:[...(prev.cmrSlike||[]),novaSlika]})); showToast("✅ CMR dodana!"); }; reader.readAsDataURL(file); e.target.value=""; }}/>{modal==="zakljuci" && <ZakljuciModal form={form} nalog={st.nalogi.find(n=>n.id===form.nalogId)} dodajSlikoCMR={dodajSlikoCMR} odstraniSliko={odstraniSliko} onPotrdi={potrdiZakljucitev} onClose={closeModal}/>}{toast && <Toast toast={toast}/>}</div>); }
+  if (selectedNalog) { const live = { ...(st.nalogi.find(n=>n.id===selectedNalog.id)||{}), ...selectedNalog }; return (<div style={s.wrap}><NalogDetail nalog={live} cmrSlike={selectedNalog.cmrSlike||[]} cmrLoading={selectedNalog._cmrLoading} onBack={()=>setSelectedNalog(null)} onSprejmi={()=>sprejmiNalog(live)} onZakljuci={()=>zakljuciNalog(live)} onDodajCMR={dodajCMRvNalog} onIzbrisiCMR={izbrisiCMRizNaloga} onOsveziCMR={osveziCMR}/>{toast && <Toast toast={toast}/>}</div>); }
   return (<div style={s.wrap}>
     <div style={s.header}><div style={s.hRow}><div><div style={s.logo}>🚛 TransApp</div><div style={s.sub}>{voznikIme} · {voznikVozilo}</div></div><div style={{display:"flex",alignItems:"center",gap:8}}>{novihNalogov>0 && <div style={s.redBadge}>{novihNalogov} nov{novihNalogov>1?"a":""}</div>}{onOdjava && <button style={{background:"rgba(255,255,255,0.2)",border:"none",color:"#fff",padding:"5px 12px",borderRadius:8,fontSize:12,cursor:"pointer",fontWeight:600}} onClick={onOdjava}>Odjava</button>}</div></div></div>
     {toast && <Toast toast={toast}/>}
     <div style={s.content}>
       {tab==="obracun" && <ObracunTab st={st} showToast={showToast} voznikId={voznikId}/>}
-      {tab==="nalogi" && <NalogiTab nalogi={st.nalogi} onSelect={setSelectedNalog}/>}
+      {tab==="nalogi" && <NalogiTab nalogi={st.nalogi} onSelect={odpriNalog}/>}
       {tab==="vzdrzevanje" && <VzdrzevanjeTab voznikId={voznikId} showToast={showToast}/>}
       {tab==="dopust" && <DopustTab voznikId={voznikId} showToast={showToast}/>}
       {tab==="prosticmr" && <ProstiCMRTab st={st} upd={upd} showToast={showToast}/>}
@@ -611,7 +651,49 @@ function DopustTab({ voznikId, showToast }) {
 function NalogiTab({nalogi,onSelect}){const [filter,setFilter]=useState("aktivni");const filtered=nalogi.filter(n=>filter==="aktivni"?(n.status==="nov"||n.status==="poslan"||n.status==="sprejet"):filter==="zakljuceni"?n.status==="zakljucen":true).sort((a,b)=>new Date(b.poslan)-new Date(a.poslan));const sc={nov:{color:"#64748b"},poslan:{color:"#2563eb"},sprejet:{color:"#d97706"},zakljucen:{color:"#16a34a"}};return(<div><div style={s.filterRow}>{[["aktivni","Aktivni"],["zakljuceni","Zaključeni"],["vsi","Vsi"]].map(([f,l])=><button key={f} style={{...s.filterBtn,...(filter===f?s.filterOn:{})}} onClick={()=>setFilter(f)}>{l}</button>)}</div>{filtered.length===0&&<div style={s.empty}>{filter==="aktivni"?"🎉 Ni aktivnih nalogov.":"Ni nalogov."}</div>}{filtered.map(n=><button key={n.id} style={s.nalogRow} onClick={()=>onSelect(n)}><div style={s.nalogRowLeft}><div style={{width:10,height:10,borderRadius:"50%",background:sc[n.status]?.color||"#94a3b8",marginRight:12,marginTop:4,flexShrink:0}}/><div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:"#2563eb",fontFamily:"monospace",marginBottom:3}}>📋 {n.stevilkaNaloga}</div><div style={{fontSize:16,fontWeight:700,color:"#0f2744",marginBottom:2}}>{n.nakKraj} → {n.razKraj}</div><div style={{fontSize:13,color:"#64748b",marginBottom:1}}>{n.stranka}</div><div style={{fontSize:12,color:"#94a3b8"}}>{fmt(n.nakDatum)} – {fmt(n.razDatum)}</div></div></div><div style={{fontSize:22,color:"#94a3b8",marginLeft:8}}>›</div></button>)}</div>);}
 
 /* ===== NALOG DETAIL ===== */
-function NalogDetail({nalog,onBack,onSprejmi,onZakljuci,onDodajCMR}){if(!nalog)return null;const si={nov:{label:"Nov",color:"#64748b",bg:"#f8fafc",icon:"🔘"},poslan:{label:"Poslan",color:"#2563eb",bg:"#eff6ff",icon:"📤"},sprejet:{label:"Sprejet",color:"#d97706",bg:"#fffbeb",icon:"✅"},zakljucen:{label:"Zaključen",color:"#16a34a",bg:"#f0fdf4",icon:"✔️"}}[nalog.status]||{};const slike=nalog.cmrSlike?.filter(Boolean)||[];return(<div style={s.wrap}><div style={s.header}><button style={s.backBtn} onClick={onBack}>← Nazaj</button><div style={{fontSize:13,opacity:0.75,marginBottom:2}}>{nalog.stevilkaNaloga} · {nalog.stranka}</div><div style={{fontSize:18,fontWeight:800}}>{nalog.nakKraj} → {nalog.razKraj}</div></div><div style={{...s.content,paddingBottom:120}}><div style={{...s.statusCard,background:si.bg,borderColor:si.color+"33"}}><span style={{...s.statusPill2,background:si.color+"22",color:si.color}}>{si.icon} {si.label}</span>{nalog.sprejetCas&&<div style={s.statusMeta}>Sprejet: {fmt(nalog.sprejetCas)} ob {fmtT(nalog.sprejetCas)}</div>}{nalog.zakljucenCas&&<div style={s.statusMeta}>Zaključen: {fmt(nalog.zakljucenCas)} ob {fmtT(nalog.zakljucenCas)}</div>}</div><Sec title="📦 Blago"><IR label="Blago" val={nalog.blago}/><IR label="Količina" val={nalog.kolicina}/><IR label="Teža" val={nalog.teza}/></Sec><Sec title="📍 Naklad"><IR label="Firma" val={nalog.nakFirma||"–"} bold/><IR label="Naslov" val={nalog.nakNaslov}/><IR label="Referenca" val={nalog.nakReferenca} mono/><IR label="Datum" val={`${fmt(nalog.nakDatum)} ob ${nalog.nakCas}`}/></Sec><Sec title="🏁 Razklad"><IR label="Firma" val={nalog.razFirma||"–"} bold/><IR label="Naslov" val={nalog.razNaslov}/><IR label="Referenca" val={nalog.razReferenca} mono/><IR label="Datum" val={`${fmt(nalog.razDatum)} ob ${nalog.razCas}`}/></Sec>{nalog.navodila&&<Sec title="⚠️ Navodila"><div style={s.navodilaBox}>{nalog.navodila}</div></Sec>}<div style={{background:"#fff",borderRadius:14,padding:"14px 16px",marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:slike.length>0?12:8}}><div style={{fontSize:13,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5}}>📄 CMR {slike.length>0&&<span style={{background:"#16a34a",color:"#fff",borderRadius:20,padding:"1px 8px",fontSize:11,marginLeft:4}}>{slike.length}</span>}</div>{nalog.status==="sprejet"&&<div><input type="file" accept="image/*" capture="environment" id="cmr-inline" style={{display:"none"}} onChange={onDodajCMR}/><label htmlFor="cmr-inline" style={{background:"#0f2744",color:"#fff",padding:"7px 14px",borderRadius:10,fontWeight:700,fontSize:13,cursor:"pointer"}}>📷 Fotografiraj</label></div>}</div>{slike.length===0?<div style={{textAlign:"center",padding:"16px 0",color:"#94a3b8",fontSize:13}}>{nalog.status==="sprejet"?"Fotografiraj CMR.":nalog.status==="poslan"?"CMR po sprejemu.":"Ni CMR."}</div>:<div><div style={s.cmrGrid}>{slike.map((sl,i)=><div key={i} style={s.cmrThumbWrap}><img src={sl.img||sl.url} alt={`CMR ${i+1}`} style={s.cmrThumb}/><div style={s.cmrThumbLabel}>✅ {i+1}</div></div>)}{nalog.status==="sprejet"&&<div style={s.cmrThumbWrap}><input type="file" accept="image/*" capture="environment" id="cmr-inline3" style={{display:"none"}} onChange={onDodajCMR}/><label htmlFor="cmr-inline3" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",width:"100%",aspectRatio:"3/4",border:"2px dashed #cbd5e1",borderRadius:8,cursor:"pointer",background:"#f8fafc"}}><span style={{fontSize:24}}>📷</span><span style={{fontSize:11,color:"#64748b",marginTop:4}}>Dodaj</span></label></div>}</div>{nalog.status==="zakljucen"&&<div style={s.cmrPoslan}>✅ CMR poslan</div>}</div>}</div><div style={s.metaBox}>Poslan: {fmt(nalog.poslan)} ob {fmtT(nalog.poslan)}</div></div><div style={s.actionBar}>{nalog.status==="poslan"&&<button style={s.btnPrimary} onClick={onSprejmi}>✅ Sprejmi nalog</button>}{nalog.status==="sprejet"&&<div style={{display:"flex",flexDirection:"column",gap:8}}><div style={{fontSize:12,color:"#64748b",textAlign:"center"}}>{slike.length>0?`✅ ${slike.length} CMR slik`:"💡 Fotografiraj CMR"}</div><button style={s.btnSuccess} onClick={onZakljuci}>{slike.length>0?"📤 Zaključi & pošlji CMR":"📸 Zaključi (brez CMR)"}</button></div>}{nalog.status==="zakljucen"&&<div style={s.zakljucenoBar}>✅ Nalog zaključen</div>}</div></div>);}
+function NalogDetail({nalog,cmrSlike=[],cmrLoading=false,onBack,onSprejmi,onZakljuci,onDodajCMR,onIzbrisiCMR,onOsveziCMR}){
+  if(!nalog)return null;
+  const si={nov:{label:"Nov",color:"#64748b",bg:"#f8fafc",icon:"🔘"},poslan:{label:"Poslan",color:"#2563eb",bg:"#eff6ff",icon:"📤"},sprejet:{label:"Sprejet",color:"#d97706",bg:"#fffbeb",icon:"✅"},zakljucen:{label:"Zaključen",color:"#16a34a",bg:"#f0fdf4",icon:"✔️"}}[nalog.status]||{};
+  const slike=cmrSlike?.filter(Boolean)||[];
+  // CMR lahko dodajamo/brišemo ko je nalog sprejet ALI zaključen
+  const lahkoUrejaCMR = nalog.status==="sprejet" || nalog.status==="zakljucen";
+  return(<div style={s.wrap}>
+    <div style={s.header}><button style={s.backBtn} onClick={onBack}>← Nazaj</button><div style={{fontSize:13,opacity:0.75,marginBottom:2}}>{nalog.stevilkaNaloga} · {nalog.stranka}</div><div style={{fontSize:18,fontWeight:800}}>{nalog.nakKraj} → {nalog.razKraj}</div></div>
+    <div style={{...s.content,paddingBottom:120}}>
+      <div style={{...s.statusCard,background:si.bg,borderColor:si.color+"33"}}><span style={{...s.statusPill2,background:si.color+"22",color:si.color}}>{si.icon} {si.label}</span>{nalog.sprejetCas&&<div style={s.statusMeta}>Sprejet: {fmt(nalog.sprejetCas)} ob {fmtT(nalog.sprejetCas)}</div>}{nalog.zakljucenCas&&<div style={s.statusMeta}>Zaključen: {fmt(nalog.zakljucenCas)} ob {fmtT(nalog.zakljucenCas)}</div>}</div>
+      <Sec title="📦 Blago"><IR label="Blago" val={nalog.blago}/><IR label="Količina" val={nalog.kolicina}/><IR label="Teža" val={nalog.teza}/></Sec>
+      <Sec title="📍 Naklad"><IR label="Firma" val={nalog.nakFirma||"–"} bold/><IR label="Naslov" val={nalog.nakNaslov}/><IR label="Referenca" val={nalog.nakReferenca} mono/><IR label="Datum" val={`${fmt(nalog.nakDatum)} ob ${nalog.nakCas}`}/></Sec>
+      <Sec title="🏁 Razklad"><IR label="Firma" val={nalog.razFirma||"–"} bold/><IR label="Naslov" val={nalog.razNaslov}/><IR label="Referenca" val={nalog.razReferenca} mono/><IR label="Datum" val={`${fmt(nalog.razDatum)} ob ${nalog.razCas}`}/></Sec>
+      {nalog.navodila&&<Sec title="⚠️ Navodila"><div style={s.navodilaBox}>{nalog.navodila}</div></Sec>}
+      <div style={{background:"#fff",borderRadius:14,padding:"14px 16px",marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5}}>📄 CMR {slike.length>0&&<span style={{background:"#16a34a",color:"#fff",borderRadius:20,padding:"1px 8px",fontSize:11,marginLeft:4}}>{slike.length}</span>}</div>
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <button onClick={onOsveziCMR} style={{background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:8,padding:"6px 10px",fontSize:12,cursor:"pointer",color:"#64748b",fontWeight:600}}>🔄</button>
+            {lahkoUrejaCMR&&<><input type="file" accept="image/*" capture="environment" id="cmr-add-hdr" style={{display:"none"}} onChange={onDodajCMR}/><label htmlFor="cmr-add-hdr" style={{background:"#0f2744",color:"#fff",padding:"7px 14px",borderRadius:10,fontWeight:700,fontSize:13,cursor:"pointer"}}>📷 Fotografiraj</label></>}
+          </div>
+        </div>
+        {cmrLoading?<div style={{textAlign:"center",padding:"16px 0",color:"#94a3b8",fontSize:13}}>⏳ Nalagam CMR...</div>:
+          slike.length===0?<div style={{textAlign:"center",padding:"16px 0",color:"#94a3b8",fontSize:13}}>{lahkoUrejaCMR?"Še ni CMR — klikni 📷 Fotografiraj.":nalog.status==="poslan"?"CMR po sprejemu naloga.":"Ni CMR."}</div>:
+          <div><div style={s.cmrGrid}>
+            {slike.map((sl,i)=><div key={sl.id||i} style={{...s.cmrThumbWrap,position:"relative"}}>
+              <a href={sl.url||sl.img} target="_blank" rel="noopener noreferrer"><img src={sl.url||sl.img} alt={`CMR ${i+1}`} style={s.cmrThumb}/></a>
+              <div style={s.cmrThumbLabel}>✅ {i+1}</div>
+              {lahkoUrejaCMR&&sl.id&&<button onClick={()=>onIzbrisiCMR(sl)} style={{position:"absolute",top:4,right:4,background:"#dc2626",color:"#fff",border:"none",borderRadius:"50%",width:24,height:24,fontSize:13,cursor:"pointer",fontWeight:700,lineHeight:"24px",padding:0,boxShadow:"0 1px 4px rgba(0,0,0,0.3)"}}>✕</button>}
+            </div>)}
+            {lahkoUrejaCMR&&<div style={s.cmrThumbWrap}><input type="file" accept="image/*" capture="environment" id="cmr-add-tile" style={{display:"none"}} onChange={onDodajCMR}/><label htmlFor="cmr-add-tile" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",width:"100%",aspectRatio:"3/4",border:"2px dashed #cbd5e1",borderRadius:8,cursor:"pointer",background:"#f8fafc"}}><span style={{fontSize:24}}>📷</span><span style={{fontSize:11,color:"#64748b",marginTop:4}}>Dodaj</span></label></div>}
+          </div></div>}
+        {nalog.status==="zakljucen"&&<div style={{fontSize:11,color:"#94a3b8",textAlign:"center",marginTop:8}}>💡 CMR lahko dodajaš ali brišeš tudi po zaključitvi.</div>}
+      </div>
+      <div style={s.metaBox}>Poslan: {fmt(nalog.poslan)} ob {fmtT(nalog.poslan)}</div>
+    </div>
+    <div style={s.actionBar}>
+      {nalog.status==="poslan"&&<button style={s.btnPrimary} onClick={onSprejmi}>✅ Sprejmi nalog</button>}
+      {nalog.status==="sprejet"&&<div style={{display:"flex",flexDirection:"column",gap:8}}><div style={{fontSize:12,color:"#64748b",textAlign:"center"}}>{slike.length>0?`✅ ${slike.length} CMR slik naloženih`:"💡 Fotografiraj CMR (lahko tudi po zaključitvi)"}</div><button style={s.btnSuccess} onClick={()=>{if(slike.length===0&&!window.confirm("Zaključujem brez CMR. CMR lahko dodaš tudi kasneje. Nadaljujem?"))return;onZakljuci();}}>✔️ Zaključi nalog</button></div>}
+      {nalog.status==="zakljucen"&&<div style={s.zakljucenoBar}>✅ Nalog zaključen</div>}
+    </div>
+  </div>);
+}
 
 /* ===== ZAKLJUČI MODAL ===== */
 function ZakljuciModal({form,nalog,dodajSlikoCMR,odstraniSliko,onPotrdi,onClose}){const slike=(form.slike||[]).filter(Boolean);return(<div style={s.overlay}><div style={{...s.modalBox,maxHeight:"95vh"}}><div style={s.modalHead}><span style={s.modalTitle}>Zaključi nalog</span><button style={s.closeBtn} onClick={onClose}>✕</button></div><div style={s.modalBody}><div style={s.infoBox}><b>{nalog?.stranka}</b><br/><span style={{fontSize:13,color:"#475569"}}>{nalog?.stevilkaNaloga}</span></div><div style={{marginBottom:10}}><div style={s.label}>📸 CMR</div><div style={{fontSize:12,color:"#64748b",marginBottom:12}}>Dodaj slike.</div></div>{slike.length>0&&<div style={s.cmrGallery}>{slike.map((sl,i)=><div key={i} style={s.cmrGalleryItem}><img src={sl.img} alt={`CMR ${i+1}`} style={s.cmrGalleryImg}/><button style={s.cmrOdstraniBtn} onClick={()=>odstraniSliko(i)}>✕</button><div style={s.cmrGalleryLbl}>✅ {i+1}.</div></div>)}</div>}<input type="file" accept="image/*" capture="environment" id="cmr-add" style={{display:"none"}} onChange={dodajSlikoCMR}/><label htmlFor="cmr-add" style={s.cmrDodajBtn}>📷 {slike.length===0?"Fotografiraj CMR":"+ Dodaj"}</label>{slike.length>0&&<div style={s.cmrSteviloBadge}>✅ {slike.length} {slike.length===1?"slika":"slik"}</div>}<button style={s.btnPrimary} onClick={onPotrdi}>Zaključi & pošlji →</button></div></div></div>);}
