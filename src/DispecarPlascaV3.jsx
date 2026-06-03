@@ -119,46 +119,7 @@ export default function DispecarPlasca() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // ===== REALTIME SYNC =====
-  // Avtomatsko osveži podatke ko voznik karkoli spremeni
-  useEffect(() => {
-    const channel = supabase.channel("dispatcher-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "nalogi" }, (payload) => {
-        console.log("🔄 Realtime: nalogi spremenjeni", payload.eventType, payload.new?.stevilka_naloga || payload.old?.stevilka_naloga);
-        naložiPodatke();
-        if (payload.eventType === "UPDATE" && payload.new) {
-          const stari = payload.old?.status;
-          const nov = payload.new?.status;
-          if (stari !== nov) {
-            const stevilka = payload.new.stevilka_naloga || "Nalog";
-            const statusLabel = SC[nov]?.label || nov;
-            showToast(`🔄 ${stevilka}: ${statusLabel}`);
-          }
-        }
-      })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "cmr_dokumenti" }, (payload) => {
-        console.log("📄 Realtime: nov CMR dokument", payload.new);
-        naložiPodatke();
-        showToast("📄 Voznik je naložil CMR!");
-      })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "prosti_cmr" }, (payload) => {
-        console.log("📸 Realtime: nov prosti CMR", payload.new);
-        naložiPodatke();
-        const stev = payload.new?.stevilka_naloga || "";
-        showToast(`📸 Nov prosti CMR${stev ? ` (${stev})` : ""}!`);
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "tedenski_obracuni" }, (payload) => {
-        console.log("💶 Realtime: obračun spremenjen", payload.eventType);
-        if (payload.eventType === "INSERT" || (payload.eventType === "UPDATE" && payload.new?.status === "poslan" && payload.old?.status !== "poslan")) {
-          showToast("💶 Nov tedenski obračun!");
-        }
-      })
-      .subscribe((status) => {
-        console.log("📡 Realtime status:", status);
-      });
-
-    return () => { supabase.removeChannel(channel); };
-  }, []);
+  
 
   const naložiPodatke = async () => {
     setLoading(true);
