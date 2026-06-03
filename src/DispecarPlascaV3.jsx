@@ -850,7 +850,7 @@ function ObracuniTab({obracuni,onSelect}){
     const zaslStr2=stroski.reduce((a,x)=>a+(parseFloat(x.znesek)||0),0);
     const natisniObracun=()=>{window.print();};
     return(<div>
-      <style>{`@media print { body * { visibility: hidden; } .print-area, .print-area * { visibility: visible; } .print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; } .no-print { display: none !important; } }`}</style>
+      <style>{`@media print { @page { size: A4 portrait; margin: 10mm; } html,body { margin:0; padding:0; background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; } body * { visibility: hidden; } .print-area, .print-area * { visibility: visible; } .print-area { position: absolute; left: 0; top: 0; width: 190mm; max-width: 190mm; box-sizing: border-box; padding: 0; margin: 0; -webkit-print-color-adjust:exact; print-color-adjust:exact; } .print-area * { box-sizing: border-box !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; } .no-print { display: none !important; } }`}</style>
       <div className="no-print" style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
         <button style={s.fBtn} onClick={()=>setSelOb(null)}>← Nazaj</button>
         <button style={{...s.btnSm,marginLeft:"auto",background:"#16a34a"}} onClick={natisniObracun}>🖨️ Natisni / Shrani PDF</button>

@@ -360,7 +360,7 @@ function ObracuniPanel(){
 
     return(
       <div>
-        <style>{`@media print { body * { visibility: hidden; } .print-area, .print-area * { visibility: visible; } .print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; } .no-print { display: none !important; } }`}</style>
+        <style>{`@media print { @page { size: A4 portrait; margin: 10mm; } html,body { margin:0; padding:0; background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; } body * { visibility: hidden; } .print-area, .print-area * { visibility: visible; } .print-area { position: absolute; left: 0; top: 0; width: 190mm; max-width: 190mm; box-sizing: border-box; padding: 0; margin: 0; -webkit-print-color-adjust:exact; print-color-adjust:exact; } .print-area * { box-sizing: border-box !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; } .no-print { display: none !important; } }`}</style>
 
         <div className="no-print" style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
           <button onClick={()=>setSelOb(null)} style={{padding:"8px 14px",borderRadius:10,border:"1px solid #e2e8f0",background:"#fff",fontSize:13,fontWeight:600,color:"#64748b",cursor:"pointer"}}>← Nazaj</button>
