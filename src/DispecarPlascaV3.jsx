@@ -423,12 +423,18 @@ je_slovenska_ddv: form.jeSlovenskaDdv!==undefined?form.jeSlovenskaDdv:null,
   };
   const izbrisiNalog=async(id)=>{
     try {
+      // Najprej zbrisi povezane CMR dokumente (sicer 409 Conflict zaradi foreign key)
+      await supabase.from('cmr_dokumenti').delete().eq('nalog_id',id);
+      // Odvezi morebitne proste CMR-je
+      await supabase.from('prosti_cmr').update({povezan:false,nalog_id:null}).eq('nalog_id',id);
+      // Zdaj zbrisi nalog
       const { error } = await supabase.from('nalogi').delete().eq('id',id);
       if(error) throw error;
       upd(s=>({...s,nalogi:s.nalogi.filter(n=>n.id!==id)}));
-      setSelNalog(null);showToast("Nalog izbrisan.");
+      setSelNalog(null);showToast("✅ Nalog izbrisan.");
     } catch(err) {
-      showToast("❌ Napaka pri brisanju!",true);
+      console.error('Brisanje napaka:',err);
+      showToast("❌ Napaka pri brisanju: "+(err.message||""),true);
     }
   };
 
