@@ -320,6 +320,8 @@ function ObracuniPanel(){
   const [selOb,setSelOb]=useState(null);
   const [filter,setFilter]=useState("vsi");
   const [search,setSearch]=useState("");
+  const [mesec,setMesec]=useState(()=>new Date().toISOString().slice(0,7));
+  const [odprtiVozniki,setOdprtiVozniki]=useState({});
 
   useEffect(()=>{
     setLoading(true);
@@ -332,8 +334,12 @@ function ObracuniPanel(){
   const TARIFA_KM=0.185;
   const TARIFA_STR=20;
   const TARIFA_DOPUST=40;
+  const MESECI_IMENA=["Januar","Februar","Marec","April","Maj","Junij","Julij","Avgust","September","Oktober","November","December"];
+  const mesecLabel=(ym)=>{const[y,m]=ym.split("-");return`${MESECI_IMENA[parseInt(m,10)-1]} ${y}`;};
+  const razpolozljiviMeseci=[...new Set(obracuni.map(o=>(o.datum_od||"").slice(0,7)).filter(Boolean))].sort().reverse();
 
   const filtered=obracuni.filter(o=>{
+    if(mesec!=="vsi" && (o.datum_od||"").slice(0,7)!==mesec) return false;
     if(filter==="osnutek" && o.status!=="osnutek") return false;
     if(filter==="poslan" && o.status!=="poslan") return false;
     if(!search.trim()) return true;
@@ -457,6 +463,12 @@ function ObracuniPanel(){
         {search && <button onClick={()=>setSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"#e2e8f0",border:"none",borderRadius:"50%",width:20,height:20,fontSize:11,cursor:"pointer",color:"#64748b"}}>✕</button>}
       </div>
 
+      <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap",overflowX:"auto"}}>
+        <button onClick={()=>setMesec("vsi")} style={{padding:"6px 12px",borderRadius:20,border:"1.5px solid #e2e8f0",background:mesec==="vsi"?"#0f2744":"#fff",color:mesec==="vsi"?"#fff":"#475569",fontSize:12,fontWeight:mesec==="vsi"?700:500,cursor:"pointer",whiteSpace:"nowrap"}}>📅 Vsi meseci</button>
+        {razpolozljiviMeseci.map(ym=>(
+          <button key={ym} onClick={()=>setMesec(ym)} style={{padding:"6px 12px",borderRadius:20,border:"1.5px solid #e2e8f0",background:mesec===ym?"#0f2744":"#fff",color:mesec===ym?"#fff":"#475569",fontSize:12,fontWeight:mesec===ym?700:500,cursor:"pointer",whiteSpace:"nowrap"}}>{mesecLabel(ym)}</button>
+        ))}
+      </div>
       <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
         {[["vsi","Vsi"],["poslan","✅ Poslani"],["osnutek","⏳ Osnutki"]].map(([v,l])=>(
           <button key={v} onClick={()=>setFilter(v)} style={{padding:"6px 12px",borderRadius:20,border:"1.5px solid #e2e8f0",background:filter===v?"#0f2744":"#fff",color:filter===v?"#fff":"#475569",fontSize:12,fontWeight:filter===v?700:500,cursor:"pointer"}}>{l}</button>
@@ -465,21 +477,54 @@ function ObracuniPanel(){
 
       {loading && <div style={{textAlign:"center",padding:20,color:"#94a3b8"}}>⏳ Nalagam...</div>}
       {!loading && filtered.length===0 && <div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>Ni obračunov za prikaz.</div>}
-      {filtered.map(o=>{
-        const v=o.vozniki;
-        return(
-          <button key={o.id} onClick={()=>setSelOb(o)} style={{width:"100%",background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:9,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:"none",cursor:"pointer",textAlign:"left",borderLeft:`4px solid ${o.status==="poslan"?"#16a34a":"#d97706"}`}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div>
-                <div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{v?`${v.ime} ${v.priimek}`:"Voznik"}</div>
-                <div style={{fontSize:12,color:"#64748b"}}>{fmt(o.datum_od)} – {fmt(o.datum_do)} · {v?.vozilo||""}</div>
-                <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{(o.km_prevozeni||0).toLocaleString()} km · {o.stevilo_strank||0} strank · {o.status==="poslan"?"✅ Poslan":"⏳ Osnutek"}</div>
+      {!loading && filtered.length>0 && (()=>{
+        const skupine={};
+        filtered.forEach(o=>{
+          const vid=o.voznik_id||o.vozniki?.id||"neznan";
+          if(!skupine[vid]) skupine[vid]={voznik:o.vozniki,obracuni:[]};
+          skupine[vid].obracuni.push(o);
+        });
+        const stEnota=(n)=>n===1?"obračun":n===2?"obračuna":n<5?"obračuni":"obračunov";
+        const seznam=Object.entries(skupine).map(([vid,g])=>({
+          vid, voznik:g.voznik,
+          obracuni:g.obracuni.sort((a,b)=>(b.datum_od||"").localeCompare(a.datum_od||"")),
+          skupajZnesek:g.obracuni.reduce((a,o)=>a+(o.sestevek||0),0),
+          skupajKm:g.obracuni.reduce((a,o)=>a+(o.km_prevozeni||0),0),
+        })).sort((a,b)=>{
+          const an=a.voznik?`${a.voznik.ime} ${a.voznik.priimek}`:""; const bn=b.voznik?`${b.voznik.ime} ${b.voznik.priimek}`:"";
+          return an.localeCompare(bn);
+        });
+        return seznam.map(g=>{
+          const odprt=odprtiVozniki[g.vid];
+          const v=g.voznik;
+          return(<div key={g.vid} style={{background:"#fff",borderRadius:12,marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",overflow:"hidden"}}>
+            <button onClick={()=>setOdprtiVozniki(p=>({...p,[g.vid]:!p[g.vid]}))} style={{width:"100%",background:"none",border:"none",cursor:"pointer",textAlign:"left",padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:38,height:38,borderRadius:"50%",background:"linear-gradient(135deg,#0f2744,#1d4ed8)",color:"#fff",fontSize:15,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{v?v.ime.charAt(0):"?"}</div>
+                <div>
+                  <div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{v?`${v.ime} ${v.priimek}`:"Voznik"} <span style={{fontSize:11,color:"#94a3b8",fontWeight:500}}>· {v?.vozilo||""}</span></div>
+                  <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{g.obracuni.length} {stEnota(g.obracuni.length)} · {g.skupajKm.toLocaleString()} km</div>
+                </div>
               </div>
-              <div style={{fontWeight:800,fontSize:18,color:"#16a34a"}}>{(o.sestevek||0).toFixed(2)} €</div>
-            </div>
-          </button>
-        );
-      })}
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{fontWeight:800,fontSize:17,color:"#16a34a"}}>{g.skupajZnesek.toFixed(2)} €</div>
+                <span style={{fontSize:16,color:"#94a3b8",display:"inline-block",transform:odprt?"rotate(180deg)":"none",transition:"transform 0.15s"}}>▼</span>
+              </div>
+            </button>
+            {odprt&&<div style={{borderTop:"1px solid #f1f5f9"}}>
+              {g.obracuni.map(o=>(
+                <button key={o.id} onClick={()=>setSelOb(o)} style={{width:"100%",background:"#f8fafc",border:"none",borderBottom:"1px solid #f1f5f9",cursor:"pointer",textAlign:"left",padding:"11px 16px 11px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",borderLeft:`4px solid ${o.status==="poslan"?"#16a34a":"#d97706"}`}}>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:600,color:"#0f2744"}}>{fmt(o.datum_od)} – {fmt(o.datum_do)}</div>
+                    <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{(o.km_prevozeni||0).toLocaleString()} km · {o.stevilo_strank||0} strank · {o.status==="poslan"?"✅ Poslan":"⏳ Osnutek"}</div>
+                  </div>
+                  <div style={{fontWeight:700,fontSize:15,color:"#16a34a"}}>{(o.sestevek||0).toFixed(2)} €</div>
+                </button>
+              ))}
+            </div>}
+          </div>);
+        });
+      })()}
     </div>
   );
 }
