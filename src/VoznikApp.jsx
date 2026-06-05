@@ -575,6 +575,11 @@ function DopustTab({ voznikId, showToast }) {
   const prihodnji = dopusti.filter(d => d.datum_do >= danes);
   const pretekli = dopusti.filter(d => d.datum_do < danes);
 
+  const tekoceLeto = new Date().getFullYear();
+  const skupajLetos = dopusti
+    .filter(d => new Date(d.datum_od).getFullYear() === tekoceLeto)
+    .reduce((vsota, d) => vsota + steviloDni(d.datum_od, d.datum_do), 0);
+
   if (loading) return <div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>⏳ Nalagam...</div>;
 
   return (<div>
@@ -623,6 +628,13 @@ function DopustTab({ voznikId, showToast }) {
           </div>
         ))}
       </>}
+
+      {skupajLetos > 0 && (
+        <div style={{marginTop:14,paddingTop:14,borderTop:"2px solid #e2e8f0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{fontSize:14,fontWeight:700,color:"#0f2744"}}>📊 Skupaj dopust {tekoceLeto}</div>
+          <div style={{fontSize:18,fontWeight:800,color:"#16a34a"}}>{skupajLetos} {dniLabel(skupajLetos)}</div>
+        </div>
+      )}
     </div>
 
     {modal && <div style={s.overlay} onClick={()=>setModal(null)}>
