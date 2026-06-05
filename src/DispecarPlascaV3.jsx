@@ -7,6 +7,38 @@ const fmt=(iso)=>{if(!iso)return"–";const d=new Date(iso);return`${pad(d.getDa
 const fmtT=(iso)=>{if(!iso)return"";const d=new Date(iso);return`${pad(d.getHours())}:${pad(d.getMinutes())}`;};
 const fmtDT=(iso)=>iso?`${fmt(iso)} ob ${fmtT(iso)}`:"–";
 
+// Natisni original nalog + CMR z interno NAL številko na vrhu vsake strani
+const natisniVse=(n,cmrSlike=[])=>{
+  const nalUrl=n.original_pdf_url||n.originalPdfUrl;
+  const nalStevilka=n.stevilkaNaloga||n.stevilka_naloga||"";
+  const w=window.open("","_blank");
+  if(!w){alert("Brskalnik je blokiral pojavno okno. Dovoli pojavna okna za tiskanje.");return;}
+  const jePdf=nalUrl&&/\.pdf(\?|$)/i.test(nalUrl);
+  const datum=new Date().toLocaleDateString("sl-SI");
+  const header=(naslov)=>`<div class="hdr"><div><div class="hdr-l">${naslov}</div><div class="hdr-num">${nalStevilka}</div></div><div class="hdr-r"><div><b>MATJA\u017d JURJEVEC s.p.</b></div><div>${datum}</div></div></div>`;
+  let body="";
+  if(nalUrl){
+    body+=jePdf
+      ?`<div class="page">${header("Original nalog naro\u010dnika")}<embed src="${nalUrl}" type="application/pdf" class="pdf"/></div>`
+      :`<div class="page">${header("Original nalog naro\u010dnika")}<img src="${nalUrl}" class="doc"/></div>`;
+  }
+  (cmrSlike||[]).forEach((sl,i)=>{
+    const url=sl.url||sl.img;
+    if(!url)return;
+    body+=`<div class="page">${header(`CMR dokument ${i+1}/${cmrSlike.length}`)}<img src="${url}" class="doc"/></div>`;
+  });
+  if(!body){w.document.write("<p style='font-family:sans-serif;padding:20px'>Ni dokumentov za tiskanje.</p>");w.document.close();return;}
+  w.document.write(`<!DOCTYPE html><html><head><title>${nalStevilka} - nalog + CMR</title><style>@page{size:A4;margin:8mm;}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;}.page{page-break-after:always;}.page:last-child{page-break-after:auto;}.hdr{background:#0f2744;color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}.hdr-l{font-size:10px;opacity:0.7;text-transform:uppercase;letter-spacing:1px;}.hdr-num{font-size:22px;font-weight:800;font-family:monospace;letter-spacing:1px;}.hdr-r{text-align:right;font-size:11px;opacity:0.85;}.doc{display:block;width:100%;max-height:255mm;object-fit:contain;}.pdf{display:block;width:100%;height:255mm;border:none;}</style></head><body>${body}</body></html>`);
+  w.document.close();
+  const doPrint=()=>{try{w.focus();w.print();}catch(e){}};
+  const imgs=w.document.images;
+  if(imgs.length===0){setTimeout(doPrint,900);return;}
+  let loaded=0,done=false;
+  const check=()=>{loaded++;if(loaded>=imgs.length&&!done){done=true;setTimeout(doPrint,300);}};
+  for(const img of imgs){if(img.complete)check();else{img.onload=check;img.onerror=check;}}
+  setTimeout(()=>{if(!done){done=true;doPrint();}},4000);
+};
+
 const VOZNIKI=[
   {id:"V001",ime:"Adnan Mujkanovic",vozilo:"CE-ES-555",tel:""},
   {id:"V002",ime:"Armin Gluhic",vozilo:"CE LU-099",tel:""},
@@ -423,18 +455,12 @@ je_slovenska_ddv: form.jeSlovenskaDdv!==undefined?form.jeSlovenskaDdv:null,
   };
   const izbrisiNalog=async(id)=>{
     try {
-      // Najprej zbrisi povezane CMR dokumente (sicer 409 Conflict zaradi foreign key)
-      await supabase.from('cmr_dokumenti').delete().eq('nalog_id',id);
-      // Odvezi morebitne proste CMR-je
-      await supabase.from('prosti_cmr').update({povezan:false,nalog_id:null}).eq('nalog_id',id);
-      // Zdaj zbrisi nalog
       const { error } = await supabase.from('nalogi').delete().eq('id',id);
       if(error) throw error;
       upd(s=>({...s,nalogi:s.nalogi.filter(n=>n.id!==id)}));
-      setSelNalog(null);showToast("✅ Nalog izbrisan.");
+      setSelNalog(null);showToast("Nalog izbrisan.");
     } catch(err) {
-      console.error('Brisanje napaka:',err);
-      showToast("❌ Napaka pri brisanju: "+(err.message||""),true);
+      showToast("❌ Napaka pri brisanju!",true);
     }
   };
 
@@ -528,7 +554,7 @@ const handleDrop=async(e)=>{
           {(n.stevilka_narocnika||n.stevilkaNarocnika)&&<Sec title="📋 Št. naloga naročnika"><div style={{fontFamily:"monospace",fontSize:16,fontWeight:800,color:"#2563eb"}}>{n.stevilka_narocnika||n.stevilkaNarocnika}</div></Sec>}
           {n.kontaktEmail&&<Sec title="💶 Kontakt za račun"><R label="Email" val={n.kontaktEmail} mono/></Sec>}
           {/* Original PDF */}
-          <Sec title="📄 Original nalog od naročnika">{(n.original_pdf_url||n.originalPdfUrl)?<div><iframe src={n.original_pdf_url||n.originalPdfUrl} style={{width:"100%",height:500,border:"none",borderRadius:8}} title="Original nalog"/><a href={n.original_pdf_url||n.originalPdfUrl} target="_blank" rel="noopener noreferrer" style={{display:"block",textAlign:"center",padding:8,fontSize:12,color:"#2563eb",fontWeight:600}}>Odpri v novem zavihku ↗</a></div>:<div><div style={{fontSize:13,color:"#94a3b8",marginBottom:8}}>Ni naložen.</div><input type="file" id={`pdf-${n.id}`} accept=".pdf" style={{display:"none"}} onChange={async(e)=>{const file=e.target.files?.[0];if(!file)return;showToast("⏳ Nalagam PDF...");const url=await uploadOriginalPdf(file);if(url){await supabase.from('nalogi').update({original_pdf_url:url}).eq('id',n.id);await naložiPodatke();odpriNalog({...n,original_pdf_url:url});showToast("✅ PDF naložen!");}else{showToast("❌ Napaka pri uploadu!",true);}}}/><label htmlFor={`pdf-${n.id}`} style={{background:"#2563eb",color:"#fff",padding:"8px 16px",borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer"}}>📂 Naloži original PDF</label></div>}</Sec>
+          <Sec title="📄 Original nalog od naročnika">{(n.original_pdf_url||n.originalPdfUrl)?<div><iframe src={n.original_pdf_url||n.originalPdfUrl} style={{width:"100%",height:500,border:"none",borderRadius:8}} title="Original nalog"/><div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap",marginTop:8}}><button onClick={()=>natisniVse(n,cmrSlike)} style={{background:"#0f2744",color:"#fff",border:"none",borderRadius:8,padding:"9px 18px",fontSize:13,fontWeight:700,cursor:"pointer"}}>🖨️ Natisni vse (nalog + CMR)</button><button onClick={()=>natisniVse(n,[])} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}}>🖨️ Samo nalog</button><a href={n.original_pdf_url||n.originalPdfUrl} target="_blank" rel="noopener noreferrer" style={{padding:"9px 16px",fontSize:13,color:"#2563eb",fontWeight:600,textDecoration:"none",border:"1.5px solid #bfdbfe",borderRadius:8}}>Odpri ↗</a></div></div>:<div><div style={{fontSize:13,color:"#94a3b8",marginBottom:8}}>Ni naložen.</div><input type="file" id={`pdf-${n.id}`} accept=".pdf" style={{display:"none"}} onChange={async(e)=>{const file=e.target.files?.[0];if(!file)return;showToast("⏳ Nalagam PDF...");const url=await uploadOriginalPdf(file);if(url){await supabase.from('nalogi').update({original_pdf_url:url}).eq('id',n.id);await naložiPodatke();odpriNalog({...n,original_pdf_url:url});showToast("✅ PDF naložen!");}else{showToast("❌ Napaka pri uploadu!",true);}}}/><label htmlFor={`pdf-${n.id}`} style={{background:"#2563eb",color:"#fff",padding:"8px 16px",borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer"}}>📂 Naloži original PDF</label></div>}</Sec>
           {/* CMR sekcija — VEDNO vidna, popravljen prikaz */}
           <Sec title={`📄 CMR dokumenti${cmrSlike.length>0?` (${cmrSlike.length})`:""}`}>
             {cmrLoading ? (
@@ -737,20 +763,7 @@ function PregledTab({stats,nalogi,obracuni,vozniki,onSelNalog,onSelOb}){
 function NalogiTab({nalogi,vozniki,onSelect,openNovNalog,onEdit,onDelete}){
   const [f,setF]=useState("vsi");
   const [q,setQ]=useState("");
-  const najdi=(n)=>{
-    if(!q.trim())return true;
-    const t=q.toLowerCase().trim();
-    const v=(vozniki||VOZNIKI).find(x=>x.id===n.voznikId);
-    const polja=[
-      n.stevilkaNaloga, n.stranka, n.blago, n.kolicina, n.teza,
-      n.nakFirma, n.nakKraj, n.nakNaslov, n.nakReferenca,
-      n.razFirma, n.razKraj, n.razNaslov, n.razReferenca,
-      n.navodila, n.kontaktEmail, v?.ime, v?.vozilo,
-      n.stevilka_narocnika, n.stevilkaNarocnika,
-    ];
-    return polja.some(p=>p&&String(p).toLowerCase().includes(t));
-  };
-  const list=nalogi.filter(n=>f==="vsi"||n.status===f).filter(najdi);
+  const list=nalogi.filter(n=>f==="vsi"||n.status===f).filter(n=>!q||n.stranka.toLowerCase().includes(q.toLowerCase())||n.stevilkaNaloga.includes(q));
   return(<div>
     <div style={{display:"flex",gap:8,marginBottom:12}}>
       <input style={{...s.inp,flex:1,margin:0}} placeholder="🔍 Išči..." value={q} onChange={e=>setQ(e.target.value)}/>
