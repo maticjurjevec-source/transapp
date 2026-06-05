@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from './supabase';
 import { loginToOutlook, logoutFromOutlook, getActiveAccount, getRecentEmails, getEmailWithAttachments, markEmailAsRead } from './outlookService';
 
@@ -97,6 +97,94 @@ async function uploadOriginalPdf(file){
   }
 }
 
+// ===== OBREZOVANJE CMR (Cropper.js) =====
+const loadCropper=()=>new Promise((resolve,reject)=>{
+  if(window.Cropper)return resolve(window.Cropper);
+  if(!document.getElementById("cropperjs-css")){
+    const link=document.createElement("link");
+    link.id="cropperjs-css";link.rel="stylesheet";
+    link.href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css";
+    document.head.appendChild(link);
+  }
+  const sc=document.createElement("script");
+  sc.src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js";
+  sc.onload=()=>resolve(window.Cropper);
+  sc.onerror=()=>reject(new Error("Cropper se ni naložil"));
+  document.head.appendChild(sc);
+});
+
+function CropCMRModal({cmr,nalStevilka,onClose,onSaved,showToast}){
+  const imgRef=useRef(null);
+  const cropperRef=useRef(null);
+  const [objUrl,setObjUrl]=useState(null);
+  const [ready,setReady]=useState(false);
+  const [saving,setSaving]=useState(false);
+
+  useEffect(()=>{
+    let revoked=false,created=null;
+    fetch(cmr.url).then(r=>r.blob()).then(b=>{created=URL.createObjectURL(b);if(!revoked)setObjUrl(created);}).catch(()=>{if(!revoked)setObjUrl(cmr.url);});
+    return ()=>{revoked=true;if(created)URL.revokeObjectURL(created);if(cropperRef.current){cropperRef.current.destroy();cropperRef.current=null;}};
+  },[]);
+
+  const onImgLoad=async()=>{
+    try{
+      const Cropper=await loadCropper();
+      if(!imgRef.current)return;
+      if(cropperRef.current)cropperRef.current.destroy();
+      cropperRef.current=new Cropper(imgRef.current,{viewMode:1,autoCropArea:0.9,background:false,responsive:true});
+      setReady(true);
+    }catch(e){showToast&&showToast("❌ Orodje se ni naložilo",true);}
+  };
+
+  const zavrti=(deg)=>{if(cropperRef.current)cropperRef.current.rotate(deg);};
+
+  const shrani=async()=>{
+    if(!cropperRef.current)return;
+    setSaving(true);
+    try{
+      const canvas=cropperRef.current.getCroppedCanvas({maxWidth:2000,maxHeight:2800,imageSmoothingQuality:"high"});
+      const blob=await new Promise(res=>canvas.toBlob(res,"image/jpeg",0.92));
+      if(!blob)throw new Error("Ni slike");
+      const stara=cmr.pot;
+      const mapa=stara&&stara.includes("/")?stara.slice(0,stara.lastIndexOf("/")):(cmr.id||"cmr");
+      const novaPot=`${mapa}/${Date.now()}-obrezano.jpg`;
+      const {error:upErr}=await supabase.storage.from(CMR_BUCKET).upload(novaPot,blob,{contentType:"image/jpeg",upsert:false});
+      if(upErr)throw upErr;
+      const {error:updErr}=await supabase.from("cmr_dokumenti").update({storage_pot:novaPot,ime_datoteke:((cmr.ime||"cmr").replace(/\.[^.]+$/,""))+"-obrezano.jpg"}).eq("id",cmr.id);
+      if(updErr)throw updErr;
+      if(stara){await supabase.storage.from(CMR_BUCKET).remove([stara]);}
+      onSaved&&onSaved();
+    }catch(err){
+      console.error(err);
+      showToast&&showToast("❌ Napaka pri shranjevanju!",true);
+      setSaving(false);
+    }
+  };
+
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+    <div style={{background:"#fff",borderRadius:14,width:"100%",maxWidth:560,maxHeight:"92vh",overflow:"hidden",display:"flex",flexDirection:"column"}}>
+      <div style={{background:"#0f2744",color:"#fff",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{fontWeight:700,fontSize:15}}>✂️ Obreži CMR{nalStevilka?` — ${nalStevilka}`:""}</span>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",borderRadius:"50%",width:28,height:28,fontSize:13,cursor:"pointer"}}>✕</button>
+      </div>
+      <div style={{padding:16,background:"#f1f5f9",overflow:"auto",flex:1}}>
+        <div style={{maxHeight:"55vh"}}>
+          <img ref={imgRef} src={objUrl||undefined} onLoad={onImgLoad} alt="CMR" style={{maxWidth:"100%",display:"block"}}/>
+        </div>
+        <div style={{textAlign:"center",fontSize:12,color:"#64748b",marginTop:10}}>Povleci robove okvirja, da izrežeš dokument</div>
+      </div>
+      <div style={{display:"flex",gap:8,justifyContent:"center",padding:"10px 16px"}}>
+        <button onClick={()=>zavrti(-90)} disabled={!ready} style={{background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:8,padding:"8px 14px",fontSize:13,cursor:"pointer",color:"#475569",fontWeight:600}}>↺ Zavrti levo</button>
+        <button onClick={()=>zavrti(90)} disabled={!ready} style={{background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:8,padding:"8px 14px",fontSize:13,cursor:"pointer",color:"#475569",fontWeight:600}}>↻ Zavrti desno</button>
+      </div>
+      <div style={{display:"flex",gap:8,padding:"12px 16px 18px",borderTop:"1px solid #e2e8f0"}}>
+        <button onClick={onClose} disabled={saving} style={{flex:1,background:"#f1f5f9",color:"#475569",border:"none",borderRadius:10,padding:12,fontSize:14,fontWeight:700,cursor:"pointer"}}>Prekliči</button>
+        <button onClick={shrani} disabled={!ready||saving} style={{flex:2,background:"linear-gradient(135deg,#065f46,#16a34a)",color:"#fff",border:"none",borderRadius:10,padding:12,fontSize:14,fontWeight:700,cursor:"pointer",opacity:(!ready||saving)?0.6:1}}>{saving?"⏳ Shranjujem...":"✅ Shrani obrezano"}</button>
+      </div>
+    </div>
+  </div>);
+}
+
 export default function DispecarPlasca() {
   const [st,setSt]=useState(initState);
   const [tab,setTab]=useState("pregled");
@@ -108,6 +196,7 @@ export default function DispecarPlasca() {
   const [dragOver,setDragOver]=useState(false);
   const [vozniki,setVozniki]=useState(VOZNIKI);
   const [loading,setLoading]=useState(false);
+  const [cropCmr,setCropCmr]=useState(null);
 
   useEffect(()=>{ naložiPodatke(); },[]);
 
@@ -571,6 +660,7 @@ const handleDrop=async(e)=>{
                         onError={e=>{e.target.style.background="#fef2f2";e.target.style.padding="20px";e.target.alt="❌ "+sl.ime;}}
                       />
                       <div style={{position:"absolute",bottom:4,right:4,background:"rgba(0,0,0,0.7)",color:"#fff",padding:"2px 6px",borderRadius:4,fontSize:10,fontWeight:600}}>{i+1}</div>
+                      {sl.id&&<button onClick={(e)=>{e.preventDefault();e.stopPropagation();setCropCmr(sl);}} style={{position:"absolute",top:4,right:4,background:"#d97706",color:"#fff",border:"none",borderRadius:6,padding:"3px 7px",fontSize:11,fontWeight:700,cursor:"pointer"}}>✂️</button>}
                     </a>
                   ))}
                 </div>
@@ -622,6 +712,7 @@ const handleDrop=async(e)=>{
             </button>
           )}
           {(n.status==="nov"||n.status==="poslan")&&<button style={s.btnD} onClick={()=>izbrisiNalog(n.id)}>🗑️ Izbriši nalog</button>}
+          {cropCmr&&<CropCMRModal cmr={cropCmr} nalStevilka={n.stevilkaNaloga||n.stevilka_naloga} onClose={()=>setCropCmr(null)} onSaved={async()=>{setCropCmr(null);await osveziCMR();showToast("✅ CMR obrezan!");}} showToast={showToast}/>}
         </div>
       </div>
     );
