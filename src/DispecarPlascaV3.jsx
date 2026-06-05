@@ -339,6 +339,19 @@ export default function DispecarPlasca() {
     setSelNalog({...n, cmrSlike: cmr, _loading: false});
   };
 
+  // Izbriši CMR dokument (iz baze + storage)
+  const izbrisiCMR = async (cmr) => {
+    if (!cmr?.id) return;
+    if (!window.confirm("Izbrišem ta CMR dokument? Tega ni mogoče razveljaviti.")) return;
+    try {
+      if (cmr.pot) { await supabase.storage.from(CMR_BUCKET).remove([cmr.pot]); }
+      const { error } = await supabase.from('cmr_dokumenti').delete().eq('id', cmr.id);
+      if (error) throw error;
+      await osveziCMR();
+      showToast("🗑️ CMR izbrisan.");
+    } catch (err) { showToast("❌ Napaka pri brisanju CMR!", true); console.error(err); }
+  };
+
   // Funkcija za reload CMR-jev v odprtem nalogu
   const osveziCMR = async () => {
     if (!selNalog) return;
@@ -661,6 +674,7 @@ const handleDrop=async(e)=>{
                       />
                       <div style={{position:"absolute",bottom:4,right:4,background:"rgba(0,0,0,0.7)",color:"#fff",padding:"2px 6px",borderRadius:4,fontSize:10,fontWeight:600}}>{i+1}</div>
                       {sl.id&&<button onClick={(e)=>{e.preventDefault();e.stopPropagation();setCropCmr(sl);}} style={{position:"absolute",top:4,right:4,background:"#d97706",color:"#fff",border:"none",borderRadius:6,padding:"3px 7px",fontSize:11,fontWeight:700,cursor:"pointer"}}>✂️</button>}
+                      {sl.id&&<button onClick={(e)=>{e.preventDefault();e.stopPropagation();izbrisiCMR(sl);}} style={{position:"absolute",top:4,left:4,background:"#dc2626",color:"#fff",border:"none",borderRadius:6,padding:"3px 7px",fontSize:11,fontWeight:700,cursor:"pointer"}}>🗑️</button>}
                     </a>
                   ))}
                 </div>
