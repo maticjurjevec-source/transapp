@@ -557,7 +557,18 @@ function DopustTab({ voznikId, showToast }) {
     }
   };
 
-  const steviloDni = (od, do_) => Math.floor((new Date(do_) - new Date(od)) / 86400000) + 1;
+  const steviloDni = (od, do_) => {
+    const start = new Date(od + "T00:00:00");
+    const end = new Date(do_ + "T00:00:00");
+    let count = 0;
+    const cur = new Date(start);
+    while (cur <= end) {
+      const dan = cur.getDay(); // 0 = nedelja, 6 = sobota
+      if (dan !== 0 && dan !== 6) count++;
+      cur.setDate(cur.getDate() + 1);
+    }
+    return count;
+  };
   const dniLabel = (n) => n === 1 ? "dan" : n === 2 ? "dneva" : n < 5 ? "dni" : "dni";
 
   const danes = new Date().toISOString().slice(0, 10);
