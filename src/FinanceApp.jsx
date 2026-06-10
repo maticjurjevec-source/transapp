@@ -121,12 +121,15 @@ export default function FinanceApp(){
         </div>
 
         {/* TABS */}
-        <div style={{display:"flex",gap:8,marginBottom:16}}>
+        <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
           <button onClick={()=>setTab("za_fakturo")} style={{padding:"10px 20px",borderRadius:10,border:"none",background:tab==="za_fakturo"?"#d97706":"#fff",color:tab==="za_fakturo"?"#fff":"#64748b",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
             📋 Za fakturiranje ({zaFakturo.length})
           </button>
           <button onClick={()=>setTab("fakturirano")} style={{padding:"10px 20px",borderRadius:10,border:"none",background:tab==="fakturirano"?"#16a34a":"#fff",color:tab==="fakturirano"?"#fff":"#64748b",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
             ✅ Fakturirano ({fakturirano.length})
+          </button>
+          <button onClick={()=>setTab("vsi_nalogi")} style={{padding:"10px 20px",borderRadius:10,border:"none",background:tab==="vsi_nalogi"?"#1d4ed8":"#fff",color:tab==="vsi_nalogi"?"#fff":"#64748b",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+            📦 Vsi nalogi
           </button>
           <button onClick={()=>setTab("obracuni")} style={{padding:"10px 20px",borderRadius:10,border:"none",background:tab==="obracuni"?"#1d4ed8":"#fff",color:tab==="obracuni"?"#fff":"#64748b",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
             💶 Obračuni
@@ -179,6 +182,7 @@ export default function FinanceApp(){
           })}
         </div>
         </>}
+        {tab === "vsi_nalogi" && <VsiNalogiPanel/>}
         {tab === "obracuni" && <ObracuniPanel/>}
         {tab === "dopusti" && <DopustiPanel/>}
       </div>
@@ -310,6 +314,132 @@ export default function FinanceApp(){
         </div>
         <button style={{position:"absolute",top:20,right:20,background:"rgba(255,255,255,0.2)",border:"none",color:"#fff",width:40,height:40,borderRadius:20,fontSize:18,cursor:"pointer"}} onClick={()=>setImgPreview(null)}>✕</button>
       </div>}
+    </div>
+  );
+}
+
+/* ===== VSI NALOGI PANEL (Bernarda vidi vse, odkljuka fakturirane) ===== */
+function VsiNalogiPanel(){
+  const [vsi,setVsi]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [search,setSearch]=useState("");
+  const [filter,setFilter]=useState("nefakturirano");
+  const [saving,setSaving]=useState({});
+
+  const STATUS_INFO={
+    nov:{label:"Nov",color:"#64748b"},
+    poslan:{label:"Poslan",color:"#2563eb"},
+    sprejet:{label:"V vožnji",color:"#d97706"},
+    zakljucen:{label:"Zaključen",color:"#16a34a"},
+    za_fakturo:{label:"Za fakturo",color:"#2563eb"},
+    fakturirano:{label:"Fakturirano",color:"#16a34a"},
+  };
+
+  async function load(){
+    setLoading(true);
+    const{data}=await supabase.from("nalogi").select("*").order("created_at",{ascending:false}).limit(500);
+    if(data)setVsi(data);
+    setLoading(false);
+  }
+  useEffect(()=>{ load(); },[]);
+
+  async function toggleFakturirano(n){
+    const nova=!n.fakturirano_bernarda;
+    setSaving(p=>({...p,[n.id]:true}));
+    const{error}=await supabase.from("nalogi").update({fakturirano_bernarda:nova}).eq("id",n.id);
+    if(!error){
+      setVsi(prev=>prev.map(x=>x.id===n.id?{...x,fakturirano_bernarda:nova}:x));
+    }else{
+      alert("Napaka pri shranjevanju!");
+    }
+    setSaving(p=>({...p,[n.id]:false}));
+  }
+
+  const steviloNefakt=vsi.filter(n=>!n.fakturirano_bernarda).length;
+  const steviloFakt=vsi.filter(n=>n.fakturirano_bernarda).length;
+
+  const filtered=vsi.filter(n=>{
+    if(filter==="nefakturirano" && n.fakturirano_bernarda) return false;
+    if(filter==="fakturirano" && !n.fakturirano_bernarda) return false;
+    if(!search.trim()) return true;
+    const q=search.toLowerCase().trim();
+    return (n.stranka||"").toLowerCase().includes(q)||
+      (n.stevilka_naloga||"").toLowerCase().includes(q)||
+      (n.nak_referenca||"").toLowerCase().includes(q)||
+      (n.nak_kraj||"").toLowerCase().includes(q)||
+      (n.raz_kraj||"").toLowerCase().includes(q);
+  });
+
+  return(
+    <div>
+      {/* Števci */}
+      <div style={{display:"flex",gap:10,marginBottom:14}}>
+        <div style={{flex:1,background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",textAlign:"center"}}>
+          <div style={{fontSize:24,fontWeight:800,color:"#d97706"}}>{steviloNefakt}</div>
+          <div style={{fontSize:11,color:"#94a3b8"}}>Še ne fakturirano</div>
+        </div>
+        <div style={{flex:1,background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",textAlign:"center"}}>
+          <div style={{fontSize:24,fontWeight:800,color:"#16a34a"}}>{steviloFakt}</div>
+          <div style={{fontSize:11,color:"#94a3b8"}}>Fakturirano</div>
+        </div>
+        <div style={{flex:1,background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",textAlign:"center"}}>
+          <div style={{fontSize:24,fontWeight:800,color:"#0f2744"}}>{vsi.length}</div>
+          <div style={{fontSize:11,color:"#94a3b8"}}>Skupaj</div>
+        </div>
+      </div>
+
+      {/* Filtri */}
+      <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+        {[["nefakturirano","Še ne fakturirano"],["vse","Vse"],["fakturirano","Fakturirano"]].map(([v,l])=>(
+          <button key={v} onClick={()=>setFilter(v)} style={{padding:"6px 14px",borderRadius:20,border:"1.5px solid #e2e8f0",background:filter===v?"#0f2744":"#fff",color:filter===v?"#fff":"#475569",fontSize:12,fontWeight:filter===v?700:500,cursor:"pointer"}}>{l}</button>
+        ))}
+      </div>
+
+      {/* Iskalnik */}
+      <div style={{position:"relative",marginBottom:14}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Išči po stranki, številki, referenci, kraju..." style={{width:"100%",padding:"10px 14px",border:"1px solid #e2e8f0",borderRadius:10,fontSize:13,outline:"none",boxSizing:"border-box",background:"#fff"}}/>
+        {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"#e2e8f0",border:"none",borderRadius:"50%",width:20,height:20,fontSize:11,cursor:"pointer",color:"#64748b"}}>✕</button>}
+      </div>
+
+      {loading&&<div style={{textAlign:"center",padding:30,color:"#94a3b8"}}>⏳ Nalagam naloge...</div>}
+      {!loading&&filtered.length===0&&<div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>{filter==="nefakturirano"?"Vse fakturirano! 🎉":"Ni nalogov za prikaz."}</div>}
+
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {filtered.map(n=>{
+          const zOrig=n.znesek_original?parseZnesek(n.znesek_original):null;
+          const si=STATUS_INFO[n.status]||{label:n.status||"–",color:"#94a3b8"};
+          const fakt=!!n.fakturirano_bernarda;
+          const jeShranjevanje=!!saving[n.id];
+          return(
+            <div key={n.id} style={{background:"#fff",borderRadius:12,padding:"12px 16px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",borderLeft:`4px solid ${fakt?"#16a34a":"#d97706"}`,display:"flex",alignItems:"center",gap:12}}>
+              {/* Kljukica */}
+              <label style={{display:"flex",alignItems:"center",cursor:"pointer",flexShrink:0}} title={fakt?"Klikni da odznačiš":"Klikni ko je fakturirano"}>
+                <input type="checkbox" checked={fakt} disabled={jeShranjevanje} onChange={()=>toggleFakturirano(n)} style={{width:22,height:22,cursor:"pointer",accentColor:"#16a34a"}}/>
+              </label>
+              {/* Podatki */}
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,fontSize:14,color:"#0f2744"}}>{n.stranka||"–"}</div>
+                <div style={{fontSize:12,color:"#64748b",marginTop:2}}>
+                  <span style={{fontFamily:"monospace",fontWeight:600,color:"#2563eb"}}>{n.stevilka_naloga}</span>
+                  <span style={{margin:"0 5px"}}>·</span>{n.nak_kraj} → {n.raz_kraj}
+                </div>
+                <div style={{fontSize:10,color:"#94a3b8",marginTop:3}}>{fmt(n.created_at)}</div>
+              </div>
+              {/* Znesek + status */}
+              <div style={{textAlign:"right",flexShrink:0}}>
+                {zOrig?<div style={{fontSize:15,fontWeight:800,color:"#0f2744"}}>{zOrig.toFixed(2)} €</div>:<div style={{fontSize:12,color:"#cbd5e1"}}>—</div>}
+                <span style={{display:"inline-block",marginTop:3,fontSize:10,padding:"2px 8px",borderRadius:12,background:si.color+"22",color:si.color,fontWeight:700}}>{si.label}</span>
+              </div>
+              {/* Oznaka fakturirano */}
+              <div style={{flexShrink:0,width:92,textAlign:"center"}}>
+                {jeShranjevanje?<span style={{fontSize:12,color:"#94a3b8"}}>⏳</span>:
+                  fakt?<span style={{fontSize:12,color:"#16a34a",fontWeight:700}}>✅ Fakturirano</span>:
+                  <span style={{fontSize:12,color:"#d97706",fontWeight:700}}>Čaka</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
