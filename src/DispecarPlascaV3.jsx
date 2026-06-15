@@ -1767,13 +1767,26 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
     const d=fmt(datum+"T00:00:00");
     return cas?`${d} ${cas}`:d;
   };
+  const tabelaPosta=(naslov)=>{
+    if(!naslov)return"";
+    const m=String(naslov).match(/\b(\d{4,5})\s+\p{L}/u);
+    if(m)return m[1];
+    const m2=String(naslov).match(/\b(\d{4,5})\b/);
+    return m2?m2[1]:"";
+  };
+  const tabelaKraj=(kraj,naslov)=>{
+    const k=(kraj||"").trim();
+    const p=tabelaPosta(naslov);
+    if(k&&p&&!k.startsWith(p))return`${p} ${k}`;
+    return k||p;
+  };
   const kopirajZaTabelo=()=>{
     const vrstica=[
       form.stranka||"",
       tabelaBlago(),
-      form.nakKraj||"",
+      tabelaKraj(form.nakKraj,form.nakNaslov),
       tabelaDatum(form.nakDatum,form.nakCas),
-      form.razKraj||"",
+      tabelaKraj(form.razKraj,form.razNaslov),
       tabelaDatum(form.razDatum,form.razCas),
     ].join("\t");
     navigator.clipboard.writeText(vrstica).then(()=>{
@@ -2384,7 +2397,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
             </thead>
             <tbody>
               <tr>
-                {[form.stranka||"–",tabelaBlago()||"–",form.nakKraj||"–",tabelaDatum(form.nakDatum,form.nakCas)||"–",form.razKraj||"–",tabelaDatum(form.razDatum,form.razCas)||"–"].map((c,i)=>(
+                {[form.stranka||"–",tabelaBlago()||"–",tabelaKraj(form.nakKraj,form.nakNaslov)||"–",tabelaDatum(form.nakDatum,form.nakCas)||"–",tabelaKraj(form.razKraj,form.razNaslov)||"–",tabelaDatum(form.razDatum,form.razCas)||"–"].map((c,i)=>(
                   <td key={i} style={{padding:"8px 10px",border:"1px solid #e2e8f0",color:"#0f2744"}}>{c}</td>
                 ))}
               </tr>
