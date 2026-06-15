@@ -868,6 +868,8 @@ function PregledTab({stats,nalogi,obracuni,vozniki,onSelNalog,onSelOb}){
 function NalogiTab({nalogi,vozniki,onSelect,openNovNalog,onEdit,onDelete}){
   const [f,setF]=useState("vsi");
   const [q,setQ]=useState("");
+  const [grupiranje,setGrupiranje]=useState("seznam");
+  const [odprte,setOdprte]=useState({});
   const list=nalogi.filter(n=>f==="vsi"||n.status===f).filter(n=>{
     if(!q)return true;
     const qq=q.toLowerCase().trim();
@@ -880,10 +882,42 @@ function NalogiTab({nalogi,vozniki,onSelect,openNovNalog,onEdit,onDelete}){
     ];
     return polja.some(p=>String(p||"").toLowerCase().includes(qq));
   });
+
+  const tedenInfo=(dateStr)=>{
+    const d=dateStr?new Date(dateStr):null;
+    if(!d||isNaN(d))return{key:"brez",label:"Brez datuma",sub:"",week:"?",sort:"0000-W00"};
+    const tmp=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+    const day=tmp.getUTCDay()||7;
+    tmp.setUTCDate(tmp.getUTCDate()+4-day);
+    const yearStart=new Date(Date.UTC(tmp.getUTCFullYear(),0,1));
+    const week=Math.ceil((((tmp-yearStart)/86400000)+1)/7);
+    const mon=new Date(d);const wd=mon.getDay()||7;mon.setDate(mon.getDate()-wd+1);
+    const sun=new Date(mon);sun.setDate(mon.getDate()+6);
+    const ff=(x)=>`${String(x.getDate()).padStart(2,"0")}.${String(x.getMonth()+1).padStart(2,"0")}`;
+    const key=`${tmp.getUTCFullYear()}-W${String(week).padStart(2,"0")}`;
+    return{key,label:`Teden ${week} · ${tmp.getUTCFullYear()}`,sub:`${ff(mon)} – ${ff(sun)}`,week,sort:key};
+  };
+  let skupine=[];
+  if(grupiranje==="tedni"){
+    const map={};
+    list.forEach(n=>{const t=tedenInfo(n.poslan);if(!map[t.key])map[t.key]={...t,nalogi:[]};map[t.key].nalogi.push(n);});
+    skupine=Object.values(map).sort((a,b)=>b.sort.localeCompare(a.sort));
+  } else if(grupiranje==="vozniki"){
+    const map={};
+    list.forEach(n=>{const v=(vozniki||[]).find(x=>x.id===n.voznikId);const key=v?v.id:"_nedodeljeni";if(!map[key])map[key]={key,label:v?v.ime:"– Nedodeljeni",sub:v?v.vozilo:"",nalogi:[]};map[key].nalogi.push(n);});
+    skupine=Object.values(map).sort((a,b)=>a.label.localeCompare(b.label));
+  }
+  const toggleSkupina=(k)=>setOdprte(p=>({...p,[k]:!p[k]}));
+
   return(<div>
     <div style={{display:"flex",gap:8,marginBottom:12}}>
       <input style={{...s.inp,flex:1,margin:0}} placeholder="🔍 Išči..." value={q} onChange={e=>setQ(e.target.value)}/>
       <button style={s.btnSm} onClick={openNovNalog}>+ Nov</button>
+    </div>
+    <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+      {[["seznam","📋 Seznam"],["tedni","📅 Po tednih"],["vozniki","🚛 Po voznikih"]].map(([v,l])=>(
+        <button key={v} style={{...s.fBtn,...(grupiranje===v?s.fOn:{})}} onClick={()=>setGrupiranje(v)}>{l}</button>
+      ))}
     </div>
     <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
       {[["vsi","Vsi"],["nov","Novi"],["poslan","Poslani"],["sprejet","Sprejeto"],["zakljucen","Zaključeni"],["za_fakturo","Za fakturo"]].map(([v,l])=>(
@@ -891,7 +925,32 @@ function NalogiTab({nalogi,vozniki,onSelect,openNovNalog,onEdit,onDelete}){
       ))}
     </div>
     {list.length===0&&<div style={s.empty}>Ni nalogov.</div>}
-    {list.map(n=><NC key={n.id} n={n} vozniki={vozniki} onClick={()=>onSelect(n)} onEdit={onEdit} onDelete={onDelete}/>)}
+    {grupiranje==="seznam"&&list.map(n=><NC key={n.id} n={n} vozniki={vozniki} onClick={()=>onSelect(n)} onEdit={onEdit} onDelete={onDelete}/>)}
+    {grupiranje!=="seznam"&&skupine.map(g=>{
+      const odprt=odprte[g.key];
+      const jeVoznik=grupiranje==="vozniki";
+      const init=jeVoznik?(g.label==="– Nedodeljeni"?"?":g.label.charAt(0)):null;
+      return(<div key={g.key} style={{background:"#fff",borderRadius:12,marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",overflow:"hidden"}}>
+        <button onClick={()=>toggleSkupina(g.key)} style={{width:"100%",background:"none",border:"none",cursor:"pointer",textAlign:"left",padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{display:"flex",alignItems:"center",gap:11}}>
+            {jeVoznik
+              ?<div style={{width:38,height:38,borderRadius:"50%",background:"linear-gradient(135deg,#0f2744,#1d4ed8)",color:"#fff",fontSize:15,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{init}</div>
+              :<div style={{width:42,height:42,borderRadius:10,background:"#eff6ff",color:"#1d4ed8",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:9,fontWeight:700,opacity:0.7}}>TEDEN</span><span style={{fontSize:16,fontWeight:800,lineHeight:1}}>{g.week}</span></div>}
+            <div>
+              <div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{g.label}</div>
+              {g.sub&&<div style={{fontSize:12,color:"#64748b",marginTop:2}}>{g.sub}</div>}
+            </div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{background:"#f1f5f9",color:"#0f2744",fontSize:13,fontWeight:800,padding:"4px 12px",borderRadius:20}}>{g.nalogi.length}</span>
+            <span style={{fontSize:14,color:"#94a3b8",transform:odprt?"rotate(180deg)":"none",transition:"transform 0.15s"}}>▼</span>
+          </div>
+        </button>
+        {odprt&&<div style={{borderTop:"1px solid #f1f5f9",padding:"10px 12px 4px"}}>
+          {g.nalogi.map(n=><NC key={n.id} n={n} vozniki={vozniki} onClick={()=>onSelect(n)} onEdit={onEdit} onDelete={onDelete}/>)}
+        </div>}
+      </div>);
+    })}
   </div>);
 }
 
