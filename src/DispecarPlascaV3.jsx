@@ -1738,6 +1738,40 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
   const [vsiNalogi, setVsiNalogi] = useState([]);
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
 
+  const [kopiranoTabela,setKopiranoTabela]=useState(false);
+  const tabelaMetri=()=>{
+    const m=form.metri||form.ldm||form.metriNaklada||form.nakMetri||form.nak_metri||"";
+    const str=String(m||"").trim();
+    if(!str)return"";
+    return /ldm|metr/i.test(str)?str:`${str} ldm`;
+  };
+  const tabelaBlago=()=>{
+    const metri=tabelaMetri();
+    const b=(form.blago||"").trim();
+    if(b&&metri)return`${b}, ${metri}`;
+    return b||metri;
+  };
+  const tabelaDatum=(datum,cas)=>{
+    if(!datum)return"";
+    const d=fmt(datum+"T00:00:00");
+    return cas?`${d} ${cas}`:d;
+  };
+  const kopirajZaTabelo=()=>{
+    const vrstica=[
+      form.stranka||"",
+      tabelaBlago(),
+      form.nakKraj||"",
+      tabelaDatum(form.nakDatum,form.nakCas),
+      form.razKraj||"",
+      tabelaDatum(form.razDatum,form.razCas),
+    ].join("\t");
+    navigator.clipboard.writeText(vrstica).then(()=>{
+      setKopiranoTabela(true);
+      showToast("📋 Kopirano! Prilepi v Google tabelo (Ctrl+V)");
+      setTimeout(()=>setKopiranoTabela(false),2500);
+    }).catch(()=>showToast("❌ Kopiranje ni uspelo",true));
+  };
+
   // Naloži obstoječe naloge za preverjanje podvajanja
   useEffect(() => {
     supabase.from("nalogi")
@@ -2320,6 +2354,31 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
         <Fi2 l="Email za račun" v={form.kontaktEmail} s={v=>sf("kontaktEmail",v)} ph="finance@podjetje.com"/>
         <Fi2 l="Kontaktna oseba" v={form.kontaktIme} s={v=>sf("kontaktIme",v)}/>
         <div style={{gridColumn:"1/-1"}}><label style={s2.lbl}>Navodila</label><textarea style={{...s2.inp,resize:"vertical",height:60}} value={form.navodila||""} onChange={e=>sf("navodila",e.target.value)}/></div>
+      </div>
+      <div style={{background:"#f0f9ff",border:"1.5px solid #bae6fd",borderRadius:12,padding:14,marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#0369a1"}}>📊 Podatki za Google tabelo</div>
+          <button onClick={kopirajZaTabelo} style={{background:kopiranoTabela?"#16a34a":"#0284c7",color:"#fff",border:"none",borderRadius:10,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}}>{kopiranoTabela?"✅ Kopirano!":"📋 Kopiraj za tabelo"}</button>
+        </div>
+        <div style={{background:"#fff",borderRadius:8,border:"1px solid #e0f2fe",overflowX:"auto"}}>
+          <table style={{borderCollapse:"collapse",width:"100%",fontSize:11,whiteSpace:"nowrap"}}>
+            <thead>
+              <tr>
+                {["NAROČNIK","BLAGO","KRAJ NAKLADA","DATUM NAKLADA","KRAJ RAZKLADA","DATUM RAZKLADA"].map(h=>(
+                  <th key={h} style={{background:"#f1f5f9",color:"#475569",fontWeight:700,textAlign:"left",padding:"8px 10px",border:"1px solid #e2e8f0",fontSize:10}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                {[form.stranka||"–",tabelaBlago()||"–",form.nakKraj||"–",tabelaDatum(form.nakDatum,form.nakCas)||"–",form.razKraj||"–",tabelaDatum(form.razDatum,form.razCas)||"–"].map((c,i)=>(
+                  <td key={i} style={{padding:"8px 10px",border:"1px solid #e2e8f0",color:"#0f2744"}}>{c}</td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style={{fontSize:11,color:"#0369a1",marginTop:8}}>💡 Klikni gumb → v Google tabeli pritisni <b>Ctrl+V</b>, podatki se razporedijo v 6 stolpcev.</div>
       </div>
       <button style={{width:"100%",background:"linear-gradient(135deg,#065f46,#16a34a)",color:"#fff",border:"none",borderRadius:12,padding:14,fontSize:15,fontWeight:700,cursor:"pointer"}} onClick={ustvariNalog}>
         📋 Ustvari nalog v sistemu →
