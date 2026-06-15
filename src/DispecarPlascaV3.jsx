@@ -2136,9 +2136,11 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
         showToast("⏳ Nalagam original...");
         pdfUrl=await uploadOriginalDatoteke(priponkaFile);
       }
+      const statusNaloga = form.voznikId ? 'poslan' : 'nov';
       const { data, error } = await supabase.from('nalogi').insert([{
         stevilka_naloga: '',
-        status: 'nov',
+        status: statusNaloga,
+        poslan_cas: form.voznikId ? new Date().toISOString() : null,
         stranka: form.stranka,
         blago: form.blago||"",
         kolicina: form.kolicina||"",
@@ -2174,7 +2176,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
       }
  
       await naložiPodatke();
-      showToast(`✅ Nalog ${data.stevilka_naloga} ustvarjen!`);
+      showToast(form.voznikId ? `✅ Nalog ${data.stevilka_naloga} ustvarjen in poslan vozniku!` : `✅ Nalog ${data.stevilka_naloga} ustvarjen!`);
       setKorak("vnos");
       setVnosText("");
       setPriponka(null);
