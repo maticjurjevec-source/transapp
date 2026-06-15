@@ -868,7 +868,18 @@ function PregledTab({stats,nalogi,obracuni,vozniki,onSelNalog,onSelOb}){
 function NalogiTab({nalogi,vozniki,onSelect,openNovNalog,onEdit,onDelete}){
   const [f,setF]=useState("vsi");
   const [q,setQ]=useState("");
-  const list=nalogi.filter(n=>f==="vsi"||n.status===f).filter(n=>!q||n.stranka.toLowerCase().includes(q.toLowerCase())||n.stevilkaNaloga.includes(q));
+  const list=nalogi.filter(n=>f==="vsi"||n.status===f).filter(n=>{
+    if(!q)return true;
+    const qq=q.toLowerCase().trim();
+    const v=(vozniki||[]).find(x=>x.id===n.voznikId);
+    const polja=[
+      n.stevilkaNaloga,n.stevilka_narocnika,n.stranka,n.blago,n.kolicina,n.teza,
+      n.nakFirma,n.nakKraj,n.nakNaslov,n.nakReferenca,n.nakDatum,
+      n.razFirma,n.razKraj,n.razNaslov,n.razReferenca,n.razDatum,
+      n.navodila,n.kontaktEmail,v?.ime,v?.vozilo,
+    ];
+    return polja.some(p=>String(p||"").toLowerCase().includes(qq));
+  });
   return(<div>
     <div style={{display:"flex",gap:8,marginBottom:12}}>
       <input style={{...s.inp,flex:1,margin:0}} placeholder="🔍 Išči..." value={q} onChange={e=>setQ(e.target.value)}/>
