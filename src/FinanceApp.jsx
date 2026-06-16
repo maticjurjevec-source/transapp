@@ -157,9 +157,10 @@ export default function FinanceApp(){
   const faktCount=useMemo(()=>nalogi.filter(n=>n.fakturirano_bernarda).length,[nalogi]);
 
   const nalogiFiltered=useMemo(()=>{
-    let items=[...nalogi].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
-    if(nalogFilter==="nefakturirano")items=items.filter(n=>!n.fakturirano_bernarda);
-    else if(nalogFilter==="fakturirano")items=items.filter(n=>n.fakturirano_bernarda);
+    let items=[...nalogi];
+    if(nalogFilter==="nefakturirano")items=items.filter(n=>!n.fakturirano_bernarda).sort((a,b)=>new Date(a.created_at||0)-new Date(b.created_at||0));
+    else if(nalogFilter==="fakturirano")items=items.filter(n=>n.fakturirano_bernarda).sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
+    else items=items.sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
     if(nalogSearch.trim()){
       const q=nalogSearch.toLowerCase().trim();
       items=items.filter(n=>[n.stevilka_naloga,n.stranka,n.blago,n.nak_kraj,n.raz_kraj,n.nak_firma,n.raz_firma,n.sq_racun,n.nak_referenca].some(f=>String(f||"").toLowerCase().includes(q)));
@@ -308,14 +309,17 @@ export default function FinanceApp(){
               const osnova=zOrig?parseZnesek(zOrig):0;
               const skupaj=jeSlo?osnova*1.22:osnova;
               const fakt=!!n.fakturirano_bernarda;
+              const dniStari=Math.floor((Date.now()-new Date(n.created_at||Date.now()).getTime())/86400000);
+              const star=!fakt&&dniStari>=14;
               return(
-                <div key={n.id} style={{background:c.card,borderRadius:10,padding:"14px 18px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",borderLeft:`4px solid ${fakt?c.green:c.orange}`}}>
+                <div key={n.id} style={{background:c.card,borderRadius:10,padding:"14px 18px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",borderLeft:`4px solid ${fakt?c.green:(star?c.red:c.orange)}`}}>
                   <div onClick={()=>setNalogDetail(n)} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap",cursor:"pointer"}}>
                     <div style={{flex:"1 1 280px",minWidth:0}}>
                       <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:4,flexWrap:"wrap"}}>
                         <span style={{fontSize:12,fontFamily:"monospace",fontWeight:700,color:c.accent}}>{n.stevilka_naloga||"—"}</span>
                         <span style={{padding:"2px 8px",borderRadius:10,background:sc.bg,color:sc.color,fontSize:10,fontWeight:700}}>{sc.label}</span>
                         {fakt&&<span style={{padding:"2px 8px",borderRadius:10,background:"#dcfce7",color:c.green,fontSize:10,fontWeight:700}}>✅ Fakturirano</span>}
+                        {star&&<span style={{padding:"2px 8px",borderRadius:10,background:dniStari>=30?"#fee2e2":"#fef3c7",color:dniStari>=30?c.red:"#b45309",fontSize:10,fontWeight:700}}>⚠️ {dniStari} dni</span>}
                       </div>
                       <div style={{fontWeight:700,fontSize:15,color:c.primary}}>{n.stranka||"—"}</div>
                       <div style={{fontSize:12,color:c.muted,marginTop:2}}>📍 {n.nak_kraj||"?"} → {n.raz_kraj||"?"}</div>
