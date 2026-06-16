@@ -6,6 +6,8 @@ const pad=(n)=>String(n).padStart(2,"0");
 const fmt=(iso)=>{if(!iso)return"–";const d=new Date(iso);return`${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()}`;};
 const fmtT=(iso)=>{if(!iso)return"";const d=new Date(iso);return`${pad(d.getHours())}:${pad(d.getMinutes())}`;};
 const fmtDT=(iso)=>iso?`${fmt(iso)} ob ${fmtT(iso)}`:"–";
+const isoDan=(d)=>{const x=new Date(d);return`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`;};
+const obdobjeRange=(r)=>{const t=new Date();t.setHours(0,0,0,0);if(r==="danes")return[isoDan(t),isoDan(t)];if(r==="teden"){const p=new Date(t);const day=(p.getDay()+6)%7;p.setDate(p.getDate()-day);const n=new Date(p);n.setDate(p.getDate()+6);return[isoDan(p),isoDan(n)];}if(r==="mesec"){const p=new Date(t.getFullYear(),t.getMonth(),1);const n=new Date(t.getFullYear(),t.getMonth()+1,0);return[isoDan(p),isoDan(n)];}return["",""];};
 
 // Natisni original nalog + CMR z interno NAL številko na vrhu vsake strani
 const natisniVse=(n,cmrSlike=[])=>{
