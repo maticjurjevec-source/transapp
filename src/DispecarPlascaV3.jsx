@@ -781,12 +781,13 @@ const handleDrop=async(e)=>{
         </div>
         {/* Tabs */}
         <div style={s.tabs}>
-          {[["pregled","📊 Pregled"],["nalogi","📋 Nalogi"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["finance","🧾 Finance"],["komunikacija","📨 Komunikacija"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`]].map(([id,label])=>(
+          {[["pregled","📊 Pregled"],["nalogi","📋 Nalogi"],["ai","🤖 AI"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["finance","🧾 Finance"],["komunikacija","📨 Komunikacija"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`]].map(([id,label])=>(
             <button key={id} style={{...s.tab,...(tab===id?s.tabOn:{})}} onClick={()=>setTab(id)}>{label}</button>
           ))}
         </div>
         {tab==="pregled"&&<PregledTab stats={stats} nalogi={st.nalogi} obracuni={st.obracuni} vozniki={vozniki} onSelNalog={odpriNalog} onSelOb={setSelObracun}/>}
         {tab==="nalogi"&&<NalogiTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog} openNovNalog={openNovNalog} onEdit={urediNalog} onDelete={izbrisiNalog}/>}
+        {tab==="ai"&&<AiIskalnikTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog} showToast={showToast}/>}
         {tab==="vozniki"&&<VoznikiTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog}/>}
         {tab==="obracuni"&&<ObracuniTab obracuni={st.obracuni} onSelect={setSelObracun}/>}
         {tab==="finance"&&<FinanceTab st={st} upd={upd} showToast={showToast} supabase={supabase} setActiveTab={setTab}/>}
@@ -872,7 +873,14 @@ function NalogiTab({nalogi,vozniki,onSelect,openNovNalog,onEdit,onDelete}){
   const [q,setQ]=useState("");
   const [grupiranje,setGrupiranje]=useState("seznam");
   const [odprte,setOdprte]=useState({});
+  const [datumOd,setDatumOd]=useState("");
+  const [datumDo,setDatumDo]=useState("");
+  const [obdobje,setObdobje]=useState("vse");
   const list=nalogi.filter(n=>f==="vsi"||n.status===f).filter(n=>{
+    if(datumOd&&!(n.nakDatum&&n.nakDatum>=datumOd))return false;
+    if(datumDo&&!(n.nakDatum&&n.nakDatum<=datumDo))return false;
+    return true;
+  }).filter(n=>{
     if(!q)return true;
     const qq=q.toLowerCase().trim();
     const v=(vozniki||[]).find(x=>x.id===n.voznikId);
@@ -925,6 +933,19 @@ function NalogiTab({nalogi,vozniki,onSelect,openNovNalog,onEdit,onDelete}){
       {[["vsi","Vsi"],["nov","Novi"],["poslan","Poslani"],["sprejet","Sprejeto"],["zakljucen","Zaključeni"],["za_fakturo","Za fakturo"]].map(([v,l])=>(
         <button key={v} style={{...s.fBtn,...(f===v?s.fOn:{})}} onClick={()=>setF(v)}>{l}</button>
       ))}
+    </div>
+    <div style={{background:"#fff",borderRadius:12,padding:12,marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+      <div style={{fontSize:11,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>📅 Obdobje (datum naklada)</div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+        {[["danes","Danes"],["teden","Ta teden"],["mesec","Ta mesec"],["vse","Vse"]].map(([v,l])=>(
+          <button key={v} style={{...s.fBtn,...(obdobje===v?s.fOn:{})}} onClick={()=>{setObdobje(v);const[od,doo]=obdobjeRange(v);setDatumOd(od);setDatumDo(doo);}}>{l}</button>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:8,alignItems:"flex-end",flexWrap:"wrap"}}>
+        <div style={{flex:"1 1 120px"}}><label style={{...s.lbl,fontSize:11}}>Od</label><input type="date" style={{...s.inp,margin:0}} value={datumOd} onChange={e=>{setDatumOd(e.target.value);setObdobje("");}}/></div>
+        <div style={{flex:"1 1 120px"}}><label style={{...s.lbl,fontSize:11}}>Do</label><input type="date" style={{...s.inp,margin:0}} value={datumDo} onChange={e=>{setDatumDo(e.target.value);setObdobje("");}}/></div>
+        {(datumOd||datumDo)&&<button style={{...s.fBtn}} onClick={()=>{setDatumOd("");setDatumDo("");setObdobje("vse");}}>Počisti</button>}
+      </div>
     </div>
     {list.length===0&&<div style={s.empty}>Ni nalogov.</div>}
     {grupiranje==="seznam"&&list.map(n=><NC key={n.id} n={n} vozniki={vozniki} onClick={()=>onSelect(n)} onEdit={onEdit} onDelete={onDelete}/>)}
@@ -2476,8 +2497,61 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
   return null;
 }
  
-// ===== KOMUNIKACIJA TAB =====
-function KomunikacijaTab({ showToast }) {
+// ===== AI ISKALNIK TAB =====
+function AiIskalnikTab({nalogi,vozniki,onSelect,showToast}){
+  const [q,setQ]=useState("");
+  const [conv,setConv]=useState([]);
+  const [loading,setLoading]=useState(false);
+  const endRef=useRef(null);
+
+  useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth",block:"end"});},[conv,loading]);
+
+  const primeri=["Kateri nalogi so še nefakturirani?","Koliko nalogov je šlo ta mesec?","Kdo vozi v Nemčijo?","Najdražji nalog ta teden"];
+
+  const vprasaj=async(vpr)=>{
+    const vprasanje=(vpr??q).trim();
+    if(!vprasanje||loading)return;
+    setQ("");
+    setLoading(true);
+    const kompakt=nalogi.slice(0,200).map(n=>{
+      const v=(vozniki||[]).find(x=>x.id===n.voznikId);
+      return {
+        st:n.stevilkaNaloga,
+        stranka:n.stranka||"",
+        nakKraj:n.nakKraj||"",
+        razKraj:n.razKraj||"",
+        blago:n.blago||"",
+        status:n.status||"",
+        nakDatum:n.nakDatum||"",
+        razDatum:n.razDatum||"",
+        voznik:v?.ime||"",
+        znesek:n.znesek_original||n.znesekOriginal||"",
+        slovenskaDdv:n.je_slovenska_ddv,
+      };
+    });
+    try{
+      const {data,error}=await supabase.functions.invoke("ai-nalogi-iskalnik",{body:{vprasanje,nalogi:kompakt}});
+      if(error)throw error;
+      if(!data?.success)throw new Error(data?.error||"AI napaka");
+      const stevilke=data.stevilke||[];
+      const najdeni=stevilke.map(s=>nalogi.find(n=>(n.stevilkaNaloga||"").toUpperCase()===String(s).toUpperCase())).filter(Boolean);
+      setConv(c=>[...c,{q:vprasanje,odgovor:data.odgovor||"",stats:data.stats||[],najdeni}]);
+    }catch(err){
+      console.error(err);
+      setConv(c=>[...c,{q:vprasanje,odgovor:"❌ Prišlo je do napake pri iskanju. Poskusi znova.",stats:[],najdeni:[]}]);
+      showToast&&showToast("❌ AI iskanje ni uspelo",true);
+    }
+    setLoading(false);
+  };
+
+  return(<div>
+    <div style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:14,padding:18,color:"#fff",marginBottom:14}}>
+      <div style={{fontWeight:800,fontSize:16,marginBottom:6}}>🤖 Vprašaj o nalogih</div>
+      <div style={{fontSize:13,opacity:0.85,lineHeight:1.5}}>Vprašaj v naravnem jeziku — AI poišče po tvojih nalogih in odgovori. Klikni na najden nalog, da ga odpreš.</div>
+    </div>
+    <div style={{background:"#fff",borderRadius:12,padding:14,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",marginBottom:12}}>
+      <div style={{display:"flex",gap:8}}>
+        <input style={{flex:1,border:"1.5px solid #e2e8f0",borderRadius:10,padding:"12px 14px",fontSize:14,outline:"none",background:"#f8fafc",fontFamily:"inherit"}} placeholder="Vprašaj o svojih nalogih…" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")vprasa
   const [korak, setKorak] = useState("vnos"); // vnos | rezultat
   const [aiLoading, setAiLoading] = useState(false);
   const [stranke, setStranke] = useState([]);
