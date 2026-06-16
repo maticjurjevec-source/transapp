@@ -2551,7 +2551,38 @@ function AiIskalnikTab({nalogi,vozniki,onSelect,showToast}){
     </div>
     <div style={{background:"#fff",borderRadius:12,padding:14,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",marginBottom:12}}>
       <div style={{display:"flex",gap:8}}>
-        <input style={{flex:1,border:"1.5px solid #e2e8f0",borderRadius:10,padding:"12px 14px",fontSize:14,outline:"none",background:"#f8fafc",fontFamily:"inherit"}} placeholder="Vprašaj o svojih nalogih…" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")vprasa
+        <input style={{flex:1,border:"1.5px solid #e2e8f0",borderRadius:10,padding:"12px 14px",fontSize:14,outline:"none",background:"#f8fafc",fontFamily:"inherit"}} placeholder="Vprašaj o svojih nalogih…" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")vprasaj();}}/>
+        <button style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",color:"#fff",border:"none",borderRadius:10,padding:"0 20px",fontSize:14,fontWeight:700,cursor:loading?"default":"pointer",opacity:loading?0.5:1}} onClick={()=>vprasaj()} disabled={loading}>Vprašaj</button>
+      </div>
+      {conv.length===0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
+        {primeri.map((p,i)=><button key={i} onClick={()=>vprasaj(p)} style={{background:"#eff6ff",border:"1px solid #bfdbfe",color:"#1d4ed8",borderRadius:20,padding:"5px 12px",fontSize:12,cursor:"pointer",fontWeight:500}}>{p}</button>)}
+      </div>}
+    </div>
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {conv.map((m,i)=>(
+        <div key={i} style={{display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{alignSelf:"flex-end",maxWidth:"85%",background:"#0f2744",color:"#fff",borderRadius:"14px 14px 4px 14px",padding:"10px 14px",fontSize:14}}>{m.q}</div>
+          <div style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:"#7c3aed",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>🤖 AI odgovor</div>
+            <div style={{fontSize:14,lineHeight:1.6,color:"#0f2744",whiteSpace:"pre-wrap"}}>{m.odgovor}</div>
+            {m.stats&&m.stats.length>0&&<div style={{display:"flex",gap:10,flexWrap:"wrap",margin:"12px 0 4px"}}>
+              {m.stats.map((stt,j)=><div key={j} style={{background:"#f8fafc",borderRadius:10,padding:"10px 14px",textAlign:"center",flex:1,minWidth:90}}><div style={{fontSize:20,fontWeight:800,color:"#0f2744"}}>{stt[0]}</div><div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{stt[1]}</div></div>)}
+            </div>}
+            {m.najdeni&&m.najdeni.length>0&&<>
+              <div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5,margin:"14px 0 8px"}}>📋 Najdeni nalogi ({m.najdeni.length})</div>
+              {m.najdeni.map(n=><NC key={n.id} n={n} vozniki={vozniki} onClick={()=>onSelect(n)}/>)}
+            </>}
+          </div>
+        </div>
+      ))}
+      {loading&&<div style={{background:"#fff",borderRadius:12,padding:"14px 16px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",color:"#64748b",fontSize:13}}>🤖 AI razmišlja in išče po nalogih…</div>}
+      <div ref={endRef}/>
+    </div>
+  </div>);
+}
+
+// ===== KOMUNIKACIJA TAB =====
+function KomunikacijaTab({ showToast }) {
   const [korak, setKorak] = useState("vnos"); // vnos | rezultat
   const [aiLoading, setAiLoading] = useState(false);
   const [stranke, setStranke] = useState([]);
