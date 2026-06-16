@@ -10,6 +10,14 @@ const supabase = createClient(
 function fmt(d){if(!d)return"—";try{return new Date(d).toLocaleDateString("sl-SI",{day:"2-digit",month:"2-digit",year:"numeric"})}catch{return"—"}}
 function parseZnesek(s){if(!s)return 0;if(typeof s==="number")return s;const c=String(s).replace(/[^\d,.\s]/g," ").trim();let n=c.replace(/\s/g,"").replace(/\.(?=\d{3}(\D|$))/g,"").replace(",",".");return parseFloat(n)||0}
 function izvleciEmail(t){if(!t)return"";const m=t.match(/[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);return m?m[0]:""}
+function isoDan(d){const x=new Date(d);return`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`}
+function obdobjeRange(r){
+  const t=new Date();t.setHours(0,0,0,0);
+  if(r==="danes")return[isoDan(t),isoDan(t)];
+  if(r==="teden"){const p=new Date(t);const day=(p.getDay()+6)%7;p.setDate(p.getDate()-day);const n=new Date(p);n.setDate(p.getDate()+6);return[isoDan(p),isoDan(n)];}
+  if(r==="mesec"){const p=new Date(t.getFullYear(),t.getMonth(),1);const n=new Date(t.getFullYear(),t.getMonth()+1,0);return[isoDan(p),isoDan(n)];}
+  return["",""];
+}
 
 // Natisni en dokument (PDF ali slika)
 function jeTiskljiv(url){return /\.(pdf|jpg|jpeg|png|webp|gif)(\?|$)/i.test(url||"");}
@@ -71,6 +79,9 @@ export default function FinanceApp(){
   const [nalogSearch,setNalogSearch]=useState("");
   const [nalogFilter,setNalogFilter]=useState("nefakturirano");
   const [nalogDetail,setNalogDetail]=useState(null);
+  const [datumOd,setDatumOd]=useState("");
+  const [datumDo,setDatumDo]=useState("");
+  const [obdobje,setObdobje]=useState("vse");
 
   // ─── Fetch data ───
   useEffect(()=>{
@@ -161,12 +172,14 @@ export default function FinanceApp(){
     if(nalogFilter==="nefakturirano")items=items.filter(n=>!n.fakturirano_bernarda).sort((a,b)=>new Date(a.created_at||0)-new Date(b.created_at||0));
     else if(nalogFilter==="fakturirano")items=items.filter(n=>n.fakturirano_bernarda).sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
     else items=items.sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
+    if(datumOd)items=items.filter(n=>n.nak_datum&&n.nak_datum>=datumOd);
+    if(datumDo)items=items.filter(n=>n.nak_datum&&n.nak_datum<=datumDo);
     if(nalogSearch.trim()){
       const q=nalogSearch.toLowerCase().trim();
       items=items.filter(n=>[n.stevilka_naloga,n.stranka,n.blago,n.nak_kraj,n.raz_kraj,n.nak_firma,n.raz_firma,n.sq_racun,n.nak_referenca].some(f=>String(f||"").toLowerCase().includes(q)));
     }
     return items;
-  },[nalogi,nalogFilter,nalogSearch]);
+  },[nalogi,nalogFilter,nalogSearch,datumOd,datumDo]);
 
   // ─── Actions ───
   async function oznacPlacano(id){
@@ -294,6 +307,25 @@ export default function FinanceApp(){
               {[["nefakturirano","⏳ Še ne fakturirano ("+nefaktCount+")"],["fakturirano","✅ Fakturirano ("+faktCount+")"],["vsi","Vsi ("+nalogi.length+")"]].map(([v,l])=>(
                 <button key={v} onClick={()=>setNalogFilter(v)} style={{padding:"6px 14px",borderRadius:20,border:`1px solid ${nalogFilter===v?c.accent:c.border}`,background:nalogFilter===v?c.accent:"#fff",color:nalogFilter===v?"#fff":c.muted,fontSize:12,fontWeight:600,cursor:"pointer"}}>{l}</button>
               ))}
+            </div>
+            <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${c.bgSoft}`}}>
+              <div style={{fontSize:11,fontWeight:700,color:c.light,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>📅 Obdobje (datum naklada)</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+                {[["danes","Danes"],["teden","Ta teden"],["mesec","Ta mesec"],["vse","Vse"]].map(([v,l])=>(
+                  <button key={v} onClick={()=>{setObdobje(v);const[od,doo]=obdobjeRange(v);setDatumOd(od);setDatumDo(doo);}} style={{padding:"6px 14px",borderRadius:20,border:`1px solid ${obdobje===v?c.accent:c.border}`,background:obdobje===v?c.accent:"#fff",color:obdobje===v?"#fff":c.muted,fontSize:12,fontWeight:600,cursor:"pointer"}}>{l}</button>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:10,alignItems:"flex-end",flexWrap:"wrap"}}>
+                <div style={{flex:"1 1 130px"}}>
+                  <label style={{display:"block",fontSize:11,color:c.muted,marginBottom:3}}>Od</label>
+                  <input type="date" value={datumOd} onChange={e=>{setDatumOd(e.target.value);setObdobje("");}} style={{width:"100%",padding:"8px 10px",border:`1px solid ${c.border}`,borderRadius:8,fontSize:13,boxSizing:"border-box"}}/>
+                </div>
+                <div style={{flex:"1 1 130px"}}>
+                  <label style={{display:"block",fontSize:11,color:c.muted,marginBottom:3}}>Do</label>
+                  <input type="date" value={datumDo} onChange={e=>{setDatumDo(e.target.value);setObdobje("");}} style={{width:"100%",padding:"8px 10px",border:`1px solid ${c.border}`,borderRadius:8,fontSize:13,boxSizing:"border-box"}}/>
+                </div>
+                {(datumOd||datumDo)&&<button onClick={()=>{setDatumOd("");setDatumDo("");setObdobje("vse");}} style={{padding:"8px 12px",border:`1px solid ${c.border}`,background:c.bgSoft,borderRadius:8,fontSize:12,cursor:"pointer",color:c.muted,fontWeight:600}}>Počisti</button>}
+              </div>
             </div>
           </div>
 
