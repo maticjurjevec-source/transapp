@@ -12,8 +12,16 @@ function parseZnesek(s){if(!s)return 0;if(typeof s==="number")return s;const c=S
 function izvleciEmail(t){if(!t)return"";const m=t.match(/[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);return m?m[0]:""}
 
 // Natisni en dokument (PDF ali slika)
+function jeTiskljiv(url){return /\.(pdf|jpg|jpeg|png|webp|gif)(\?|$)/i.test(url||"");}
+function prenesiDatoteko(url){
+  if(!url)return;
+  const a=document.createElement("a");
+  a.href=url;a.target="_blank";a.rel="noopener noreferrer";a.download="";
+  document.body.appendChild(a);a.click();a.remove();
+}
 function natisniDok(url,naslov){
-  if(!url){alert("Ni dokumenta za tiskanje.");return;}
+  if(!url){alert("Ni dokumenta.");return;}
+  if(!jeTiskljiv(url)){prenesiDatoteko(url);return;}
   const w=window.open("","_blank");
   if(!w){alert("Brskalnik je blokiral okno. Dovoli pojavna okna za tiskanje.");return;}
   const jePdf=/\.pdf(\?|$)/i.test(url);
@@ -62,6 +70,7 @@ export default function FinanceApp(){
   // Vsi nalogi UI
   const [nalogSearch,setNalogSearch]=useState("");
   const [nalogFilter,setNalogFilter]=useState("nefakturirano");
+  const [nalogDetail,setNalogDetail]=useState(null);
 
   // ─── Fetch data ───
   useEffect(()=>{
@@ -301,7 +310,7 @@ export default function FinanceApp(){
               const fakt=!!n.fakturirano_bernarda;
               return(
                 <div key={n.id} style={{background:c.card,borderRadius:10,padding:"14px 18px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",borderLeft:`4px solid ${fakt?c.green:c.orange}`}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+                  <div onClick={()=>setNalogDetail(n)} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap",cursor:"pointer"}}>
                     <div style={{flex:"1 1 280px",minWidth:0}}>
                       <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:4,flexWrap:"wrap"}}>
                         <span style={{fontSize:12,fontFamily:"monospace",fontWeight:700,color:c.accent}}>{n.stevilka_naloga||"—"}</span>
@@ -311,6 +320,7 @@ export default function FinanceApp(){
                       <div style={{fontWeight:700,fontSize:15,color:c.primary}}>{n.stranka||"—"}</div>
                       <div style={{fontSize:12,color:c.muted,marginTop:2}}>📍 {n.nak_kraj||"?"} → {n.raz_kraj||"?"}</div>
                       {n.blago&&<div style={{fontSize:11,color:c.light,marginTop:1}}>📦 {n.blago}</div>}
+                      {(n.nak_datum||n.raz_datum)&&<div style={{fontSize:11,color:c.light,marginTop:3,display:"flex",gap:10,flexWrap:"wrap"}}>{n.nak_datum&&<span>📅 Nakl: {fmt(n.nak_datum)}</span>}{n.raz_datum&&<span>🏁 Razkl: {fmt(n.raz_datum)}</span>}</div>}
                     </div>
                     {zOrig&&<div style={{textAlign:"right",flexShrink:0}}>
                       <div style={{fontSize:18,fontWeight:800,color:c.green}}>{skupaj.toFixed(2)} €</div>
@@ -320,7 +330,7 @@ export default function FinanceApp(){
 
                   {/* Akcije */}
                   <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginTop:12,paddingTop:12,borderTop:`1px solid ${c.bgSoft}`}}>
-                    <button onClick={()=>natisniDok(origUrl,n.stevilka_naloga)} disabled={!origUrl} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${origUrl?"#bfdbfe":c.border}`,background:origUrl?"#eff6ff":"#f8fafc",color:origUrl?c.accent:c.light,fontSize:12,fontWeight:700,cursor:origUrl?"pointer":"not-allowed"}}>🖨️ Natisni original</button>
+                    <button onClick={()=>natisniDok(origUrl,n.stevilka_naloga)} disabled={!origUrl} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${origUrl?"#bfdbfe":c.border}`,background:origUrl?"#eff6ff":"#f8fafc",color:origUrl?c.accent:c.light,fontSize:12,fontWeight:700,cursor:origUrl?"pointer":"not-allowed"}}>{origUrl&&!jeTiskljiv(origUrl)?"📄 Prenesi original":"🖨️ Natisni original"}</button>
                     <button onClick={()=>natisniCMRji(cmrArr.map(getCmrUrl),"CMR "+(n.stevilka_naloga||""))} disabled={cmrArr.length===0} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${cmrArr.length?c.border:c.border}`,background:cmrArr.length?"#f1f5f9":"#f8fafc",color:cmrArr.length?c.primary:c.light,fontSize:12,fontWeight:700,cursor:cmrArr.length?"pointer":"not-allowed"}}>🖨️ Natisni CMR{cmrArr.length>0?` (${cmrArr.length})`:""}</button>
                     <SqInput nalog={n} onSave={shraniSq} c={c}/>
                     <button onClick={()=>toggleFakturirano(n)} style={{padding:"7px 14px",borderRadius:8,border:"none",background:fakt?"#e2e8f0":c.green,color:fakt?c.muted:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",marginLeft:"auto"}}>{fakt?"↩️ Prekliči fakturirano":"☑️ Označi fakturirano"}</button>
@@ -550,6 +560,95 @@ export default function FinanceApp(){
                   const body=`Spoštovani,\n\nV priponki pošiljamo račun ${detail.id} v znesku ${(detail.znesek||0).toFixed(2)} € z rokom plačila ${fmt(detail.rok)}.\n\nLep pozdrav,\nMATJAŽ JURJEVEC, s.p.\nSI76353362`;
                   window.location.href=`mailto:${detail.kontaktEmail||detail.kontakt_email||""}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;
                 }}/>
+              </div>
+            </div>
+          </div>
+        </div>);
+      })()}
+
+      {/* DETAJL NALOGA (Bernarda) */}
+      {nalogDetail&&(()=>{
+        const n=nalogDetail;
+        const sc=nalogSC[n.status]||nalogSC.nov;
+        const origUrl=getOriginalUrl(n);
+        const cmrArr=cmrByNalog[n.id]||[];
+        const zOrig=getZnesekOriginal(n);
+        const jeSlo=n.je_slovenska_ddv!==false;
+        const osnova=zOrig?parseZnesek(zOrig):0;
+        const skupaj=jeSlo?osnova*1.22:osnova;
+        const fakt=!!n.fakturirano_bernarda;
+        const RowD=({k,v})=>v?<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #eef2f6",fontSize:13}}><span style={{color:c.light}}>{k}</span><span style={{color:"#1e293b",fontWeight:600,textAlign:"right"}}>{v}</span></div>:null;
+        return(<div style={{position:"fixed",inset:0,zIndex:150,background:"rgba(0,0,0,0.5)",display:"flex",justifyContent:"center",alignItems:"flex-start",padding:"30px 16px",overflowY:"auto"}} onClick={()=>setNalogDetail(null)}>
+          <div style={{background:c.card,borderRadius:16,maxWidth:700,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.2)",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+            <div style={{background:`linear-gradient(135deg, ${c.primary} 0%, #0f2744 100%)`,color:"#fff",padding:"20px 24px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                <div>
+                  <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:c.light}}>Nalog</div>
+                  <div style={{fontSize:20,fontWeight:800,fontFamily:"monospace",marginTop:2}}>{n.stevilka_naloga||"—"}</div>
+                  <div style={{fontSize:15,fontWeight:700,marginTop:8}}>🏢 {n.stranka||"—"}</div>
+                  <div style={{marginTop:8,display:"flex",gap:6,flexWrap:"wrap"}}>
+                    <span style={{padding:"3px 10px",borderRadius:10,background:sc.bg,color:sc.color,fontSize:11,fontWeight:700}}>{sc.label}</span>
+                    {fakt&&<span style={{padding:"3px 10px",borderRadius:10,background:"#dcfce7",color:c.green,fontSize:11,fontWeight:700}}>✅ Fakturirano</span>}
+                  </div>
+                </div>
+                <button onClick={()=>setNalogDetail(null)} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",width:32,height:32,borderRadius:8,fontSize:16,cursor:"pointer"}}>✕</button>
+              </div>
+            </div>
+            <div style={{padding:"20px 24px"}}>
+              <Section title="📍 Naklad">
+                <RowD k="Firma" v={n.nak_firma}/>
+                <RowD k="Kraj" v={n.nak_kraj}/>
+                <RowD k="Naslov" v={n.nak_naslov}/>
+                <RowD k="Datum" v={n.nak_datum?(n.nak_cas?`${fmt(n.nak_datum)} ${n.nak_cas}`:fmt(n.nak_datum)):""}/>
+                <RowD k="Referenca" v={n.nak_referenca}/>
+              </Section>
+              <Section title="🏁 Razklad">
+                <RowD k="Firma" v={n.raz_firma}/>
+                <RowD k="Kraj" v={n.raz_kraj}/>
+                <RowD k="Naslov" v={n.raz_naslov}/>
+                <RowD k="Datum" v={n.raz_datum?(n.raz_cas?`${fmt(n.raz_datum)} ${n.raz_cas}`:fmt(n.raz_datum)):""}/>
+                <RowD k="Referenca" v={n.raz_referenca}/>
+              </Section>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <Section title="📦 Blago">
+                  <div style={{fontSize:13,color:"#1e293b"}}>{n.blago||"—"}{n.kolicina?` · ${n.kolicina}`:""}{n.teza?` · ${n.teza}`:""}</div>
+                </Section>
+                {zOrig&&<Section title="💶 Cena">
+                  <div style={{fontSize:16,fontWeight:800,color:c.green}}>{skupaj.toFixed(2)} €</div>
+                  <div style={{fontSize:11,color:c.light}}>{jeSlo?"z DDV 22%":"reverse charge"}</div>
+                </Section>}
+              </div>
+              {n.navodila&&<Section title="⚠️ Navodila">
+                <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,padding:10,fontSize:13,color:"#78350f",whiteSpace:"pre-wrap"}}>{n.navodila}</div>
+              </Section>}
+              {n.sq_racun&&<Section title="🧾 Št. računa (SQ Trans)">
+                <div style={{fontFamily:"monospace",fontWeight:700,fontSize:14,color:c.accent}}>{n.sq_racun}</div>
+              </Section>}
+              {origUrl&&<Section title="📄 Original nalog">
+                <a href={origUrl} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:12,background:c.bgSoft,border:`1px solid ${c.border}`,borderRadius:8,padding:12,textDecoration:"none",color:"inherit"}}>
+                  <div style={{width:36,height:36,borderRadius:6,background:"#fef2f2",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>📄</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:600,fontSize:13,color:c.primary}}>{decodeURIComponent(origUrl.split("/").pop()||"nalog")}</div>
+                    <div style={{fontSize:11,color:c.muted}}>Odpri ↗</div>
+                  </div>
+                </a>
+              </Section>}
+              {cmrArr.length>0&&<Section title={`📎 CMR dokumenti (${cmrArr.length})`}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(90px,1fr))",gap:8}}>
+                  {cmrArr.map(cmr=>{
+                    const url=getCmrUrl(cmr);
+                    const isImg=/\.(jpg|jpeg|png|webp|gif)$/i.test(cmr.ime_datoteke||"");
+                    return(<div key={cmr.id} onClick={()=>{if(isImg&&url)setImgPreview(url);else if(url)window.open(url,"_blank");}} style={{background:c.bgSoft,border:`1px solid ${c.border}`,borderRadius:8,padding:4,cursor:"pointer",textAlign:"center"}}>
+                      {isImg&&url?<img src={url} alt="" style={{width:"100%",height:70,objectFit:"cover",borderRadius:4}}/>:<div style={{height:70,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>📄</div>}
+                      <div style={{fontSize:9,color:c.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:3}}>{cmr.ime_datoteke}</div>
+                    </div>);
+                  })}
+                </div>
+              </Section>}
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",paddingTop:12,borderTop:`1px solid ${c.border}`}}>
+                <button onClick={()=>natisniDok(origUrl,n.stevilka_naloga)} disabled={!origUrl} style={{padding:"8px 14px",borderRadius:8,border:`1px solid ${origUrl?"#bfdbfe":c.border}`,background:origUrl?"#eff6ff":"#f8fafc",color:origUrl?c.accent:c.light,fontSize:12,fontWeight:700,cursor:origUrl?"pointer":"not-allowed"}}>{origUrl&&!jeTiskljiv(origUrl)?"📄 Prenesi original":"🖨️ Natisni original"}</button>
+                <button onClick={()=>natisniCMRji(cmrArr.map(getCmrUrl),"CMR "+(n.stevilka_naloga||""))} disabled={cmrArr.length===0} style={{padding:"8px 14px",borderRadius:8,border:`1px solid ${c.border}`,background:cmrArr.length?"#f1f5f9":"#f8fafc",color:cmrArr.length?c.primary:c.light,fontSize:12,fontWeight:700,cursor:cmrArr.length?"pointer":"not-allowed"}}>🖨️ Natisni CMR{cmrArr.length>0?` (${cmrArr.length})`:""}</button>
+                <button onClick={()=>{toggleFakturirano(n);setNalogDetail(d=>d?{...d,fakturirano_bernarda:!d.fakturirano_bernarda}:d);}} style={{padding:"8px 16px",borderRadius:8,border:"none",background:fakt?"#e2e8f0":c.green,color:fakt?c.muted:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",marginLeft:"auto"}}>{fakt?"↩️ Prekliči fakturirano":"☑️ Označi fakturirano"}</button>
               </div>
             </div>
           </div>
