@@ -2308,6 +2308,53 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
     }
   };
  
+  // Posodobi obstoječi (podvojeni) nalog z novimi podatki — namesto ustvarjanja novega
+  const posodobiObstojeci = async () => {
+    if (!duplikatOpozorilo?.id) return;
+    if (!form.stranka||!form.nakKraj||!form.razKraj) return showToast("Izpolni obvezna polja!", true);
+    if (!window.confirm(`Posodobim obstoječi nalog ${duplikatOpozorilo.stevilka_naloga} z novimi podatki iz tega dokumenta?`)) return;
+    try {
+      let pdfUrl=null;
+      if(priponkaFile){
+        showToast("⏳ Nalagam original...");
+        pdfUrl=await uploadOriginalDatoteke(priponkaFile);
+      }
+      const updateData = {
+        stranka: form.stranka,
+        blago: form.blago||"",
+        kolicina: form.kolicina||"",
+        teza: form.teza||"",
+        nak_firma: form.nakFirma||"",
+        nak_kraj: form.nakKraj,
+        nak_naslov: form.nakNaslov||"",
+        nak_referenca: form.nakReferenca||"",
+        stevilka_narocnika: form.stevilkaNarocnika||null,
+        nak_datum: form.nakDatum||null,
+        nak_cas: form.nakCas ? form.nakCas.slice(0,5) : null,
+        raz_firma: form.razFirma||"",
+        raz_kraj: form.razKraj,
+        raz_naslov: form.razNaslov||"",
+        raz_referenca: form.razReferenca||"",
+        raz_datum: form.razDatum||null,
+        raz_cas: form.razCas ? form.razCas.slice(0,5) : null,
+        navodila: form.navodila||"",
+        znesek_original: form.znesek||null,
+        je_slovenska_ddv: form.jeSlovenskaDdv!==undefined?form.jeSlovenskaDdv:null,
+      };
+      if (pdfUrl) updateData.original_pdf_url = pdfUrl;
+      if (form.voznikId) updateData.voznik_id = form.voznikId;
+      const { error } = await supabase.from('nalogi').update(updateData).eq('id', duplikatOpozorilo.id);
+      if (error) throw error;
+      if (form._outlookMsgId) { try { await markEmailAsRead(form._outlookMsgId); } catch(e){} }
+      await naložiPodatke();
+      showToast(`✅ Nalog ${duplikatOpozorilo.stevilka_naloga} posodobljen z novimi podatki!`);
+      setKorak("vnos"); setVnosText(""); setPriponka(null); setPriponkaFile(null); setForm({});
+    } catch(err) {
+      showToast("❌ Napaka pri posodabljanju!", true);
+      console.error(err);
+    }
+  };
+ 
   // Filter za Outlook emaile
   const filtriraniEmaili = outlookEmails.filter(em => {
     if (outlookFilter === "priponke") return em.hasAttachments;
@@ -2445,7 +2492,8 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
           {duplikatOpozorilo.stevilka_narocnika && <div style={{color:"#64748b",fontSize:11,marginTop:3}}>📋 Št. naročnika: <b>{duplikatOpozorilo.stevilka_narocnika}</b></div>}
           {duplikatOpozorilo.nak_referenca && <div style={{color:"#64748b",fontSize:11}}>🏷️ Ref. naklada: <b>{duplikatOpozorilo.nak_referenca}</b></div>}
         </div>
-        <div style={{color:"#78350f",fontSize:11,marginTop:8,fontStyle:"italic"}}>💡 Lahko vseeno nadaljuješ — to je samo opozorilo.</div>
+        <div style={{color:"#78350f",fontSize:11,marginTop:8,fontStyle:"italic"}}>💡 Lahko vseeno nadaljuješ kot nov nalog — to je samo opozorilo.</div>
+        <button onClick={posodobiObstojeci} style={{marginTop:10,width:"100%",background:"#0284c7",color:"#fff",border:"none",borderRadius:10,padding:"10px 14px",fontSize:13,fontWeight:700,cursor:"pointer"}}>🔄 Posodobi obstoječi nalog {duplikatOpozorilo.stevilka_naloga} (namesto novega)</button>
       </div>}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px",marginBottom:14}}>
         <div style={{gridColumn:"1/-1"}}>
