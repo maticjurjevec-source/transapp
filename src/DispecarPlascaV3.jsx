@@ -794,13 +794,14 @@ const handleDrop=async(e)=>{
         </div>
         {/* Tabs */}
         <div style={s.tabs}>
-          {[["pregled","📊 Pregled"],["nalogi","📋 Nalogi"],["ai","🤖 AI"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["finance","🧾 Finance"],["komunikacija","📨 Komunikacija"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`]].map(([id,label])=>(
+          {[["pregled","📊 Pregled"],["nalogi","📋 Nalogi"],["tedenski","📅 Tedenski"],["ai","🤖 AI"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["finance","🧾 Finance"],["komunikacija","📨 Komunikacija"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`]].map(([id,label])=>(
             <button key={id} style={{...s.tab,...(tab===id?s.tabOn:{})}} onClick={()=>setTab(id)}>{label}</button>
           ))}
         </div>
         {tab==="pregled"&&<PregledTab stats={stats} nalogi={st.nalogi} obracuni={st.obracuni} vozniki={vozniki} onSelNalog={odpriNalog} onSelOb={setSelObracun}/>}
         {tab==="nalogi"&&<NalogiTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog} openNovNalog={openNovNalog} onEdit={urediNalog} onDelete={izbrisiNalog}/>}
         {tab==="ai"&&<AiIskalnikTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog} showToast={showToast}/>}
+        {tab==="tedenski"&&<TedenskiPregledTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog} showToast={showToast}/>}
         {tab==="vozniki"&&<VoznikiTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog}/>}
         {tab==="obracuni"&&<ObracuniTab obracuni={st.obracuni} onSelect={setSelObracun}/>}
         {tab==="finance"&&<FinanceTab st={st} upd={upd} showToast={showToast} supabase={supabase} setActiveTab={setTab}/>}
@@ -2559,6 +2560,128 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
   return null;
 }
  
+// ===== TEDENSKI PREGLED PO VOZNIKIH =====
+function TedenskiPregledTab({nalogi,vozniki,onSelect,showToast}){
+  const obdRange=(v)=>{
+    if(v==="teden"||v==="mesec"||v==="danes")return obdobjeRange(v);
+    const t=new Date();t.setHours(0,0,0,0);
+    const day=(t.getDay()+6)%7;
+    const mon=new Date(t); mon.setDate(t.getDate()-day);
+    if(v==="prejsnji"){ const p=new Date(mon); p.setDate(mon.getDate()-7); const n=new Date(p); n.setDate(p.getDate()+6); return [isoDan(p),isoDan(n)]; }
+    if(v==="naslednji"){ const p=new Date(mon); p.setDate(mon.getDate()+7); const n=new Date(p); n.setDate(p.getDate()+6); return [isoDan(p),isoDan(n)]; }
+    return ["",""];
+  };
+  const [obdobje,setObdobje]=useState("teden");
+  const init=obdRange("teden");
+  const [od,setOd]=useState(init[0]);
+  const [doo,setDoo]=useState(init[1]);
+  const [kat,setKat]=useState({razklad:true,oba:true,naklad:true,naPoti:true});
+  const toggleKat=(k)=>setKat(p=>({...p,[k]:!p[k]}));
+
+  const vObd=(d)=>d&&(!od||d>=od)&&(!doo||d<=doo);
+  const prekriva=(n)=>{
+    const nak=n.nakDatum||""; const raz=n.razDatum||"";
+    const z=nak||raz; const k=raz||nak;
+    if(!z&&!k)return false;
+    if(doo&&z>doo)return false;
+    if(od&&k<od)return false;
+    return true;
+  };
+  const katNaloga=(n)=>{
+    const nakIn=vObd(n.nakDatum), razIn=vObd(n.razDatum);
+    if(nakIn&&razIn)return"oba";
+    if(!nakIn&&razIn)return"razklad";
+    if(nakIn&&!razIn)return"naklad";
+    return"naPoti";
+  };
+  const list=nalogi.filter(prekriva).filter(n=>kat[katNaloga(n)]);
+
+  const skupine={};
+  list.forEach(n=>{
+    const v=(vozniki||[]).find(x=>x.id===n.voznikId);
+    const key=v?v.id:"_ned";
+    if(!skupine[key])skupine[key]={key,ime:v?v.ime:"– Nedodeljeni",vozilo:v?v.vozilo:"",nalogi:[]};
+    skupine[key].nalogi.push(n);
+  });
+  const seznam=Object.values(skupine).sort((a,b)=>{
+    if(a.key==="_ned")return 1; if(b.key==="_ned")return -1;
+    return a.ime.localeCompare(b.ime);
+  });
+
+  const kratD=(d)=>d?fmt(d+"T00:00:00"):"";
+  const katChips=[["razklad","🏁 Razklad v obdobju"],["oba","📦🏁 Oboje v obdobju"],["naklad","📦 Naklad v obdobju"],["naPoti","🚚 Vmes na poti"]];
+
+  const kopirajVse=()=>{
+    if(list.length===0)return showToast("Ni transportov za kopiranje",true);
+    const vrstice=list.map(n=>tabVrstica(n)).join("\n");
+    navigator.clipboard.writeText(vrstice).then(()=>showToast(`📋 Kopiranih ${list.length} vrstic! Prilepi v Google tabelo (Ctrl+V)`)).catch(()=>showToast("❌ Kopiranje ni uspelo",true));
+  };
+
+  return(<div>
+    <style>{`@media print{@page{size:A4 portrait;margin:10mm;}body *{visibility:hidden;}.tp-print,.tp-print *{visibility:visible;}.tp-print{position:absolute;left:0;top:0;width:100%;}.no-print{display:none !important;}}`}</style>
+
+    <div className="no-print" style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:14,padding:18,color:"#fff",marginBottom:14}}>
+      <div style={{fontWeight:800,fontSize:16,marginBottom:6}}>📅 Tedenski pregled po voznikih</div>
+      <div style={{fontSize:13,opacity:0.85}}>Vsi transporti, ki se v izbranem obdobju nakladajo ali razkladajo (tudi naloženi prej in razloženi v tem obdobju).</div>
+    </div>
+
+    <div className="no-print" style={{background:"#fff",borderRadius:12,padding:12,marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+      <div style={{fontSize:11,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>📅 Obdobje</div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+        {[["prejsnji","Prejšnji teden"],["teden","Ta teden"],["naslednji","Naslednji teden"],["mesec","Ta mesec"]].map(([v,l])=>(
+          <button key={v} style={{...s.fBtn,...(obdobje===v?s.fOn:{})}} onClick={()=>{setObdobje(v);const[a,b]=obdRange(v);setOd(a);setDoo(b);}}>{l}</button>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:8,alignItems:"flex-end",flexWrap:"wrap",marginBottom:10}}>
+        <div style={{flex:"1 1 120px"}}><label style={{...s.lbl,fontSize:11}}>Od</label><input type="date" style={{...s.inp,margin:0}} value={od} onChange={e=>{setOd(e.target.value);setObdobje("");}}/></div>
+        <div style={{flex:"1 1 120px"}}><label style={{...s.lbl,fontSize:11}}>Do</label><input type="date" style={{...s.inp,margin:0}} value={doo} onChange={e=>{setDoo(e.target.value);setObdobje("");}}/></div>
+      </div>
+      <div style={{fontSize:11,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Kateri transporti</div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+        {katChips.map(([k,l])=>(
+          <button key={k} style={{...s.fBtn,...(kat[k]?s.fOn:{})}} onClick={()=>toggleKat(k)}>{l}{kat[k]?" ✓":""}</button>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <button onClick={kopirajVse} style={{flex:1,minWidth:160,background:"#0284c7",color:"#fff",border:"none",borderRadius:10,padding:"10px 14px",fontSize:13,fontWeight:700,cursor:"pointer"}}>📋 Kopiraj vse za tabelo ({list.length})</button>
+        <button onClick={()=>window.print()} style={{flex:1,minWidth:120,background:"#0f2744",color:"#fff",border:"none",borderRadius:10,padding:"10px 14px",fontSize:13,fontWeight:700,cursor:"pointer"}}>🖨️ Natisni</button>
+      </div>
+    </div>
+
+    <div className="tp-print">
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:12,flexWrap:"wrap",gap:8}}>
+        <div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{kratD(od)} – {kratD(doo)}</div>
+        <div style={{fontSize:12,color:"#64748b"}}>{seznam.length} voznikov · {list.length} transportov</div>
+      </div>
+
+      {list.length===0&&<div style={s.empty}>V izbranem obdobju ni transportov za izbrane kategorije.</div>}
+
+      {seznam.map(g=>(
+        <div key={g.key} style={{background:"#fff",borderRadius:12,border:"1px solid #e2e8f0",marginBottom:10,overflow:"hidden"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:"1px solid #f1f5f9",background:"#f8fafc"}}>
+            <div style={{width:30,height:30,borderRadius:"50%",background:"linear-gradient(135deg,#0f2744,#1d4ed8)",color:"#fff",fontWeight:800,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{g.ime==="– Nedodeljeni"?"?":g.ime.charAt(0)}</div>
+            <div style={{fontWeight:700,fontSize:14,color:"#0f2744"}}>{g.ime}</div>
+            <div style={{fontSize:12,color:"#94a3b8"}}>{g.vozilo}</div>
+            <div style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:"#0f2744",background:"#f1f5f9",borderRadius:20,padding:"2px 10px"}}>{g.nalogi.length}</div>
+          </div>
+          {g.nalogi.map(n=>{
+            const nakIn=vObd(n.nakDatum), razIn=vObd(n.razDatum);
+            return(
+              <div key={n.id} onClick={()=>onSelect(n)} style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:"6px 10px",padding:"9px 14px",borderTop:"1px solid #f8fafc",cursor:"pointer"}}>
+                <span style={{fontSize:13,color:"#0f2744",fontWeight:600,flex:1,minWidth:160}}>{krajZPosto(n.nakKraj,n.nakNaslov)} → {krajZPosto(n.razKraj,n.razNaslov)}</span>
+                {tabBlago(n)&&<span style={{fontSize:12,color:"#64748b"}}>{tabBlago(n)}</span>}
+                {nakIn&&<span style={{fontSize:11,fontWeight:700,color:"#0f6e56",background:"#e1f5ee",borderRadius:20,padding:"2px 8px"}}>📦 naklad {kratD(n.nakDatum)}</span>}
+                {razIn&&<span style={{fontSize:11,fontWeight:700,color:"#0c447c",background:"#e6f1fb",borderRadius:20,padding:"2px 8px"}}>🏁 razklad {kratD(n.razDatum)}</span>}
+                {!nakIn&&!razIn&&<span style={{fontSize:11,fontWeight:600,color:"#854f0b",background:"#faeeda",borderRadius:20,padding:"2px 8px"}}>na poti</span>}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  </div>);
+}
+
 // ===== AI ISKALNIK TAB =====
 const AI_PREDLOGE_LS="ai_predloge_v1";
 const AI_PRIVZETE_PREDLOGE=["Kateri nalogi so še nefakturirani?","Koliko nalogov je šlo ta mesec?","Kdo vozi v Nemčijo?","Najdražji nalog ta teden","Po voznikih: kdo vozi kaj ta teden?","Kateri nalogi nimajo dodeljenega voznika?","Koliko nalogov je za fakturo?","Skupni znesek nalogov ta mesec"];
