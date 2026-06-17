@@ -603,7 +603,7 @@ const handleDrop=async(e)=>{
         slikaB64=await new Promise((res)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.readAsDataURL(file);});
       }
       if(!txt&&!slikaB64)txt=await file.text().catch(()=>file.name);
-      const promptTekst=`Iz tega transportnega naloga izvleci podatke. POZOR za polje "stranka": stranka je ŠPEDICIJA ali LOGISTIČNO PODJETJE ki je poslalo ta nalog (npr. Cargo Partner, DHL, Rooskens, ROCS Trading, Fersped ipd.) — torej tisti ki naroča prevoz. NI nakladna firma, NI razkladna firma, NI prevoznik (JURJEVEC). Poišči logo, glavo dokumenta ali polje "ordered by/Auftraggeber/naročnik" da najdeš pravo stranko. Poišči tudi ceno prevoza (price/rate/freight/Preis/Fracht) in jo vpiši v polje znesek kot število. Vrni SAMO JSON:\n{"stranka":"","stevilkaNarocnika":"","blago":"","kolicina":"","teza":"","nakFirma":"","nakKraj":"","nakNaslov":"","nakReferenca":"","nakDatum":"","nakCas":"","razFirma":"","razKraj":"","razNaslov":"","razReferenca":"","razDatum":"","razCas":"","navodila":"","kontaktEmail":"","znesek":"","jeSlovenskaDdv":true}\n\nPolja:\n- znesek: cena prevoza v EUR (samo število, npr "850.00"). Poišči v dokumentu besede kot price, rate, freight, Preis, cena.\n- jeSlovenskaDdv: true če je naročnik iz Slovenije, false če je tuj (glede na državo naročnika).\n- kontaktEmail: email za pošiljanje računa (poišči besede invoice, Rechnung, račun, faktura).\n- navodila: vse posebne zahteve in navodila iz dokumenta.\nDatumi: YYYY-MM-DD, casi: HH:MM.`;
+      const promptTekst=`Iz tega transportnega naloga izvleci podatke. POZOR za polje "stranka": stranka je ŠPEDICIJA ali LOGISTIČNO PODJETJE ki je poslalo ta nalog (npr. Cargo Partner, DHL, Rooskens, ROCS Trading, Fersped ipd.) — torej tisti ki naroča prevoz. NI nakladna firma, NI razkladna firma, NI prevoznik (JURJEVEC). Poišči logo, glavo dokumenta ali polje "ordered by/Auftraggeber/naročnik" da najdeš pravo stranko. Poišči tudi ceno prevoza (price/rate/freight/Preis/Fracht) in jo vpiši v polje znesek kot število. Vrni SAMO JSON:\n{"stranka":"","stevilkaNarocnika":"","blago":"","kolicina":"","teza":"","nakFirma":"","nakKraj":"","nakNaslov":"","nakReferenca":"","nakDatum":"","nakCas":"","razFirma":"","razKraj":"","razNaslov":"","razReferenca":"","razDatum":"","razCas":"","navodila":"","kontaktEmail":"","znesek":"","jeSlovenskaDdv":true}\n\nPolja:\n- znesek: cena prevoza v EUR (samo število, npr "850.00"). Poišči v dokumentu besede kot price, rate, freight, Preis, cena.\n- jeSlovenskaDdv: true če je naročnik iz Slovenije, false če je tuj (glede na državo naročnika).\n- kontaktEmail: email za pošiljanje računa (poišči besede invoice, Rechnung, račun, faktura).\n- kolicina: nakladalni metri (LDM) ce so navedeni (npr "13,6 LDM"), sicer stevilo palet in dimenzije palet (npr "24 EUR palet 120x80 cm").\n- teza: skupna teza tovora v kg (npr "18.500 kg").\n- navodila: vse posebne zahteve in navodila iz dokumenta.\nDatumi: YYYY-MM-DD, casi: HH:MM.`;
       const userContent=slikaB64
         ?[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:slikaB64}},{type:"text",text:promptTekst}]
         :promptTekst+"\n\nDokument:\n"+txt;
@@ -1852,10 +1852,11 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
     return /ldm|metr/i.test(str)?str:`${str} ldm`;
   };
   const tabelaBlago=()=>{
-    const metri=tabelaMetri();
     const b=(form.blago||"").trim();
-    if(b&&metri)return`${b}, ${metri}`;
-    return b||metri;
+    const metri=tabelaMetri();
+    const k=metri||(form.kolicina||"").trim();
+    const t=(form.teza||"").trim();
+    return [b,k,t].filter(Boolean).join(", ");
   };
   const tabelaDatum=(datum,cas)=>{
     if(!datum)return"";
@@ -2971,11 +2972,12 @@ function tabDatum(datum,cas){
   return cas?`${d} ${cas}`:d;
 }
 function tabBlago(n){
-  const m=n.metri||n.ldm||"";
-  const metri=m?(/ldm|metr/i.test(String(m))?String(m):`${m} ldm`):"";
   const b=(n.blago||"").trim();
-  if(b&&metri)return`${b}, ${metri}`;
-  return b||metri;
+  const m=n.metri||n.ldm||"";
+  const metri=m?(/ldm|metr/i.test(String(m))?String(m):`${m} LDM`):"";
+  const k=metri||(n.kolicina||"").trim();
+  const t=(n.teza||"").trim();
+  return [b,k,t].filter(Boolean).join(", ");
 }
 function tabVrstica(n){
   return [n.stranka||"",tabBlago(n),tabKraj(n.nakKraj,n.nakNaslov),tabDatum(n.nakDatum,n.nakCas),tabKraj(n.razKraj,n.razNaslov),tabDatum(n.razDatum,n.razCas)].join("\t");
