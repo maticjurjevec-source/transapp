@@ -2512,15 +2512,30 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
 }
  
 // ===== AI ISKALNIK TAB =====
+const AI_PREDLOGE_LS="ai_predloge_v1";
+const AI_PRIVZETE_PREDLOGE=["Kateri nalogi so še nefakturirani?","Koliko nalogov je šlo ta mesec?","Kdo vozi v Nemčijo?","Najdražji nalog ta teden","Po voznikih: kdo vozi kaj ta teden?","Kateri nalogi nimajo dodeljenega voznika?","Koliko nalogov je za fakturo?","Skupni znesek nalogov ta mesec"];
+
 function AiIskalnikTab({nalogi,vozniki,onSelect,showToast}){
   const [q,setQ]=useState("");
   const [conv,setConv]=useState([]);
   const [loading,setLoading]=useState(false);
+  const [mojePredloge,setMojePredloge]=useState(()=>{try{return JSON.parse(localStorage.getItem(AI_PREDLOGE_LS))||[];}catch{return[];}});
+  const [prikaziPredloge,setPrikaziPredloge]=useState(false);
   const endRef=useRef(null);
 
   useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth",block:"end"});},[conv,loading]);
 
-  const primeri=["Kateri nalogi so še nefakturirani?","Koliko nalogov je šlo ta mesec?","Kdo vozi v Nemčijo?","Najdražji nalog ta teden"];
+  const shraniPredloge=(arr)=>{setMojePredloge(arr);try{localStorage.setItem(AI_PREDLOGE_LS,JSON.stringify(arr));}catch{}};
+  const dodajPredlogo=()=>{
+    const t=q.trim();
+    if(!t)return showToast&&showToast("Najprej vpiši vprašanje",true);
+    if(mojePredloge.includes(t)||AI_PRIVZETE_PREDLOGE.includes(t))return showToast&&showToast("Ta predloga že obstaja");
+    shraniPredloge([t,...mojePredloge]);
+    showToast&&showToast("✅ Predloga shranjena");
+  };
+  const izbrisiPredlogo=(t)=>{shraniPredloge(mojePredloge.filter(x=>x!==t));};
+
+  const primeri=AI_PRIVZETE_PREDLOGE;
 
   const vprasaj=async(vpr)=>{
     const vprasanje=(vpr??q).trim();
@@ -2568,8 +2583,21 @@ function AiIskalnikTab({nalogi,vozniki,onSelect,showToast}){
         <input style={{flex:1,border:"1.5px solid #e2e8f0",borderRadius:10,padding:"12px 14px",fontSize:14,outline:"none",background:"#f8fafc",fontFamily:"inherit"}} placeholder="Vprašaj o svojih nalogih…" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")vprasaj();}}/>
         <button style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",color:"#fff",border:"none",borderRadius:10,padding:"0 20px",fontSize:14,fontWeight:700,cursor:loading?"default":"pointer",opacity:loading?0.5:1}} onClick={()=>vprasaj()} disabled={loading}>Vprašaj</button>
       </div>
-      {conv.length===0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
-        {primeri.map((p,i)=><button key={i} onClick={()=>vprasaj(p)} style={{background:"#eff6ff",border:"1px solid #bfdbfe",color:"#1d4ed8",borderRadius:20,padding:"5px 12px",fontSize:12,cursor:"pointer",fontWeight:500}}>{p}</button>)}
+      <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
+        <button onClick={()=>setPrikaziPredloge(p=>!p)} style={{background:prikaziPredloge?"#0f2744":"#f1f5f9",color:prikaziPredloge?"#fff":"#475569",border:"none",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>📋 Predloge {prikaziPredloge?"▲":"▼"}</button>
+        <button onClick={dodajPredlogo} style={{background:"#f0fdf4",color:"#16a34a",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>💾 Shrani vprašanje</button>
+      </div>
+      {(prikaziPredloge||conv.length===0)&&<div style={{marginTop:10}}>
+        {mojePredloge.length>0&&<>
+          <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>⭐ Moje predloge</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+            {mojePredloge.map((p,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,background:"#fef9c3",border:"1px solid #fde68a",color:"#854d0e",borderRadius:20,padding:"4px 6px 4px 12px",fontSize:12,fontWeight:500}}><span onClick={()=>vprasaj(p)} style={{cursor:"pointer"}}>{p}</span><button onClick={()=>izbrisiPredlogo(p)} style={{background:"none",border:"none",color:"#a16207",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 2px"}} title="Izbriši predlogo">✕</button></span>)}
+          </div>
+        </>}
+        <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>💡 Primeri vprašanj</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {primeri.map((p,i)=><button key={i} onClick={()=>vprasaj(p)} style={{background:"#eff6ff",border:"1px solid #bfdbfe",color:"#1d4ed8",borderRadius:20,padding:"5px 12px",fontSize:12,cursor:"pointer",fontWeight:500}}>{p}</button>)}
+        </div>
       </div>}
     </div>
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
