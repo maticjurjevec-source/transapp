@@ -658,7 +658,20 @@ const handleDrop=async(e)=>{
           {(n.stevilka_narocnika||n.stevilkaNarocnika)&&<Sec title="📋 Št. naloga naročnika"><div style={{fontFamily:"monospace",fontSize:16,fontWeight:800,color:"#2563eb"}}>{n.stevilka_narocnika||n.stevilkaNarocnika}</div></Sec>}
           {n.kontaktEmail&&<Sec title="💶 Kontakt za račun"><R label="Email" val={n.kontaktEmail} mono/></Sec>}
           {/* Original PDF */}
-          <Sec title="📄 Original nalog od naročnika">{(n.original_pdf_url||n.originalPdfUrl)?(()=>{const origUrl=n.original_pdf_url||n.originalPdfUrl;const jePdf=/\.pdf(\?|$)/i.test(origUrl);const jeSlika=/\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(origUrl);return <div>{jePdf?<iframe src={origUrl} style={{width:"100%",height:500,border:"none",borderRadius:8}} title="Original nalog"/>:jeSlika?<img src={origUrl} alt="Original nalog" style={{width:"100%",borderRadius:8,border:"1px solid #e2e8f0",display:"block"}}/>:<div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:24,textAlign:"center"}}><div style={{fontSize:32,marginBottom:8}}>📄</div><div style={{fontSize:13,color:"#64748b"}}>Word/dokument – klikni "Odpri ↗" spodaj za ogled.</div></div>}<div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap",marginTop:8}}><button onClick={()=>natisniVse(n,cmrSlike)} style={{background:"#0f2744",color:"#fff",border:"none",borderRadius:8,padding:"9px 18px",fontSize:13,fontWeight:700,cursor:"pointer"}}>🖨️ Natisni vse (nalog + CMR)</button><button onClick={()=>natisniVse(n,[])} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}}>🖨️ Samo nalog</button><a href={origUrl} target="_blank" rel="noopener noreferrer" style={{padding:"9px 16px",fontSize:13,color:"#2563eb",fontWeight:600,textDecoration:"none",border:"1.5px solid #bfdbfe",borderRadius:8}}>Odpri ↗</a></div></div>;})():<div><div style={{fontSize:13,color:"#94a3b8",marginBottom:8}}>Ni naložen.</div><input type="file" id={`pdf-${n.id}`} accept=".pdf" style={{display:"none"}} onChange={async(e)=>{const file=e.target.files?.[0];if(!file)return;showToast("⏳ Nalagam PDF...");const url=await uploadOriginalPdf(file);if(url){await supabase.from('nalogi').update({original_pdf_url:url}).eq('id',n.id);await naložiPodatke();odpriNalog({...n,original_pdf_url:url});showToast("✅ PDF naložen!");}else{showToast("❌ Napaka pri uploadu!",true);}}}/><label htmlFor={`pdf-${n.id}`} style={{background:"#2563eb",color:"#fff",padding:"8px 16px",borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer"}}>📂 Naloži original PDF</label></div>}</Sec>
+          <Sec title="📄 Original nalog od naročnika">{(n.original_pdf_url||n.originalPdfUrl)?(()=>{const origUrl=n.original_pdf_url||n.originalPdfUrl;const jePdf=/\.pdf(\?|$)/i.test(origUrl);const jeSlika=/\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(origUrl);return <div>{jePdf?<iframe src={origUrl} style={{width:"100%",height:500,border:"none",borderRadius:8}} title="Original nalog"/>:jeSlika?<img src={origUrl} alt="Original nalog" style={{width:"100%",borderRadius:8,border:"1px solid #e2e8f0",display:"block"}}/>:<div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:24,textAlign:"center"}}><div style={{fontSize:32,marginBottom:8}}>📄</div><div style={{fontSize:13,color:"#64748b"}}>Word/dokument – klikni "Odpri ↗" spodaj za ogled.</div></div>}<div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap",marginTop:8}}><button onClick={()=>natisniVse(n,cmrSlike)} style={{background:"#0f2744",color:"#fff",border:"none",borderRadius:8,padding:"9px 18px",fontSize:13,fontWeight:700,cursor:"pointer"}}>🖨️ Natisni vse (nalog + CMR)</button><button onClick={()=>natisniVse(n,[])} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}}>🖨️ Samo nalog</button><a href={origUrl} target="_blank" rel="noopener noreferrer" style={{padding:"9px 16px",fontSize:13,color:"#2563eb",fontWeight:600,textDecoration:"none",border:"1.5px solid #bfdbfe",borderRadius:8}}>Odpri ↗</a></div><div style={{marginTop:8,textAlign:"center"}}><input type="file" id={`reorig-${n.id}`} accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp" style={{display:"none"}} onChange={async(e)=>{const file=e.target.files?.[0];if(!file)return;showToast("⏳ Nalagam nov original...");const url=await uploadOriginalPdf(file);if(url){const staraPot=origPotIzUrl(n.original_pdf_url||n.originalPdfUrl);await supabase.from('nalogi').update({original_pdf_url:url}).eq('id',n.id);if(staraPot){await supabase.storage.from("originalni-nalogi").remove([staraPot]);}await naložiPodatke();odpriNalog({...n,original_pdf_url:url});showToast("✅ Original posodobljen!");}else{showToast("❌ Napaka pri nalaganju!",true);}e.target.value="";}}/><label htmlFor={`reorig-${n.id}`} style={{background:"#fff",color:"#2563eb",border:"1.5px solid #bfdbfe",padding:"7px 16px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>🔄 Zamenjaj original (PDF/slika/Word)</label></div></div>;})():<div><div style={{fontSize:13,color:"#94a3b8",marginBottom:8}}>Ni naložen.</div><input type="file" id={`pdf-${n.id}`} accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp" style={{display:"none"}} onChange={async(e)=>{const file=e.target.files?.[0];if(!file)return;showToast("⏳ Nalagam PDF...");const url=await uploadOriginalPdf(file);if(url){await supabase.from('nalogi').update({original_pdf_url:url}).eq('id',n.id);await naložiPodatke();odpriNalog({...n,original_pdf_url:url});showToast("✅ PDF naložen!");}else{showToast("❌ Napaka pri uploadu!",true);}}}/><label htmlFor={`pdf-${n.id}`} style={{background:"#2563eb",color:"#fff",padding:"8px 16px",borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer"}}>📂 Naloži original (PDF/slika/Word)</label></div>}</Sec>
+          {/* Kopiraj za tabelo */}
+          <div style={{background:"#f0f9ff",border:"1.5px solid #bae6fd",borderRadius:12,padding:14,marginBottom:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#0369a1"}}>📊 Podatki za Google tabelo</div>
+              <button onClick={()=>{navigator.clipboard.writeText(tabVrstica(n)).then(()=>showToast("📋 Kopirano! Prilepi v Google tabelo (Ctrl+V)")).catch(()=>showToast("❌ Kopiranje ni uspelo",true));}} style={{background:"#0284c7",color:"#fff",border:"none",borderRadius:10,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}}>📋 Kopiraj za tabelo</button>
+            </div>
+            <div style={{background:"#fff",borderRadius:8,border:"1px solid #e0f2fe",overflowX:"auto"}}>
+              <table style={{borderCollapse:"collapse",width:"100%",fontSize:11,whiteSpace:"nowrap"}}>
+                <thead><tr>{["NAROČNIK","BLAGO","KRAJ NAKLADA","DATUM NAKLADA","KRAJ RAZKLADA","DATUM RAZKLADA"].map(h=><th key={h} style={{background:"#f1f5f9",color:"#475569",fontWeight:700,textAlign:"left",padding:"8px 10px",border:"1px solid #e2e8f0",fontSize:10}}>{h}</th>)}</tr></thead>
+                <tbody><tr>{[n.stranka||"–",tabBlago(n)||"–",tabKraj(n.nakKraj,n.nakNaslov)||"–",tabDatum(n.nakDatum,n.nakCas)||"–",tabKraj(n.razKraj,n.razNaslov)||"–",tabDatum(n.razDatum,n.razCas)||"–"].map((c,i)=><td key={i} style={{padding:"8px 10px",border:"1px solid #e2e8f0",color:"#0f2744"}}>{c}</td>)}</tr></tbody>
+              </table>
+            </div>
+          </div>
           {/* CMR sekcija — VEDNO vidna, popravljen prikaz */}
           <Sec title={`📄 CMR dokumenti${cmrSlike.length>0?` (${cmrSlike.length})`:""}`}>
             {cmrLoading ? (
@@ -2934,6 +2947,39 @@ function KomunikacijaTab({ showToast }) {
 const s2={lbl:{display:"block",fontSize:12,fontWeight:600,color:"#475569",marginBottom:4},inp:{width:"100%",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"9px 10px",fontSize:13,outline:"none",boxSizing:"border-box",background:"#f8fafc"},sel:{width:"100%",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"9px 10px",fontSize:13,outline:"none",background:"#f8fafc",boxSizing:"border-box"}};
 const Fi2=({l,v,s,ph,t="text"})=><div><label style={s2.lbl}>{l}</label><input style={s2.inp} type={t} value={v||""} onChange={e=>s(e.target.value)} placeholder={ph||""}/></div>;
 
+function origPotIzUrl(url){
+  if(!url)return null;
+  const m=String(url).match(/\/originalni-nalogi\/(.+?)(\?|$)/);
+  return m?decodeURIComponent(m[1]):null;
+}
+function tabPosta(naslov){
+  if(!naslov)return"";
+  const m=String(naslov).match(/\b(\d{4,5})\s+\p{L}/u);
+  if(m)return m[1];
+  const m2=String(naslov).match(/\b(\d{4,5})\b/);
+  return m2?m2[1]:"";
+}
+function tabKraj(kraj,naslov){
+  const k=(kraj||"").trim();
+  const p=tabPosta(naslov);
+  if(k&&p&&!k.startsWith(p))return`${p} ${k}`;
+  return k||p;
+}
+function tabDatum(datum,cas){
+  if(!datum)return"";
+  const d=fmt(datum+"T00:00:00");
+  return cas?`${d} ${cas}`:d;
+}
+function tabBlago(n){
+  const m=n.metri||n.ldm||"";
+  const metri=m?(/ldm|metr/i.test(String(m))?String(m):`${m} ldm`):"";
+  const b=(n.blago||"").trim();
+  if(b&&metri)return`${b}, ${metri}`;
+  return b||metri;
+}
+function tabVrstica(n){
+  return [n.stranka||"",tabBlago(n),tabKraj(n.nakKraj,n.nakNaslov),tabDatum(n.nakDatum,n.nakCas),tabKraj(n.razKraj,n.razNaslov),tabDatum(n.razDatum,n.razCas)].join("\t");
+}
 function krajZPosto(kraj,naslov){
   const k=(kraj||"").trim();
   if(!naslov)return k;
