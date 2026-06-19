@@ -884,13 +884,14 @@ function PregledTab({stats,nalogi,obracuni,vozniki,onSelNalog,onSelOb}){
 
 function NalogiTab({nalogi,vozniki,onSelect,openNovNalog,onEdit,onDelete}){
   const [f,setF]=useState("vsi");
+  const [smerF,setSmerF]=useState("vse");
   const [q,setQ]=useState("");
   const [grupiranje,setGrupiranje]=useState("seznam");
   const [odprte,setOdprte]=useState({});
   const [datumOd,setDatumOd]=useState("");
   const [datumDo,setDatumDo]=useState("");
   const [obdobje,setObdobje]=useState("vse");
-  const list=nalogi.filter(n=>f==="vsi"||n.status===f).filter(n=>{
+  const list=nalogi.filter(n=>f==="vsi"||n.status===f).filter(n=>smerF==="vse"||smerNaloga(n).kod===smerF).filter(n=>{
     if(datumOd&&!(n.nakDatum&&n.nakDatum>=datumOd))return false;
     if(datumDo&&!(n.nakDatum&&n.nakDatum<=datumDo))return false;
     return true;
@@ -943,9 +944,14 @@ function NalogiTab({nalogi,vozniki,onSelect,openNovNalog,onEdit,onDelete}){
         <button key={v} style={{...s.fBtn,...(grupiranje===v?s.fOn:{})}} onClick={()=>setGrupiranje(v)}>{l}</button>
       ))}
     </div>
-    <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+    <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
       {[["vsi","Vsi"],["nov","Novi"],["poslan","Poslani"],["sprejet","Sprejeto"],["zakljucen","Zaključeni"],["za_fakturo","Za fakturo"]].map(([v,l])=>(
         <button key={v} style={{...s.fBtn,...(f===v?s.fOn:{})}} onClick={()=>setF(v)}>{l}</button>
+      ))}
+    </div>
+    <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+      {[["vse","🔀 Vse smeri"],["izvoz","🟢 Izvoz"],["uvoz","🔵 Uvoz"],["domaci","🏠 Domači"]].map(([v,l])=>(
+        <button key={v} style={{...s.fBtn,...(smerF===v?s.fOn:{})}} onClick={()=>setSmerF(v)}>{l}</button>
       ))}
     </div>
     <div style={{background:"#fff",borderRadius:12,padding:12,marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
@@ -3181,6 +3187,57 @@ function tabBlago(n){
 function tabVrstica(n){
   return [n.stranka||"",tabBlago(n),tabKraj(n.nakKraj,n.nakNaslov),tabDatum(n.nakDatum,n.nakCas),tabKraj(n.razKraj,n.razNaslov),tabDatum(n.razDatum,n.razCas)].join("\t");
 }
+function drzavaIzNaslova(kraj, naslov){
+  const s = `${kraj||""} ${naslov||""}`;
+  if(!s.trim()) return "";
+  const low = s.toLowerCase();
+  const imena = [
+    [/sloveni|slowenien|slovenija/, "SI"],
+    [/hrva|croat|kroat|hrvatska/, "HR"],
+    [/nem[čc]ij|german|deutschl|njema[čc]/, "DE"],
+    [/avstrij|austria|österr|oesterr/, "AT"],
+    [/italij|ital(y|ia|ien)/, "IT"],
+    [/nizozem|netherl|niederl|holland/, "NL"],
+    [/belgij|belg(ium|ien|ie)/, "BE"],
+    [/dansk|denmark|dänemark|daenemark/, "DK"],
+    [/madžar|mađar|hungar|ungarn/, "HU"],
+    [/[šs]vic|switz|schweiz/, "CH"],
+    [/[čc]e[šs]k|czech|tschech/, "CZ"],
+    [/slova[šs]k|slovak|slowak/, "SK"],
+    [/poljsk|poland|polen|poljska/, "PL"],
+    [/francij|france|frankreich|francuska/, "FR"],
+    [/luksembur|luxembour/, "LU"],
+    [/[šs]panij|spain|spanien/, "ES"],
+    [/portugal/, "PT"],
+    [/[šs]vedsk|sweden|schwed/, "SE"],
+    [/norve[šs]k|norway|norweg/, "NO"],
+    [/finsk|finland|finnl/, "FI"],
+  ];
+  for(const [re,code] of imena){ if(re.test(low)) return code; }
+  const CODE={A:"AT",D:"DE",I:"IT",F:"FR",E:"ES",P:"PT",B:"BE",L:"LU",H:"HU",N:"NO",S:"SE",SLO:"SI",SI:"SI",HR:"HR",AT:"AT",DE:"DE",IT:"IT",NL:"NL",BE:"BE",LU:"LU",FR:"FR",ES:"ES",PT:"PT",HU:"HU",CH:"CH",CZ:"CZ",SK:"SK",PL:"PL",DK:"DK",SE:"SE",NO:"NO",FI:"FI",FIN:"FI"};
+  const m = s.match(/\b([A-Z]{1,3})[-\s]?\d{4,5}\b/);
+  if(m && CODE[m[1]]) return CODE[m[1]];
+  const m2 = s.match(/\b(SLO|FIN|SI|HR|AT|DE|IT|NL|BE|LU|FR|ES|PT|HU|CH|CZ|SK|PL|DK|SE|NO)\b/);
+  if(m2 && CODE[m2[1]]) return CODE[m2[1]];
+  return "";
+}
+const SMER={
+  izvoz:{kod:"izvoz",label:"Izvoz",color:"#16a34a",bg:"#f0fdf4",icon:"🟢"},
+  uvoz:{kod:"uvoz",label:"Uvoz",color:"#2563eb",bg:"#eff6ff",icon:"🔵"},
+  domaci:{kod:"domaci",label:"Domači",color:"#64748b",bg:"#f1f5f9",icon:"🏠"},
+  "?":{kod:"?",label:"?",color:"#94a3b8",bg:"#f8fafc",icon:"❓"},
+};
+const DRZAVA_RANK={HR:1,IT:1,RS:1,BA:1,ME:1,MK:1,BG:1,GR:1,RO:2,SI:2,HU:2,AT:3,CH:3,SK:3,LI:3,CZ:4,FR:4,DE:5,PL:5,LU:5,GB:6,BE:6,NL:6,IE:6,DK:7,EE:7,LV:7,LT:6,SE:8,NO:8,FI:8};
+function smerNaloga(n){
+  const dn=drzavaIzNaslova(n.nakKraj,n.nakNaslov);
+  const dr=drzavaIzNaslova(n.razKraj,n.razNaslov);
+  if(!dn||!dr)return SMER["?"];
+  const rn=DRZAVA_RANK[dn], rr=DRZAVA_RANK[dr];
+  if(rn==null||rr==null)return SMER["?"];
+  if(rr>rn)return SMER.izvoz;
+  if(rr<rn)return SMER.uvoz;
+  return SMER.domaci;
+}
 function krajZPosto(kraj,naslov){
   const k=(kraj||"").trim();
   if(!naslov)return k;
@@ -3197,7 +3254,7 @@ function krajZPosto(kraj,naslov){
   const pref=[drzava,posta].filter(Boolean).join(" ");
   return k?`${pref} ${k}`:pref;
 }
-const NC=({n,onClick,vozniki:vl,onEdit,onDelete})=>{const sc=SC[n.status]||{};const v=(vl||VOZNIKI).find(x=>x.id===n.voznikId);return(<div style={{width:"100%",background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:9,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:"none",textAlign:"left",position:"relative"}}><div onClick={onClick} style={{cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5,flexWrap:"wrap"}}><span style={{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700,background:sc.bg,color:sc.color}}>{sc.label}</span><span style={{fontSize:11,fontFamily:"monospace",color:"#2563eb",fontWeight:700}}>{n.stevilkaNaloga}</span>{v&&<span style={{fontSize:11,fontWeight:700,color:"#7c3aed",background:"#f5f3ff",padding:"2px 8px",borderRadius:20}}>🚛 {v.ime}</span>}{!v&&n.status!=="nov"&&<span style={{fontSize:11,fontWeight:600,color:"#94a3b8",background:"#f1f5f9",padding:"2px 8px",borderRadius:20}}>– ni voznika</span>}<span style={{fontSize:11,color:"#94a3b8",marginLeft:"auto"}}>{fmt(n.poslan)} ob {fmtT(n.poslan)}</span></div><div style={{fontSize:16,fontWeight:800,color:"#0f2744",marginBottom:3}}>{n.stranka||"—"}</div><div style={{fontSize:14,fontWeight:700,color:"#334155",marginBottom:2}}>{krajZPosto(n.nakKraj,n.nakNaslov)} → {krajZPosto(n.razKraj,n.razNaslov)}</div>{n.blago&&<div style={{fontSize:13,color:"#64748b"}}>📦 {n.blago}</div>}{(n.nakDatum||n.razDatum)&&<div style={{fontSize:12,color:"#94a3b8",marginTop:3,display:"flex",gap:12,flexWrap:"wrap"}}>{n.nakDatum&&<span>📅 Nakl: {fmt(n.nakDatum+"T00:00:00")}{n.nakCas?` ${n.nakCas}`:""}</span>}{n.razDatum&&<span>🏁 Razkl: {fmt(n.razDatum+"T00:00:00")}{n.razCas?` ${n.razCas}`:""}</span>}</div>}</div>{(onEdit||onDelete)&&<div style={{display:"flex",gap:6,marginTop:10,paddingTop:10,borderTop:"1px solid #f1f5f9"}}>{onEdit&&<button style={{background:"#eff6ff",color:"#2563eb",border:"1px solid #bfdbfe",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}} onClick={(e)=>{e.stopPropagation();onEdit(n.id);}}>✏️ Uredi</button>}{onDelete&&<button style={{background:"#fef2f2",color:"#dc2626",border:"1px solid #fecaca",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}} onClick={(e)=>{e.stopPropagation();if(window.confirm(`Ali res želiš izbrisati nalog ${n.stevilkaNaloga}?\n\n${n.nakKraj} → ${n.razKraj}\n${n.stranka}\n\nTo dejanje je nepovratno.`)){onDelete(n.id);}}}>🗑️ Izbriši</button>}</div>}</div>);};
+const NC=({n,onClick,vozniki:vl,onEdit,onDelete})=>{const sc=SC[n.status]||{};const v=(vl||VOZNIKI).find(x=>x.id===n.voznikId);const sm=smerNaloga(n);return(<div style={{width:"100%",background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:9,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:"none",textAlign:"left",position:"relative"}}><div onClick={onClick} style={{cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5,flexWrap:"wrap"}}><span style={{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700,background:sc.bg,color:sc.color}}>{sc.label}</span>{sm&&sm.kod!=="?"&&<span style={{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700,background:sm.bg,color:sm.color}}>{sm.icon} {sm.label}</span>}<span style={{fontSize:11,fontFamily:"monospace",color:"#2563eb",fontWeight:700}}>{n.stevilkaNaloga}</span>{v&&<span style={{fontSize:11,fontWeight:700,color:"#7c3aed",background:"#f5f3ff",padding:"2px 8px",borderRadius:20}}>🚛 {v.ime}</span>}{!v&&n.status!=="nov"&&<span style={{fontSize:11,fontWeight:600,color:"#94a3b8",background:"#f1f5f9",padding:"2px 8px",borderRadius:20}}>– ni voznika</span>}<span style={{fontSize:11,color:"#94a3b8",marginLeft:"auto"}}>{fmt(n.poslan)} ob {fmtT(n.poslan)}</span></div><div style={{fontSize:16,fontWeight:800,color:"#0f2744",marginBottom:3}}>{n.stranka||"—"}</div><div style={{fontSize:14,fontWeight:700,color:"#334155",marginBottom:2}}>{krajZPosto(n.nakKraj,n.nakNaslov)} → {krajZPosto(n.razKraj,n.razNaslov)}</div>{n.blago&&<div style={{fontSize:13,color:"#64748b"}}>📦 {n.blago}</div>}{(n.nakDatum||n.razDatum)&&<div style={{fontSize:12,color:"#94a3b8",marginTop:3,display:"flex",gap:12,flexWrap:"wrap"}}>{n.nakDatum&&<span>📅 Nakl: {fmt(n.nakDatum+"T00:00:00")}{n.nakCas?` ${n.nakCas}`:""}</span>}{n.razDatum&&<span>🏁 Razkl: {fmt(n.razDatum+"T00:00:00")}{n.razCas?` ${n.razCas}`:""}</span>}</div>}</div>{(onEdit||onDelete)&&<div style={{display:"flex",gap:6,marginTop:10,paddingTop:10,borderTop:"1px solid #f1f5f9"}}>{onEdit&&<button style={{background:"#eff6ff",color:"#2563eb",border:"1px solid #bfdbfe",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}} onClick={(e)=>{e.stopPropagation();onEdit(n.id);}}>✏️ Uredi</button>}{onDelete&&<button style={{background:"#fef2f2",color:"#dc2626",border:"1px solid #fecaca",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}} onClick={(e)=>{e.stopPropagation();if(window.confirm(`Ali res želiš izbrisati nalog ${n.stevilkaNaloga}?\n\n${n.nakKraj} → ${n.razKraj}\n${n.stranka}\n\nTo dejanje je nepovratno.`)){onDelete(n.id);}}}>🗑️ Izbriši</button>}</div>}</div>);};
 const OC=({o,onClick,vozniki:vl})=>{const v=(vl||VOZNIKI).find(x=>x.id===o.voznikId);const z=(o.km||0)*0.18+(o.stranke||0)*20+(o.stroski||[]).reduce((a,x)=>a+(parseFloat(x.znesek)||0),0);return(<button style={{width:"100%",background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:9,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:"none",cursor:"pointer",textAlign:"left"}} onClick={onClick}><div style={{display:"flex",justifyContent:"space-between"}}><div><div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{v?.ime}</div><div style={{fontSize:12,color:"#64748b"}}>{fmt(o.datZac+"T00:00:00")} – {fmt(o.datKon+"T00:00:00")} · {v?.vozilo}</div></div><div style={{fontWeight:800,fontSize:18,color:"#16a34a"}}>{z.toFixed(2)} €</div></div></button>);};
 const Sec=({title,children})=><div style={{background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:11,fontWeight:700,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}}>{title}</div>{children}</div>;
 const R=({label,val,bold,mono})=><div style={{display:"flex",justifyContent:"space-between",paddingBottom:5,marginBottom:5,borderBottom:"1px solid #f8fafc"}}><span style={{fontSize:12,color:"#94a3b8"}}>{label}</span><span style={{fontSize:13,color:"#1e293b",textAlign:"right",...(bold?{fontWeight:700,color:"#0f2744"}:{}),...(mono?{fontFamily:"monospace",color:"#2563eb",fontSize:12}:{})}}>{val||"–"}</span></div>;
