@@ -558,7 +558,16 @@ je_slovenska_ddv: form.jeSlovenskaDdv!==undefined?form.jeSlovenskaDdv:null,
       await naložiPodatke();closeModal();showToast("✅ Nalog posodobljen!");
     }catch(err){showToast("❌ Napaka!",true);console.error(err);}
   };
-  const zamenjajPotrditev=async(prejeti,obstojeci)=>{
+const nastaviSmer=async(nalogId,smer)=>{
+    try{
+      const{error}=await supabase.from('nalogi').update({smer_rocno:smer}).eq('id',nalogId);
+      if(error)throw error;
+      await naložiPodatke();
+      setSelNalog(prev=>prev?{...prev,smer_rocno:smer}:prev);
+      showToast(smer?`✅ Smer ročno: ${SMER[smer]?.label}`:"✅ Smer: samodejno");
+    }catch(err){showToast("❌ Napaka pri shranjevanju smeri!",true);console.error(err);}
+  };
+ const zamenjajPotrditev=async(prejeti,obstojeci)=>{
     if(!window.confirm(`Zamenjam obstojeci nalog ${obstojeci.stevilkaNaloga} s podatki tega prejetega naloga? Prejeti nalog bo izbrisan.`))return;
     try{
       const{error}=await supabase.from('nalogi').update({
@@ -708,6 +717,20 @@ const handleDrop=async(e)=>{
             <div><div style={{fontSize:12,color:"#64748b"}}>Naslednji korak</div><div style={{fontWeight:700,color:SC[naslednji.next].color}}>{naslednji.icon} {naslednji.label}</div></div>
             <button style={{background:SC[naslednji.next].color,color:"#fff",border:"none",borderRadius:10,padding:"9px 16px",fontWeight:700,cursor:"pointer"}} onClick={()=>spremenStatus(n.id,naslednji.next)}>Potrdi →</button>
           </div>}
+         <Sec title="🧭 Smer (izvoz/uvoz)">
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10}}>
+              <span style={{fontSize:12,color:"#64748b"}}>Trenutno:</span>
+              {(()=>{const sm=smerNaloga(n);return sm&&sm.kod!=="?"
+                ?<span style={{padding:"4px 12px",borderRadius:20,fontSize:13,fontWeight:700,background:sm.bg,color:sm.color}}>{sm.icon} {sm.label}{(n.smer_rocno||n.smerRocno)?" (ročno)":" (samodejno)"}</span>
+                :<span style={{padding:"4px 12px",borderRadius:20,fontSize:13,fontWeight:600,background:"#f1f5f9",color:"#64748b"}}>❓ Ni zaznano</span>;})()}
+            </div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {[["izvoz","🟢 Izvoz"],["uvoz","🔵 Uvoz"],["domaci","🏠 Domači"]].map(([k,l])=>(
+                <button key={k} onClick={()=>nastaviSmer(n.id,k)} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid",borderColor:(n.smer_rocno||n.smerRocno)===k?"#0f2744":"#e2e8f0",background:(n.smer_rocno||n.smerRocno)===k?"#0f2744":"#fff",color:(n.smer_rocno||n.smerRocno)===k?"#fff":"#475569",fontSize:12,fontWeight:700,cursor:"pointer"}}>{l}</button>
+              ))}
+              <button onClick={()=>nastaviSmer(n.id,null)} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",background:"#fff",color:"#64748b",fontSize:12,fontWeight:600,cursor:"pointer"}}>↺ Samodejno</button>
+            </div>
+          </Sec>
           <Sec title="📦 Blago"><R label="Blago" val={n.blago}/><R label="Količina" val={n.kolicina}/><R label="Teža" val={n.teza}/></Sec>
           <Sec title="📍 Naklad"><R label="Firma" val={n.nakFirma} bold/><R label="Kraj" val={n.nakKraj}/><R label="Naslov" val={n.nakNaslov}/><R label="Referenca" val={n.nakReferenca} mono/><R label="Datum" val={n.nakDatum?(n.nakCas?`${fmt(n.nakDatum)} ob ${n.nakCas}`:fmt(n.nakDatum)):"–"}/></Sec>
           <Sec title="🏁 Razklad"><R label="Firma" val={n.razFirma} bold/><R label="Kraj" val={n.razKraj}/><R label="Naslov" val={n.razNaslov}/><R label="Referenca" val={n.razReferenca} mono/><R label="Datum" val={n.razDatum?(n.razCas?`${fmt(n.razDatum)} ob ${n.razCas}`:fmt(n.razDatum)):"–"}/></Sec>
@@ -3298,6 +3321,8 @@ const SMER={
 };
 const DRZAVA_RANK={HR:1,IT:1,RS:1,BA:1,ME:1,MK:1,BG:1,GR:1,RO:2,SI:2,HU:2,AT:3,CH:3,SK:3,LI:3,CZ:4,FR:4,DE:5,PL:5,LU:5,GB:6,BE:6,NL:6,IE:6,DK:7,EE:7,LV:7,LT:6,SE:8,NO:8,FI:8};
 function smerNaloga(n){
+  const rocno=n.smer_rocno||n.smerRocno;
+  if(rocno&&SMER[rocno])return SMER[rocno];
   const dn=drzavaIzNaslova(n.nakKraj,n.nakNaslov);
   const dr=drzavaIzNaslova(n.razKraj,n.razNaslov);
   if(!dn||!dr)return SMER["?"];
