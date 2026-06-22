@@ -2380,6 +2380,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
         navodila: form.navodila||"",
         voznik_id: form.voznikId||null,
         original_pdf_url: pdfUrl||form.originalPdfUrl||null,
+        postanki: form.postanki||null,
         znesek_original: form.znesek||null,
         je_slovenska_ddv: form.jeSlovenskaDdv!==undefined?form.jeSlovenskaDdv:null,
       }]).select().single();
