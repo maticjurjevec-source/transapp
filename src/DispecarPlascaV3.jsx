@@ -2381,6 +2381,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
         voznik_id: form.voznikId||null,
         original_pdf_url: pdfUrl||form.originalPdfUrl||null,
         postanki: form.postanki||null,
+        postanki: form.postanki||null,
         znesek_original: form.znesek||null,
         je_slovenska_ddv: form.jeSlovenskaDdv!==undefined?form.jeSlovenskaDdv:null,
       }]).select().single();
@@ -2441,6 +2442,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
         znesek_original: form.znesek||null,
         je_slovenska_ddv: form.jeSlovenskaDdv!==undefined?form.jeSlovenskaDdv:null,
       };
+      updateData.postanki = form.postanki||null;
       if (pdfUrl) updateData.original_pdf_url = pdfUrl;
       if (form.voznikId) updateData.voznik_id = form.voznikId;
       const { error } = await supabase.from('nalogi').update(updateData).eq('id', duplikatOpozorilo.id);
