@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { supabase } from './supabase';
 import { loginToOutlook, logoutFromOutlook, getActiveAccount, getRecentEmails, getEmailWithAttachments, markEmailAsRead } from './outlookService';
 
@@ -199,7 +199,7 @@ export default function DispecarPlasca() {
   const [dragOver,setDragOver]=useState(false);
   const [vozniki,setVozniki]=useState(VOZNIKI);
   const [loading,setLoading]=useState(false);
-  const [cropCmr,setCropCmr]=useState(null);
+  const [cropCmr,setCropCmr]=useState(null); const scrollPos=useRef(0); useLayoutEffect(()=>{ if(!selNalog){ window.scrollTo(0,scrollPos.current); } },[selNalog]);
 
   useEffect(()=>{ naložiPodatke(); },[]);
 
@@ -337,7 +337,7 @@ export default function DispecarPlasca() {
 
   // POPRAVEK: odpriNalog vedno naloži CMR slike iz Supabase
   const odpriNalog = async (n) => {
-    setSelNalog({...n, cmrSlike: [], _loading: true});
+    scrollPos.current = window.scrollY || document.documentElement.scrollTop || 0; setSelNalog({...n, cmrSlike: [], _loading: true});
     const cmr = await naložiCMR(n.id);
     setSelNalog({...n, cmrSlike: cmr, _loading: false});
   };
