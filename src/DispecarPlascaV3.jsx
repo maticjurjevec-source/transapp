@@ -872,7 +872,7 @@ const handleDrop=async(e)=>{
             <label htmlFor="drop-f" style={s.dropBtn}>📂 Izberi datoteko</label>
           </div>}
         </div>
-       {st.nalogi.filter(n=>n.status==="caka_potrditev").length>0&&(
+       {(()=>{const zap=st.nalogi.filter(n=>n.status==="zakljucen"&&n.razDatum&&Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000)>10);return zap.length>0?(<div onClick={()=>setTab("pregled")} style={{background:"linear-gradient(135deg,#dc2626,#ef4444)",borderRadius:14,padding:"14px 16px",marginBottom:14,color:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 2px 8px rgba(220,38,38,0.3)"}}><div style={{display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:24}}>!</span><div><div style={{fontWeight:800,fontSize:15}}>{zap.length} zakljucenih nalogov ceka na fakturo vec kot 10 dni</div><div style={{fontSize:12,opacity:0.9}}>Klikni za pregled</div></div></div><span style={{fontSize:20}}>{">"}</span></div>):null;})()}{st.nalogi.filter(n=>n.status==="caka_potrditev").length>0&&(
           <div onClick={()=>setTab("nalogi")} style={{background:"linear-gradient(135deg,#ea580c,#f97316)",borderRadius:14,padding:"14px 16px",marginBottom:14,color:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 2px 8px rgba(234,88,12,0.3)"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <span style={{fontSize:24}}>📥</span>
