@@ -955,7 +955,7 @@ const handleDrop=async(e)=>{
 function PregledTab({stats,nalogi,obracuni,vozniki,onSelNalog,onSelOb}){
   const novi=nalogi.filter(n=>n.status==="nov");
   const aktivni=nalogi.filter(n=>["poslan","sprejet"].includes(n.status));
-  const zaFakturo=nalogi.filter(n=>n.status==="za_fakturo");
+  const zaFakturo=nalogi.filter(n=>n.status==="za_fakturo"); const zakljuceni=nalogi.filter(n=>n.status==="zakljucen");
   const noviOb=obracuni.filter(o=>o.zakljucen);
   return(<div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:16}}>
@@ -968,7 +968,7 @@ function PregledTab({stats,nalogi,obracuni,vozniki,onSelNalog,onSelOb}){
       ))}
     </div>
     {novi.length>0&&<><div style={{fontWeight:700,fontSize:15,color:"#0f2744",marginBottom:10}}>🔘 Novi nalogi</div>{novi.map(n=><NC key={n.id} n={n} vozniki={vozniki} onClick={()=>onSelNalog(n)}/>)}</>}
-    {aktivni.length>0&&<><div style={{fontWeight:700,fontSize:15,color:"#0f2744",marginBottom:10,marginTop:12}}>🚛 Aktivni nalogi</div>{aktivni.map(n=><NC key={n.id} n={n} vozniki={vozniki} onClick={()=>onSelNalog(n)}/>)}</>}
+    {aktivni.length>0&&<><div style={{fontWeight:700,fontSize:15,color:"#0f2744",marginBottom:10,marginTop:12}}>🚛 Aktivni nalogi</div>{aktivni.map(n=><NC key={n.id} n={n} vozniki={vozniki} onClick={()=>onSelNalog(n)}/>)}</>}{zakljuceni.length>0&&<><div style={{fontWeight:700,fontSize:15,color:"#d97706",marginBottom:10,marginTop:12}}>Zakljuceni - ni za fakturo ({zakljuceni.length})</div>{zakljuceni.slice().sort((a,b)=>(a.razDatum||"").localeCompare(b.razDatum||"")).map(n=>{const dni=n.razDatum?Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000):null;const staro=dni!==null&&dni>10;return(<div key={n.id}>{dni!==null&&<div style={{fontSize:11,fontWeight:700,marginBottom:4,marginLeft:2,color:staro?"#dc2626":"#94a3b8"}}>{staro?dni+" dni - za fakturo!":dni+" dni"}</div>}<NC n={n} vozniki={vozniki} onClick={()=>onSelNalog(n)}/></div>);})}</>}
     {zaFakturo.length>0&&<><div style={{fontWeight:700,fontSize:15,color:"#9333ea",marginBottom:10,marginTop:12}}>💶 Za fakturo</div>{zaFakturo.map(n=><NC key={n.id} n={n} vozniki={vozniki} onClick={()=>onSelNalog(n)}/>)}</>}
     {noviOb.length>0&&<><div style={{fontWeight:700,fontSize:15,color:"#0f2744",marginBottom:10,marginTop:12}}>💶 Obračuni voznikov</div>{noviOb.map(o=><OC key={o.id} o={o} onClick={()=>onSelOb(o)}/>)}</>}
   </div>);
