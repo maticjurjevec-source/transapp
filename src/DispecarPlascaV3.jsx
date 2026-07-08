@@ -809,7 +809,7 @@ const handleDrop=async(e)=>{
               📤 Pošlji vozniku v Viber {izVoz && !voz(izVoz)?.tel && "(ni številke)"}
             </button>
           </div>}
-          <button style={{...s.btnP,background:"#2563eb",marginTop:8}} onClick={()=>urediNalog(n.id)}>✏️ Uredi nalog</button>
+          {(n.status==="za_fakturo"||n.status==="fakturirano")&&<button style={{...s.btnP,background:"#f59e0b",marginTop:8}} onClick={()=>{if(window.confirm("Vrniti nalog med aktivne? Status bo spet 'sprejet'."))spremenStatus(n.id,"sprejet");}}>Vrni med aktivne</button>}<button style={{...s.btnP,background:"#2563eb",marginTop:8}} onClick={()=>urediNalog(n.id)}>✏️ Uredi nalog</button>
           {n.voznikId && (
             <button
               style={{...s.btnP, background: voz(n.voznikId)?.tel ? "#7360f2" : "#cbd5e1", marginTop:8, cursor: voz(n.voznikId)?.tel ? "pointer" : "not-allowed"}}
