@@ -284,7 +284,7 @@ export default function DispecarPlasca() {
         razNaslov: n.raz_naslov,
         razReferenca: n.raz_referenca,
         razDatum: n.raz_datum,
-        razCas: n.raz_cas,
+        razCas: n.raz_cas, postanki: n.postanki,
         navodila: n.navodila,
         voznikId: n.voznik_id,
         poslan: n.poslan_cas || n.created_at,
@@ -734,7 +734,7 @@ const handleDrop=async(e)=>{
           <Sec title="📦 Blago"><R label="Blago" val={n.blago}/><R label="Količina" val={n.kolicina}/><R label="Teža" val={n.teza}/></Sec>
           <Sec title="📍 Naklad"><R label="Firma" val={n.nakFirma} bold/><R label="Kraj" val={n.nakKraj}/><R label="Naslov" val={n.nakNaslov}/><R label="Referenca" val={n.nakReferenca} mono/><R label="Datum" val={n.nakDatum?(n.nakCas?`${fmt(n.nakDatum)} ob ${n.nakCas}`:fmt(n.nakDatum)):"–"}/></Sec>
           <Sec title="🏁 Razklad"><R label="Firma" val={n.razFirma} bold/><R label="Kraj" val={n.razKraj}/><R label="Naslov" val={n.razNaslov}/><R label="Referenca" val={n.razReferenca} mono/><R label="Datum" val={n.razDatum?(n.razCas?`${fmt(n.razDatum)} ob ${n.razCas}`:fmt(n.razDatum)):"–"}/></Sec>
-          {n.navodila&&<Sec title="⚠️ Navodila"><div style={{fontSize:13,background:"#fffbeb",borderRadius:8,padding:"10px 12px",border:"1px solid #fde68a"}}>{n.navodila}</div></Sec>}
+          {Array.isArray(n.postanki)&&n.postanki.length>0&&<Sec title="Vsi postanki"><div>{n.postanki.map((p,i)=><div key={i} style={{fontSize:13,padding:"8px 10px",background:p.tip==="naklad"?"#eff6ff":"#fef2f2",border:"1px solid #e2e8f0",borderRadius:8,marginBottom:6}}><span style={{fontWeight:700,color:p.tip==="naklad"?"#1d4ed8":"#dc2626"}}>{p.tip==="naklad"?"NAKLAD":"RAZKLAD"}</span> {(p.firma?p.firma+" - ":"")+(p.kraj||"")+(p.naslov?", "+p.naslov:"")}{(p.datum?" ("+p.datum+(p.cas?" "+p.cas:"")+")":"")}</div>)}</div></Sec>}{n.navodila&&<Sec title="⚠️ Navodila"><div style={{fontSize:13,background:"#fffbeb",borderRadius:8,padding:"10px 12px",border:"1px solid #fde68a"}}>{n.navodila}</div></Sec>}
           {(n.stevilka_narocnika||n.stevilkaNarocnika)&&<Sec title="📋 Št. naloga naročnika"><div style={{fontFamily:"monospace",fontSize:16,fontWeight:800,color:"#2563eb"}}>{n.stevilka_narocnika||n.stevilkaNarocnika}</div></Sec>}
           {n.kontaktEmail&&<Sec title="💶 Kontakt za račun"><R label="Email" val={n.kontaktEmail} mono/></Sec>}
           {/* Original PDF */}
@@ -2621,7 +2621,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
         <div style={{gridColumn:"1/-1"}}><Fi2 l="Naslov" v={form.razNaslov} s={v=>sf("razNaslov",v)}/></div>
         <Fi2 l="Referenca" v={form.razReferenca} s={v=>sf("razReferenca",v)}/>
         <Fi2 l="Datum" v={form.razDatum} s={v=>sf("razDatum",v)} t="date"/>
-        <Fi2 l="Ura" v={form.razCas} s={v=>sf("razCas",v)} t="time"/>
+        <Fi2 l="Ura" v={form.razCas} s={v=>sf("razCas",v)} t="time"/>{Array.isArray(form.postanki)&&form.postanki.length>0&&<div style={{gridColumn:"1/-1"}}><div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",borderTop:"1px solid #f1f5f9",paddingTop:8,marginBottom:6}}>Vsi postanki ({form.postanki.length})</div>{form.postanki.map((p,i)=><div key={i} style={{fontSize:12,padding:"7px 10px",background:p.tip==="naklad"?"#eff6ff":"#fef2f2",border:"1px solid #e2e8f0",borderRadius:8,marginBottom:5}}><span style={{fontWeight:700,color:p.tip==="naklad"?"#1d4ed8":"#dc2626"}}>{p.tip==="naklad"?"NAKLAD":"RAZKLAD"}</span> {(p.kraj||"")+(p.naslov?", "+p.naslov:"")}{(p.datum?" ("+p.datum+(p.cas?" "+p.cas:"")+")":"")}</div>)}</div>}
         <div style={{gridColumn:"1/-1",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",borderTop:"1px solid #f1f5f9",paddingTop:8}}>💶 Kontakt za račun</div>
         <Fi2 l="Email za račun" v={form.kontaktEmail} s={v=>sf("kontaktEmail",v)} ph="finance@podjetje.com"/>
         <Fi2 l="Kontaktna oseba" v={form.kontaktIme} s={v=>sf("kontaktIme",v)}/>
