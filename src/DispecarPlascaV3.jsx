@@ -995,7 +995,7 @@ function NalogiTab({nalogi,vozniki,onSelect,openNovNalog,onEdit,onDelete}){
       n.stevilkaNaloga,n.stevilka_narocnika,n.stranka,n.blago,n.kolicina,n.teza,
       n.nakFirma,n.nakKraj,n.nakNaslov,n.nakReferenca,n.nakDatum,
       n.razFirma,n.razKraj,n.razNaslov,n.razReferenca,n.razDatum,
-      n.navodila,n.kontaktEmail,v?.ime,v?.vozilo,
+      n.navodila,n.kontaktEmail,v?.ime,v?.vozilo,...(Array.isArray(n.postanki)?n.postanki.map(p=>(p.firma||"")+" "+(p.kraj||"")+" "+(p.naslov||"")):[]),
     ];
     return polja.some(p=>String(p||"").toLowerCase().includes(qq));
   });
