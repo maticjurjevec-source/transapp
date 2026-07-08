@@ -940,7 +940,7 @@ const handleDrop=async(e)=>{
                 <I label="Datum" val={form.razDatum} set={v=>setForm(f=>({...f,razDatum:v}))} type="date"/>
                 <I label="Ura" val={form.razCas} set={v=>setForm(f=>({...f,razCas:v}))} type="time"/>
                 <div style={{gridColumn:"1/-1",borderTop:"1px solid #f1f5f9",paddingTop:8,fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase"}}>⚠️ Ostalo</div>
-                <div style={{gridColumn:"1/-1"}}><label style={s.lbl}>Navodila</label><textarea style={{...s.inp,resize:"vertical"}} rows={2} value={form.navodila||""} onChange={e=>setForm(f=>({...f,navodila:e.target.value}))}/></div>
+                <div style={{gridColumn:"1/-1"}}><label style={s.lbl}>Navodila</label><textarea style={{...s.inp,resize:"vertical"}} rows={2} value={form.navodila||""} onChange={e=>setForm(f=>({...f,navodila:e.target.value}))}/></div><I label="Cena (EUR)" val={form.znesek} set={v=>setForm(f=>({...f,znesek:v}))}/>
                 <div style={{gridColumn:"1/-1"}}><I label="💶 Email kontakta za račun" val={form.kontaktEmail} set={v=>setForm(f=>({...f,kontaktEmail:v}))} ph="finance@stranka.com"/></div>
               </div>
               <button style={s.btnP} onClick={form.editId?submitEdit:submitNalog}>📤 {form.editId?"Posodobi nalog":"Ustvari nalog"}</button>
@@ -2606,7 +2606,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
           </select>
         </div>
         <div style={{gridColumn:"1/-1"}}><Fi2 l="Stranka *" v={form.stranka} s={v=>sf("stranka",v)}/></div>
-        <Fi2 l="Blago" v={form.blago} s={v=>sf("blago",v)}/>
+        <Fi2 l="Blago" v={form.blago} s={v=>sf("blago",v)}/><Fi2 l="Cena (EUR)" v={form.znesek} s={v=>sf("znesek",v)}/>
         <Fi2 l="Količina" v={form.kolicina} s={v=>sf("kolicina",v)}/>
         <div style={{gridColumn:"1/-1",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",borderTop:"1px solid #f1f5f9",paddingTop:8}}>📍 Naklad</div>
         <Fi2 l="Firma" v={form.nakFirma} s={v=>sf("nakFirma",v)}/>
