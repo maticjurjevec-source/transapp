@@ -1975,13 +1975,13 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
     if(k&&p&&!k.startsWith(p))return`${p} ${k}`;
     return k||p;
   };
-  const kopirajZaTabelo=()=>{
+  const nakZaTabelo=()=>{if(Array.isArray(form.postanki)&&form.postanki.some(p=>p.tip==="naklad"))return form.postanki.filter(p=>p.tip==="naklad").map(p=>tabelaKraj(p.kraj,p.naslov)).filter(Boolean).join("; ");return tabelaKraj(form.nakKraj, form.nakNaslov);};const razZaTabelo=()=>{if(Array.isArray(form.postanki)&&form.postanki.some(p=>p.tip==="razklad"))return form.postanki.filter(p=>p.tip==="razklad").map(p=>tabelaKraj(p.kraj,p.naslov)).filter(Boolean).join("; ");return tabelaKraj(form.razKraj, form.razNaslov);};const kopirajZaTabelo=()=>{
     const vrstica=[
       form.stranka||"",
       tabelaBlago(),
-      tabelaKraj(form.nakKraj,form.nakNaslov),
+      nakZaTabelo(),
       tabelaDatum(form.nakDatum,form.nakCas),
-      tabelaKraj(form.razKraj,form.razNaslov),
+      razZaTabelo(),
       tabelaDatum(form.razDatum,form.razCas),
     ].join("\t");
     navigator.clipboard.writeText(vrstica).then(()=>{
@@ -2643,7 +2643,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
             </thead>
             <tbody>
               <tr>
-                {[form.stranka||"–",tabelaBlago()||"–",tabelaKraj(form.nakKraj,form.nakNaslov)||"–",tabelaDatum(form.nakDatum,form.nakCas)||"–",tabelaKraj(form.razKraj,form.razNaslov)||"–",tabelaDatum(form.razDatum,form.razCas)||"–"].map((c,i)=>(
+                {[form.stranka||"–",tabelaBlago()||"–",nakZaTabelo()||"–",tabelaDatum(form.nakDatum,form.nakCas)||"–",razZaTabelo()||"–",tabelaDatum(form.razDatum,form.razCas)||"–"].map((c,i)=>(
                   <td key={i} style={{padding:"8px 10px",border:"1px solid #e2e8f0",color:"#0f2744"}}>{c}</td>
                 ))}
               </tr>
@@ -3280,7 +3280,7 @@ function tabBlago(n){
   return [b,k,t].filter(Boolean).join(", ");
 }
 function tabVrstica(n){
-  return [n.stranka||"",tabBlago(n),tabKraj(n.nakKraj,n.nakNaslov),tabDatum(n.nakDatum,n.nakCas),tabKraj(n.razKraj,n.razNaslov),tabDatum(n.razDatum,n.razCas)].join("\t");
+  const _nak=Array.isArray(n.postanki)&&n.postanki.some(p=>p.tip==="naklad")?n.postanki.filter(p=>p.tip==="naklad").map(p=>tabKraj(p.kraj,p.naslov)).filter(Boolean).join("; "):tabKraj(n.nakKraj,n.nakNaslov);const _raz=Array.isArray(n.postanki)&&n.postanki.some(p=>p.tip==="razklad")?n.postanki.filter(p=>p.tip==="razklad").map(p=>tabKraj(p.kraj,p.naslov)).filter(Boolean).join("; "):tabKraj(n.razKraj,n.razNaslov);return [n.stranka||"",tabBlago(n),_nak,tabDatum(n.nakDatum,n.nakCas),_raz,tabDatum(n.razDatum,n.razCas)].join("\t");
 }
 function drzavaIzNaslova(kraj, naslov){
   const s = `${kraj||""} ${naslov||""}`;
