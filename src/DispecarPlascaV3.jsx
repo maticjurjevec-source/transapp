@@ -974,7 +974,7 @@ function PregledTab({stats,nalogi,obracuni,vozniki,onSelNalog,onSelOb}){
   </div>);
 }
 
-function NalogiTab({nalogi,vozniki,onSelect,openNovNalog,onEdit,onDelete}){
+let _nalogiQ=""; function NalogiTab({nalogi,vozniki,onSelect,openNovNalog,onEdit,onDelete}){
   const [f,setF]=useState("vsi");
   const [smerF,setSmerF]=useState("vse");
   const [q,setQ]=useState("");
@@ -982,7 +982,7 @@ function NalogiTab({nalogi,vozniki,onSelect,openNovNalog,onEdit,onDelete}){
   const [odprte,setOdprte]=useState({});
   const [datumOd,setDatumOd]=useState("");
   const [datumDo,setDatumDo]=useState("");
-  const [obdobje,setObdobje]=useState("vse");
+  const [obdobje,setObdobje]=useState("vse"); useLayoutEffect(()=>{if(_nalogiQ)setQ(_nalogiQ);},[]);
   const list=nalogi.filter(n=>f==="vsi"||n.status===f).filter(n=>smerF==="vse"||smerNaloga(n).kod===smerF).filter(n=>{
     if(datumOd&&!(n.nakDatum&&n.nakDatum>=datumOd))return false;
     if(datumDo&&!(n.nakDatum&&n.nakDatum<=datumDo))return false;
@@ -1028,7 +1028,7 @@ function NalogiTab({nalogi,vozniki,onSelect,openNovNalog,onEdit,onDelete}){
 
   return(<div>
     <div style={{display:"flex",gap:8,marginBottom:12}}>
-      <input style={{...s.inp,flex:1,margin:0}} placeholder="🔍 Išči..." value={q} onChange={e=>setQ(e.target.value)}/>
+      <input style={{...s.inp,flex:1,margin:0}} placeholder="🔍 Išči..." value={q} onChange={e=>{setQ(e.target.value);_nalogiQ=e.target.value;}}/>
       <button style={s.btnSm} onClick={openNovNalog}>+ Nov</button>
     </div>
     <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
