@@ -456,7 +456,7 @@ export default function DispecarPlasca() {
     try {
       const { data, error } = await supabase.from('nalogi').insert([{
         stevilka_naloga: '',
-        status: 'nov',
+        status: form.voznikId ? 'poslan' : 'nov', poslan_cas: form.voznikId ? new Date().toISOString() : null,
         stranka: form.stranka,
         blago: form.blago,
         kolicina: form.kolicina,
