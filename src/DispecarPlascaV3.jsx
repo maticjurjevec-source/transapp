@@ -190,7 +190,7 @@ function CropCMRModal({cmr,nalStevilka,onClose,onSaved,showToast}){
 
 export default function DispecarPlasca() {
   const [st,setSt]=useState(initState);
-  const [tab,setTab]=useState("pregled");
+  const [tab,setTab]=useState("nalogi");
   const [modal,setModal]=useState(null);
   const [form,setForm]=useState({});
   const [toast,setToast]=useState(null);
@@ -886,7 +886,7 @@ const handleDrop=async(e)=>{
         )}
         {/* Tabs */}
         <div style={s.tabs}>
-          {[["pregled","📊 Pregled"],["nalogi","📋 Nalogi"],["poti","Poti"],["tedenski","📅 Tedenski"],["ai","🤖 AI"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["finance","🧾 Finance"],["komunikacija","📨 Komunikacija"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`]].map(([id,label])=>(
+          {[["nalogi","📋 Nalogi"],["poti","Poti"],["tedenski","📅 Tedenski"],["ai","🤖 AI"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["finance","🧾 Finance"],["komunikacija","📨 Komunikacija"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`]].map(([id,label])=>(
             <button key={id} style={{...s.tab,...(tab===id?s.tabOn:{})}} onClick={()=>setTab(id)}>{label}</button>
           ))}
         </div>
