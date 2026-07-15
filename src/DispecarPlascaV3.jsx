@@ -199,7 +199,7 @@ export default function DispecarPlasca() {
   const [dragOver,setDragOver]=useState(false);
   const [vozniki,setVozniki]=useState(VOZNIKI);
   const [loading,setLoading]=useState(false);
-  const [cropCmr,setCropCmr]=useState(null); const scrollPos=useRef(0); useLayoutEffect(()=>{ if(!selNalog){ window.scrollTo(0,scrollPos.current); } },[selNalog]);
+  const [cropCmr,setCropCmr]=useState(null); const scrollPos=useRef(0); const contentRef=useRef(null); useLayoutEffect(()=>{ if(!selNalog){ if(contentRef.current){contentRef.current.scrollTop=scrollPos.current;}else{window.scrollTo(0,scrollPos.current);} } },[selNalog]);
 
   useEffect(()=>{ naložiPodatke(); },[]);
 
@@ -337,7 +337,7 @@ export default function DispecarPlasca() {
 
   // POPRAVEK: odpriNalog vedno naloži CMR slike iz Supabase
   const odpriNalog = async (n) => {
-    scrollPos.current = window.scrollY || document.documentElement.scrollTop || 0; setSelNalog({...n, cmrSlike: [], _loading: true});
+    scrollPos.current = contentRef.current ? contentRef.current.scrollTop : (window.scrollY||0); setSelNalog({...n, cmrSlike: [], _loading: true});
     const cmr = await naložiCMR(n.id);
     setSelNalog({...n, cmrSlike: cmr, _loading: false});
   };
@@ -834,7 +834,7 @@ const handleDrop=async(e)=>{
     return(
       <div style={s.wrap}>
         <div style={s.header}><button style={s.backBtn} onClick={()=>setSelObracun(null)}>← Nazaj</button><div style={s.htitle}>Obračun – {v?.ime}</div><div style={s.hsub}>{fmt(ob.datZac+"T00:00:00")} – {fmt(ob.datKon+"T00:00:00")}</div></div>
-        <div style={s.content}>
+        <div ref={contentRef} style={s.content}>
           <div style={{background:"#fff",borderRadius:14,padding:18,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
             <R label="Voznik" val={v?.ime}/><R label="Vozilo" val={v?.vozilo}/><div style={{borderTop:"1px solid #f1f5f9",margin:"8px 0"}}/>
             <R label={`Km (${ob.km?.toLocaleString()} × 0.18 €)`} val={`${zaslKm.toFixed(2)} €`}/>
@@ -855,12 +855,12 @@ const handleDrop=async(e)=>{
           <div><div style={s.logo}>⚡ TransDispečer</div><div style={s.sub}>{VOZNIKI.length} voznikov</div></div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             {loading && <div style={{fontSize:12,opacity:0.7}}>⏳ Nalagam...</div>}
-            <button style={s.novBtn} onClick={openNovNalog}>+ Nov nalog</button>
+            {(()=>{const zap=st.nalogi.filter(n=>n.status!=="za_fakturo"&&n.status!=="fakturirano"&&n.razDatum&&Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000)>=7);return zap.length>0?(<div onClick={()=>setShowStari(true)} title="Nalogi za fakturo" style={{position:"relative",cursor:"pointer",fontSize:22,lineHeight:1,padding:"2px 4px"}}>{"\uD83E\uDDFE"}<span style={{position:"absolute",top:-4,right:-4,minWidth:16,height:16,padding:"0 4px",background:"#dc2626",color:"#fff",fontSize:11,fontWeight:700,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",boxSizing:"border-box"}}>{zap.length}</span></div>):null;})()}<button style={s.novBtn} onClick={openNovNalog}>+ Nov nalog</button>
           </div>
         </div>
       </div>
       {toast&&<Toast t={toast}/>}
-      <div style={s.content}>
+      <div ref={contentRef} style={s.content}>
         {/* AI drop zone */}
         <div style={{...s.drop,...(dragOver?s.dropA:{}),...(aiParsing?s.dropP:{})}} onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)} onDrop={handleDrop}>
           {aiParsing?<div style={{textAlign:"center"}}><div style={{fontSize:28,marginBottom:4}}>⏳</div><div style={{fontWeight:700,color:"#0f2744"}}>AI bere dokument...</div></div>:
@@ -872,7 +872,7 @@ const handleDrop=async(e)=>{
             <label htmlFor="drop-f" style={s.dropBtn}>📂 Izberi datoteko</label>
           </div>}
         </div>
-       {(()=>{const zap=st.nalogi.filter(n=>n.status!=="za_fakturo"&&n.status!=="fakturirano"&&n.razDatum&&Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000)>=7);return zap.length>0?(<div onClick={()=>setShowStari(true)} style={{background:"linear-gradient(135deg,#dc2626,#ef4444)",borderRadius:14,padding:"14px 16px",marginBottom:14,color:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 2px 8px rgba(220,38,38,0.3)"}}><div style={{display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:24}}>!</span><div><div style={{fontWeight:800,fontSize:15}}>{zap.length} nalogov ceka na fakturo vec kot 7 dni</div><div style={{fontSize:12,opacity:0.9}}>Klikni za pregled</div></div></div><span style={{fontSize:20}}>{">"}</span></div>):null;})()}{showStari&&(<div onClick={()=>setShowStari(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 12px",overflowY:"auto"}}><div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:16,width:"100%",maxWidth:560,padding:"18px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><div style={{fontWeight:800,fontSize:17,color:"#dc2626"}}>Nalogi za fakturo (7+ dni)</div><button onClick={()=>setShowStari(false)} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#64748b",lineHeight:1}}>{"\u00d7"}</button></div>{(()=>{const list=st.nalogi.filter(n=>n.status!=="za_fakturo"&&n.status!=="fakturirano"&&n.razDatum&&Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000)>=7).sort((a,b)=>(a.razDatum||"").localeCompare(b.razDatum||""));if(list.length===0)return <div style={{color:"#64748b",fontSize:14,padding:"10px 0"}}>Ni nalogov za fakturo.</div>;return list.map(n=>{const dni=Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000);const rdec=dni>14;const barva=rdec?"#dc2626":"#d97706";const ozadje=rdec?"#fef2f2":"#fff7ed";const rob=rdec?"#fca5a5":"#fdba74";return(<div key={n.id} onClick={()=>{setShowStari(false);odpriNalog(n);}} style={{border:"1px solid "+rob,background:ozadje,borderRadius:12,padding:"10px 12px",marginBottom:8,cursor:"pointer"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><div style={{fontWeight:700,fontSize:14,color:"#0f2744"}}>{n.stranka||"Nalog"}</div><div style={{fontSize:12,fontWeight:700,color:barva}}>{dni+" dni"}</div></div><div style={{fontSize:12,color:"#64748b",marginTop:2}}>{(n.nakKraj||"")+" -> "+(n.razKraj||"")}</div></div>);});})()}</div></div>)}{st.nalogi.filter(n=>n.status==="caka_potrditev").length>0&&(
+       {(()=>{const zap=st.nalogi.filter(n=>n.status!=="za_fakturo"&&n.status!=="fakturirano"&&n.razDatum&&Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000)>=7);return false?(<div onClick={()=>setShowStari(true)} style={{background:"linear-gradient(135deg,#dc2626,#ef4444)",borderRadius:14,padding:"14px 16px",marginBottom:14,color:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 2px 8px rgba(220,38,38,0.3)"}}><div style={{display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:24}}>!</span><div><div style={{fontWeight:800,fontSize:15}}>{zap.length} nalogov ceka na fakturo vec kot 7 dni</div><div style={{fontSize:12,opacity:0.9}}>Klikni za pregled</div></div></div><span style={{fontSize:20}}>{">"}</span></div>):null;})()}{showStari&&(<div onClick={()=>setShowStari(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 12px",overflowY:"auto"}}><div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:16,width:"100%",maxWidth:560,padding:"18px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><div style={{fontWeight:800,fontSize:17,color:"#dc2626"}}>Nalogi za fakturo (7+ dni)</div><button onClick={()=>setShowStari(false)} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#64748b",lineHeight:1}}>{"\u00d7"}</button></div>{(()=>{const list=st.nalogi.filter(n=>n.status!=="za_fakturo"&&n.status!=="fakturirano"&&n.razDatum&&Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000)>=7).sort((a,b)=>(a.razDatum||"").localeCompare(b.razDatum||""));if(list.length===0)return <div style={{color:"#64748b",fontSize:14,padding:"10px 0"}}>Ni nalogov za fakturo.</div>;return list.map(n=>{const dni=Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000);const rdec=dni>14;const barva=rdec?"#dc2626":"#d97706";const ozadje=rdec?"#fef2f2":"#fff7ed";const rob=rdec?"#fca5a5":"#fdba74";return(<div key={n.id} onClick={()=>{setShowStari(false);odpriNalog(n);}} style={{border:"1px solid "+rob,background:ozadje,borderRadius:12,padding:"10px 12px",marginBottom:8,cursor:"pointer"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><div style={{fontWeight:700,fontSize:14,color:"#0f2744"}}>{n.stranka||"Nalog"}</div><div style={{fontSize:12,fontWeight:700,color:barva}}>{dni+" dni"}</div></div><div style={{fontSize:12,color:"#64748b",marginTop:2}}>{(n.nakKraj||"")+" -> "+(n.razKraj||"")}</div></div>);});})()}</div></div>)}{st.nalogi.filter(n=>n.status==="caka_potrditev").length>0&&(
           <div onClick={()=>setTab("nalogi")} style={{background:"linear-gradient(135deg,#ea580c,#f97316)",borderRadius:14,padding:"14px 16px",marginBottom:14,color:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 2px 8px rgba(234,88,12,0.3)"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <span style={{fontSize:24}}>📥</span>
