@@ -658,7 +658,7 @@ const handleDrop=async(e)=>{
     const cmrSlike = selNalog.cmrSlike || [];
     const cmrLoading = selNalog._loading;
     const sc=SC[n.status]||{};
-    const naslednji={poslan:{next:"zakljucen",label:"Označi: Zaključeno",icon:"✔️"},sprejet:{next:"zakljucen",label:"Označi: Zaključeno",icon:"✔️"},zakljucen:{next:"za_fakturo",label:"Premakni v Finance",icon:"💶"}}[n.status];
+    const naslednji={poslan:{next:"sprejet",label:"Označi: Sprejeto",icon:"✅"},sprejet:{next:"zakljucen",label:"Označi: Zaključeno",icon:"✔️"},zakljucen:{next:"za_fakturo",label:"Premakni v Finance",icon:"💶"}}[n.status];
     return(
       <div style={s.wrap}>
         <div style={s.header}><button style={s.backBtn} onClick={()=>setSelNalog(null)}>← Nazaj</button><div style={s.htitle}>{n.nakKraj} → {n.razKraj}</div><div style={s.hsub}>{n.stevilkaNaloga} · {n.stranka}</div></div>
@@ -983,7 +983,7 @@ let _nalogiQ=""; function NalogiTab({nalogi,vozniki,onSelect,openNovNalog,onEdit
   const [datumOd,setDatumOd]=useState("");
   const [datumDo,setDatumDo]=useState("");
   const [obdobje,setObdobje]=useState("vse"); useLayoutEffect(()=>{if(_nalogiQ)setQ(_nalogiQ);},[]);
-  const list=nalogi.filter(n=>f==="vsi"||n.status===f).filter(n=>smerF==="vse"||smerNaloga(n).kod===smerF).filter(n=>{
+  const list=nalogi.filter(n=>f==="vsi"||(f==="dodeljeni"?(!!n.voznikId&&n.status!=="za_fakturo"&&n.status!=="fakturirano"):f==="novi"?(!n.voznikId&&n.status!=="za_fakturo"&&n.status!=="fakturirano"):n.status===f)).filter(n=>smerF==="vse"||smerNaloga(n).kod===smerF).filter(n=>{
     if(datumOd&&!(n.nakDatum&&n.nakDatum>=datumOd))return false;
     if(datumDo&&!(n.nakDatum&&n.nakDatum<=datumDo))return false;
     return true;
@@ -1037,7 +1037,7 @@ let _nalogiQ=""; function NalogiTab({nalogi,vozniki,onSelect,openNovNalog,onEdit
       ))}
     </div>
     <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
-      {[["vsi","Vsi"],["caka_potrditev","📥 Za potrditev"],["nov","Novi"],["poslan","Poslani"],["sprejet","Sprejeto"],["zakljucen","Zaključeni"],["za_fakturo","Za fakturo"]].map(([v,l])=>(
+      {[["vsi","Vsi"],["novi","Novi"],["dodeljeni","Dodeljeni voznikom"],["za_fakturo","Za fakturo"]].map(([v,l])=>(
         <button key={v} style={{...s.fBtn,...(f===v?s.fOn:{})}} onClick={()=>setF(v)}>{l}</button>
       ))}
     </div>
