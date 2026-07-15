@@ -199,7 +199,7 @@ export default function DispecarPlasca() {
   const [dragOver,setDragOver]=useState(false);
   const [vozniki,setVozniki]=useState(VOZNIKI);
   const [loading,setLoading]=useState(false);
-  const [cropCmr,setCropCmr]=useState(null); const scrollPos=useRef(0); const contentRef=useRef(null); useLayoutEffect(()=>{ if(!selNalog){ if(contentRef.current){contentRef.current.scrollTop=scrollPos.current;}else{window.scrollTo(0,scrollPos.current);} } },[selNalog]);
+  const [cropCmr,setCropCmr]=useState(null); const scrollPos=useRef(0); const contentRef=useRef(null); const scrollEl=useRef(null); useLayoutEffect(()=>{ if(!selNalog&&scrollEl.current){ scrollEl.current.scrollTop=scrollPos.current; } },[selNalog]);
 
   useEffect(()=>{ naložiPodatke(); },[]);
 
@@ -337,7 +337,7 @@ export default function DispecarPlasca() {
 
   // POPRAVEK: odpriNalog vedno naloži CMR slike iz Supabase
   const odpriNalog = async (n) => {
-    scrollPos.current = contentRef.current ? contentRef.current.scrollTop : (window.scrollY||0); setSelNalog({...n, cmrSlike: [], _loading: true});
+    {let e=contentRef.current;let f=null;while(e){if(e.scrollTop>0){f=e;break;}e=e.parentElement;}if(!f&&document.scrollingElement&&document.scrollingElement.scrollTop>0)f=document.scrollingElement;scrollEl.current=f;scrollPos.current=f?f.scrollTop:0;} setSelNalog({...n, cmrSlike: [], _loading: true});
     const cmr = await naložiCMR(n.id);
     setSelNalog({...n, cmrSlike: cmr, _loading: false});
   };
