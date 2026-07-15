@@ -70,7 +70,7 @@ const SC={
   za_fakturo:{label:"Za fakturo",color:"#9333ea",bg:"#faf5ff",icon:"💶"},
   fakturirano:{label:"Fakturirano",color:"#15803d",bg:"#dcfce7",icon:"🧾"},
 };
-const SRed=["nov","poslan","sprejet","zakljucen","za_fakturo","fakturirano"];
+const SRed=["nov","poslan","zakljucen","za_fakturo"];
 
 // POPRAVEK: pravilno ime bucket-a (s pomišljajem, kot je v Supabase)
 const CMR_BUCKET = "cmr-dokumenti";
@@ -658,7 +658,7 @@ const handleDrop=async(e)=>{
     const cmrSlike = selNalog.cmrSlike || [];
     const cmrLoading = selNalog._loading;
     const sc=SC[n.status]||{};
-    const naslednji={poslan:{next:"sprejet",label:"Označi: Sprejeto",icon:"✅"},sprejet:{next:"zakljucen",label:"Označi: Zaključeno",icon:"✔️"},zakljucen:{next:"za_fakturo",label:"Premakni v Finance",icon:"💶"}}[n.status];
+    const naslednji={poslan:{next:"zakljucen",label:"Označi: Zaključeno",icon:"✔️"},sprejet:{next:"zakljucen",label:"Označi: Zaključeno",icon:"✔️"},zakljucen:{next:"za_fakturo",label:"Premakni v Finance",icon:"💶"}}[n.status];
     return(
       <div style={s.wrap}>
         <div style={s.header}><button style={s.backBtn} onClick={()=>setSelNalog(null)}>← Nazaj</button><div style={s.htitle}>{n.nakKraj} → {n.razKraj}</div><div style={s.hsub}>{n.stevilkaNaloga} · {n.stranka}</div></div>
