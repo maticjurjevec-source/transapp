@@ -598,7 +598,7 @@ const nastaviSmer=async(nalogId,smer)=>{
     }
   };
 
-const handleDrop=async(e)=>{
+const handleDrop=async(e,editId)=>{
     e.preventDefault();setDragOver(false);
     const file=e.dataTransfer?.files?.[0]||e.target?.files?.[0];
     if(!file)return;
@@ -642,8 +642,7 @@ const handleDrop=async(e)=>{
       const rawTxt=(data.content?.map(i=>i.text||"").join("")||"").replace(/```json|```/g,"").trim();
       const m=rawTxt.match(/\{[\s\S]*\}/);
       const parsed=JSON.parse(m?m[0]:rawTxt);
-      setForm(f=>({...f,...parsed,originalPdfUrl:pdfUrl||""}));setModal("nalog");showToast("✅ AI izpolnil nalog!");
-    }catch(err){setForm({originalPdfUrl:pdfUrl||""});setModal("nalog");showToast("⚠️ AI ni mogel prebrati – izpolni ročno.",true);}
+if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = posodobi takoj\nPreklici = odpri za popravek")){await supabase.from('nalogi').update({stranka:parsed.stranka,blago:parsed.blago,kolicina:parsed.kolicina,teza:parsed.teza,nak_firma:parsed.nakFirma,nak_kraj:parsed.nakKraj,nak_naslov:parsed.nakNaslov,nak_referenca:parsed.nakReferenca,nak_datum:parsed.nakDatum||null,nak_cas:parsed.nakCas?parsed.nakCas.slice(0,5):null,raz_firma:parsed.razFirma,raz_kraj:parsed.razKraj,raz_naslov:parsed.razNaslov,raz_referenca:parsed.razReferenca,raz_datum:parsed.razDatum||null,raz_cas:parsed.razCas?parsed.razCas.slice(0,5):null,navodila:parsed.navodila,znesek_original:parsed.znesek||null,stevilka_narocnika:parsed.stevilkaNarocnika||null,...(pdfUrl?{original_pdf_url:pdfUrl}:{})}).eq('id',editId);await naložiPodatke();setSelNalog(null);setModal(null);showToast("✅ Nalog posodobljen!");}else{setForm(f=>({...f,...parsed,editId,originalPdfUrl:pdfUrl||""}));setSelNalog(null);setModal("nalog");}}else{setForm(f=>({...f,...parsed,originalPdfUrl:pdfUrl||""}));setModal("nalog");showToast("✅ AI izpolnil nalog!");}    }catch(err){setForm({...(editId?{editId}:{}),originalPdfUrl:pdfUrl||""});setSelNalog(null);setModal("nalog");showToast("⚠️ AI ni mogel prebrati – izpolni ročno.",true);}
     setAiParsing(false);
   };
 
@@ -809,7 +808,7 @@ const handleDrop=async(e)=>{
               📤 Pošlji vozniku v Viber {izVoz && !voz(izVoz)?.tel && "(ni številke)"}
             </button>
           </div>}
-          {(n.status==="za_fakturo"||n.status==="fakturirano")&&<button style={{...s.btnP,background:"#f59e0b",marginTop:8}} onClick={()=>{if(window.confirm("Vrniti nalog med aktivne? Status bo spet 'sprejet'."))spremenStatus(n.id,"sprejet");}}>Vrni med aktivne</button>}<button style={{...s.btnP,background:"#2563eb",marginTop:8}} onClick={()=>urediNalog(n.id)}>✏️ Uredi nalog</button>
+          {(n.status==="za_fakturo"||n.status==="fakturirano")&&<button style={{...s.btnP,background:"#f59e0b",marginTop:8}} onClick={()=>{if(window.confirm("Vrniti nalog med aktivne? Status bo spet 'sprejet'."))spremenStatus(n.id,"sprejet");}}>Vrni med aktivne</button>}<div onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>handleDrop(e,n.id)} style={{...s.btnP,background:"#faf5ff",color:"#7c3aed",border:"2px dashed #c4b5fd",marginTop:8,padding:"16px",textAlign:"center",cursor:"copy",fontSize:13}}>Povleci nov dokument sem za zamenjavo naloga</div><button style={{...s.btnP,background:"#2563eb",marginTop:8}} onClick={()=>urediNalog(n.id)}>✏️ Uredi nalog</button>
           {n.voznikId && (
             <button
               style={{...s.btnP, background: voz(n.voznikId)?.tel ? "#7360f2" : "#cbd5e1", marginTop:8, cursor: voz(n.voznikId)?.tel ? "pointer" : "not-allowed"}}
