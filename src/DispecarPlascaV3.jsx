@@ -438,7 +438,7 @@ export default function DispecarPlasca() {
       const nStNar=(n.stevilka_narocnika||n.stevilkaNarocnika||"").trim();
       const nRef=(n.nak_referenca||n.nakReferenca||"").trim();
       if(stNarocnika && nStNar && nStNar.toLowerCase()===stNarocnika.toLowerCase())return true;
-      if(refNaklada && nRef && nRef.toLowerCase()===refNaklada.toLowerCase())return true;
+      
       return false;
     });
     setDuplikatOpozorilo(najden||null);
@@ -677,7 +677,7 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
               const aRef=(n.nakReferenca||"").trim().toLowerCase();
               const bRef=(x.nakReferenca||"").trim().toLowerCase();
               if(aNar&&bNar&&aNar===bNar)return true;
-              if(aRef&&bRef&&aRef===bRef)return true;
+              
               return false;
             });
             return(<div style={{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:14,padding:16,marginBottom:12}}>
