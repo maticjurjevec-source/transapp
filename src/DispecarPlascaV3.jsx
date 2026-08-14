@@ -2594,7 +2594,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
           {duplikatOpozorilo.nak_referenca && <div style={{color:"#64748b",fontSize:11}}>🏷️ Ref. naklada: <b>{duplikatOpozorilo.nak_referenca}</b></div>}
         </div>
         <div style={{color:"#78350f",fontSize:11,marginTop:8,fontStyle:"italic"}}>💡 Lahko vseeno nadaljuješ kot nov nalog — to je samo opozorilo.</div>
-        <button onClick={posodobiObstojeci} style={{marginTop:10,width:"100%",background:"#0284c7",color:"#fff",border:"none",borderRadius:10,padding:"10px 14px",fontSize:13,fontWeight:700,cursor:"pointer"}}>🔄 Posodobi obstoječi nalog {duplikatOpozorilo.stevilka_naloga} (namesto novega)</button>
+        <button onClick={ustvariNalog} style={{marginTop:10,width:"100%",background:"#16a34a",color:"#fff",border:"none",borderRadius:10,padding:"10px 14px",fontSize:13,fontWeight:700,cursor:"pointer"}}>Shrani kot nov nalog</button><button onClick={posodobiObstojeci} style={{marginTop:10,width:"100%",background:"#0284c7",color:"#fff",border:"none",borderRadius:10,padding:"10px 14px",fontSize:13,fontWeight:700,cursor:"pointer"}}>🔄 Posodobi obstoječi nalog {duplikatOpozorilo.stevilka_naloga} (namesto novega)</button>
       </div>}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px",marginBottom:14}}>
         <div style={{gridColumn:"1/-1"}}>
