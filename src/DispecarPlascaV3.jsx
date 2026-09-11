@@ -994,6 +994,7 @@ function GpsTab({nalogi,vozniki}){
     return { tekst:(kje?"Stoji "+kje:"Stoji")+" ze "+h+" h "+(min%60)+" min"+(n&&kje?" - "+n.stevilkaNaloga:""), huda:!!kje };
   };
   const list=vsa.filter(v=>!q||((v.reg_tablica||"")+" "+(v.voznik||"")+" "+(v.lokacija||"")).toLowerCase().includes(q.toLowerCase())).sort((a,b)=>((opozorilo(b)?1:0)-(opozorilo(a)?1:0)));
+  const vozi=vsa.filter(v=>v.hitrost>0).length;  
   return (<div>
     <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Isci vozilo, voznika ali kraj..." style={{flex:1,padding:"10px 14px",border:"1px solid #e2e8f0",borderRadius:10,fontSize:14,outline:"none"}}/>
