@@ -899,7 +899,7 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
         {tab==="prosticmr"&&<ProstiCMRTab st={st} upd={upd} showToast={showToast}/>}
         {tab==="email"&&<EmailNalogTab upd={upd} showToast={showToast} naložiPodatke={naložiPodatke} vozniki={vozniki}/>}
         {tab==="komunikacija"&&<KomunikacijaTab showToast={showToast}/>}
-        {tab==="dopusti"&&<DopustiTab vozniki={vozniki} showToast={showToast}/>}{tab==="gps"&&<GpsTab/>}
+        {tab==="dopusti"&&<DopustiTab vozniki={vozniki} showToast={showToast}/>}{tab==="gps"&&<GpsTab nalogi={st.nalogi} vozniki={vozniki}/>}
       </div>
       {/* Nov nalog modal */}
       {modal==="nalog"&&(
@@ -972,13 +972,29 @@ function PregledTab({stats,nalogi,obracuni,vozniki,onSelNalog,onSelOb}){
     {noviOb.length>0&&<><div style={{fontWeight:700,fontSize:15,color:"#0f2744",marginBottom:10,marginTop:12}}>💶 Obračuni voznikov</div>{noviOb.map(o=><OC key={o.id} o={o} onClick={()=>onSelOb(o)}/>)}</>}
   </div>);
 }
-function GpsTab(){
+function GpsTab({nalogi,vozniki}){
   const [d,setD]=useState(null); const [nap,setNap]=useState(""); const [load,setLoad]=useState(false); const [q,setQ]=useState(""); const [osv,setOsv]=useState(null);
   const naloziGps=async()=>{ setLoad(true); setNap(""); try{ const {data,error}=await supabase.functions.invoke("eurowag-trips",{body:{}}); if(error) throw error; if(data&&data.error) throw new Error(data.error); setD(data); setOsv(new Date()); }catch(e){ setNap(String(e&&e.message?e.message:e)); } setLoad(false); };
   useEffect(()=>{ naloziGps(); const t=setInterval(naloziGps,120000); return ()=>clearInterval(t); },[]);
   const pred=(iso)=>{ if(!iso) return "-"; const m=Math.round((Date.now()-new Date(iso).getTime())/60000); if(m<1) return "pravkar"; if(m<60) return "pred "+m+" min"; const h=Math.floor(m/60); return "pred "+h+" h "+(m%60)+" min"; };
   const vsa=(d&&d.vozila)||[];
-  const list=vsa.filter(v=>!q||((v.reg_tablica||"")+" "+(v.voznik||"")+" "+(v.lokacija||"")).toLowerCase().includes(q.toLowerCase()));
+  const nrm=(x)=>(x||"").toUpperCase().replace(/[\s.-]/g,"");
+  const aktivni=(nalogi||[]).filter(n=>n.status!=="zakljucen"&&n.status!=="fakturirano"&&n.status!=="za_fakturo");
+  const opozorilo=(v)=>{
+    if(v.hitrost>0||!v.stoji_od) return null;
+    const min=Math.round((Date.now()-new Date(v.stoji_od).getTime())/60000);
+    if(min<120||min>4320) return null;
+    const vo=(vozniki||[]).find(x=>nrm(x.vozilo)===nrm(v.reg_tablica));
+    const n=vo?aktivni.find(x=>x.voznikId===vo.id):null;
+    const kraj=nrm(v.lokacija);
+    let kje="";
+    if(n){ if(nrm(n.nakKraj)&&kraj.includes(nrm(n.nakKraj))) kje="na nakladu"; else if(nrm(n.razKraj)&&kraj.includes(nrm(n.razKraj))) kje="na razkladu"; }
+    if(!kje&&kraj.includes("NAZARJE")) return null;
+    const h=Math.floor(min/60);
+    return { tekst:(kje?"Stoji "+kje:"Stoji")+" ze "+h+" h "+(min%60)+" min"+(n&&kje?" - "+n.stevilkaNaloga:""), huda:!!kje };
+  };
+  const list=vsa.filter(v=>!q||((v.reg_tablica||"")+" "+(v.voznik||"")+" "+(v.lokacija||"")).toLowerCase().includes(q.toLowerCase())).sort((a,b)=>((opozorilo(b)?1:0)-(opozorilo(a)?1:0)));
+  const list=vsa.filter(v=>!q||((v.reg_tablica||"")+" "+(v.voznik||"")+" "+(v.lokacija||"")).toLowerCase().includes(q.toLowerCase())).sort((a,b)=>((opozorilo(b)?1:0)-(opozorilo(a)?1:0)));
   const vozi=vsa.filter(v=>v.hitrost>0).length;
   return (<div>
     <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
@@ -987,7 +1003,7 @@ function GpsTab(){
     </div>
     {vsa.length>0&&<div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap"}}>
       <span style={{background:"#dcfce7",color:"#15803d",padding:"4px 12px",borderRadius:20,fontSize:12,fontWeight:800}}>V voznji: {vozi}</span>
-      <span style={{background:"#f1f5f9",color:"#0f2744",padding:"4px 12px",borderRadius:20,fontSize:12,fontWeight:800}}>Stoji: {vsa.length-vozi}</span>
+      <span style={{background:"#f1f5f9",color:"#0f2744",padding:"4px 12px",borderRadius:20,fontSize:12,fontWeight:800}}>Stoji: {vsa.length-vozi}</span>{vsa.filter(v=>opozorilo(v)).length>0&&<span style={{background:"#fef2f2",color:"#b91c1c",padding:"4px 12px",borderRadius:20,fontSize:12,fontWeight:800}}>Opozorila: {vsa.filter(v=>opozorilo(v)).length}</span>}
       {osv&&<span style={{color:"#94a3b8",fontSize:12,alignSelf:"center"}}>Osvezeno ob {osv.toLocaleTimeString("sl-SI",{hour:"2-digit",minute:"2-digit"})}</span>}
     </div>}
     {nap&&<div style={{background:"#fef2f2",color:"#b91c1c",border:"1px solid #fecaca",borderRadius:10,padding:14,marginBottom:12,fontSize:13}}>Napaka: {nap}</div>}
@@ -1000,8 +1016,8 @@ function GpsTab(){
           {v.drzava&&<span style={{background:"#eff6ff",color:"#2563eb",padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:800}}>{v.drzava}</span>}
         </div>
       </div>
-      {v.voznik&&<div style={{fontSize:13,color:"#334155",marginBottom:4,fontWeight:600}}>{v.voznik}</div>}
-      <div style={{fontSize:13,color:"#64748b",marginBottom:6}}>{v.lokacija||"Lokacija ni znana"}</div>
+      {(()=>{const o=opozorilo(v);return o?<div style={{background:o.huda?"#fef2f2":"#fffbeb",color:o.huda?"#b91c1c":"#b45309",border:"1px solid "+(o.huda?"#fecaca":"#fde68a"),borderRadius:8,padding:"6px 10px",fontSize:12,fontWeight:700,marginBottom:6}}>{o.tekst}</div>:null;})()}{v.voznik&&<div style={{fontSize:13,color:"#334155",marginBottom:4,fontWeight:600}}>{v.voznik}</div>}
+      <div style={{fontSize:13,color:"#64748b",marginBottom:6}}>{v.lokacija||"Lokacija ni znana"}</div>{(()=>{const nr=(x)=>(x||"").toUpperCase().replace(/[\s.-]/g,"");const vo=(vozniki||[]).find(x=>nr(x.vozilo)===nr(v.reg_tablica));if(!vo)return null;const akt=(nalogi||[]).filter(x=>x.voznikId===vo.id&&x.status!=="zakljucen"&&x.status!=="fakturirano"&&x.status!=="za_fakturo");if(!akt.length)return null;const ms=(x)=>x?new Date(x+"T00:00:00").getTime():0;const now=Date.now();const tek=akt.filter(x=>ms(x.nakDatum)<=now&&ms(x.razDatum)+86400000>=now).sort((a,b)=>ms(a.razDatum)-ms(b.razDatum));const prih=akt.filter(x=>ms(x.nakDatum)>now).sort((a,b)=>ms(a.nakDatum)-ms(b.nakDatum));const n=tek[0]||prih[0]||akt[0];const vec=akt.length-1;const g=(c)=>"https://www.google.com/maps/dir/?api=1&origin="+v.lat+","+v.lon+"&destination="+encodeURIComponent(c)+"&travelmode=driving";const st={fontSize:12,color:"#0f2744",background:"#f1f5f9",padding:"4px 10px",borderRadius:8,fontWeight:700,textDecoration:"none"};return <div style={{background:"#f8fafc",borderRadius:8,padding:"8px 10px",marginBottom:8}}><div style={{display:"flex",gap:6,alignItems:"center",marginBottom:2,flexWrap:"wrap"}}><span style={{fontSize:11,fontFamily:"monospace",color:"#2563eb",fontWeight:700}}>{n.stevilkaNaloga}</span><span style={{fontSize:11,color:"#94a3b8"}}>{tek[0]?"v teku":"naslednji"}</span>{vec>0&&<span style={{fontSize:11,color:"#94a3b8"}}>+{vec} {vec===1?"nalog":"nalogi"}</span>}</div><div style={{fontSize:12,color:"#334155",fontWeight:600,marginBottom:6}}>{n.nakKraj||"?"} {"\u2192"} {n.razKraj||"?"}</div><div style={{fontSize:11,color:"#64748b",marginBottom:6}}>Nakl.: {n.nakDatum||"-"} {n.nakCas||""} | Razkl.: {n.razDatum||"-"} {n.razCas||""}</div>{v.lat&&<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{(n.nakNaslov||n.nakKraj)&&<a href={g(n.nakNaslov||n.nakKraj)} target="_blank" rel="noreferrer" style={st}>Do naklada</a>}{(n.razNaslov||n.razKraj)&&<a href={g(n.razNaslov||n.razKraj)} target="_blank" rel="noreferrer" style={st}>Do razklada</a>}</div>}</div>;})()}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <span style={{fontSize:11,color:"#94a3b8"}}>{pred(v.cas)}{v.kontakt?" | kontakt prizgan":""}</span>
         {v.lat&&<a href={"https://www.google.com/maps?q="+v.lat+","+v.lon} target="_blank" rel="noreferrer" style={{fontSize:12,color:"#2563eb",fontWeight:700,textDecoration:"none"}}>Zemljevid</a>}
