@@ -994,7 +994,6 @@ function GpsTab({nalogi,vozniki}){
     return { tekst:(kje?"Stoji "+kje:"Stoji")+" ze "+h+" h "+(min%60)+" min"+(n&&kje?" - "+n.stevilkaNaloga:""), huda:!!kje };
   };
   const list=vsa.filter(v=>!q||((v.reg_tablica||"")+" "+(v.voznik||"")+" "+(v.lokacija||"")).toLowerCase().includes(q.toLowerCase())).sort((a,b)=>((opozorilo(b)?1:0)-(opozorilo(a)?1:0)));
-  const list=vsa.filter(v=>!q||((v.reg_tablica||"")+" "+(v.voznik||"")+" "+(v.lokacija||"")).toLowerCase().includes(q.toLowerCase())).sort((a,b)=>((opozorilo(b)?1:0)-(opozorilo(a)?1:0)));
   const vozi=vsa.filter(v=>v.hitrost>0).length;
   return (<div>
     <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
@@ -1008,7 +1007,7 @@ function GpsTab({nalogi,vozniki}){
     </div>}
     {nap&&<div style={{background:"#fef2f2",color:"#b91c1c",border:"1px solid #fecaca",borderRadius:10,padding:14,marginBottom:12,fontSize:13}}>Napaka: {nap}</div>}
     {load&&!d&&<div style={{textAlign:"center",color:"#94a3b8",padding:40}}>Nalagam pozicije...</div>}
-    {list.map(v=>(<div key={v.id} style={{background:"#fff",borderRadius:12,padding:14,marginBottom:10,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",borderLeft:v.hitrost>0?"4px solid #22c55e":"4px solid #cbd5e1"}}>
+    {list.map(v=>(<div key={v.id} style={{textAlign:"left",background:"#fff",borderRadius:12,padding:14,marginBottom:10,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",borderLeft:v.hitrost>0?"4px solid #22c55e":"4px solid #cbd5e1"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
         <div style={{fontSize:16,fontWeight:800,color:"#0f2744"}}>{v.reg_tablica||"?"}</div>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
