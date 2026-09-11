@@ -885,7 +885,7 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
         )}
         {/* Tabs */}
         <div style={s.tabs}>
-          {[["nalogi","📋 Nalogi"],["poti","Poti"],["tedenski","📅 Tedenski"],["ai","🤖 AI"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["finance","🧾 Finance"],["komunikacija","📨 Komunikacija"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`]].map(([id,label])=>(
+          {[["nalogi","📋 Nalogi"],["poti","Poti"],["tedenski","📅 Tedenski"],["ai","🤖 AI"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["finance","🧾 Finance"],["komunikacija","📨 Komunikacija"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`],["gps","📍 GPS"]].map(([id,label])=>(
             <button key={id} style={{...s.tab,...(tab===id?s.tabOn:{})}} onClick={()=>setTab(id)}>{label}</button>
           ))}
         </div>
@@ -899,7 +899,7 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
         {tab==="prosticmr"&&<ProstiCMRTab st={st} upd={upd} showToast={showToast}/>}
         {tab==="email"&&<EmailNalogTab upd={upd} showToast={showToast} naložiPodatke={naložiPodatke} vozniki={vozniki}/>}
         {tab==="komunikacija"&&<KomunikacijaTab showToast={showToast}/>}
-        {tab==="dopusti"&&<DopustiTab vozniki={vozniki} showToast={showToast}/>}
+        {tab==="dopusti"&&<DopustiTab vozniki={vozniki} showToast={showToast}/>}{tab==="gps"&&<GpsTab/>}
       </div>
       {/* Nov nalog modal */}
       {modal==="nalog"&&(
@@ -972,7 +972,44 @@ function PregledTab({stats,nalogi,obracuni,vozniki,onSelNalog,onSelOb}){
     {noviOb.length>0&&<><div style={{fontWeight:700,fontSize:15,color:"#0f2744",marginBottom:10,marginTop:12}}>💶 Obračuni voznikov</div>{noviOb.map(o=><OC key={o.id} o={o} onClick={()=>onSelOb(o)}/>)}</>}
   </div>);
 }
-
+function GpsTab(){
+  const [d,setD]=useState(null); const [nap,setNap]=useState(""); const [load,setLoad]=useState(false); const [q,setQ]=useState(""); const [osv,setOsv]=useState(null);
+  const naloziGps=async()=>{ setLoad(true); setNap(""); try{ const {data,error}=await supabase.functions.invoke("eurowag-trips",{body:{}}); if(error) throw error; if(data&&data.error) throw new Error(data.error); setD(data); setOsv(new Date()); }catch(e){ setNap(String(e&&e.message?e.message:e)); } setLoad(false); };
+  useEffect(()=>{ naloziGps(); const t=setInterval(naloziGps,120000); return ()=>clearInterval(t); },[]);
+  const pred=(iso)=>{ if(!iso) return "-"; const m=Math.round((Date.now()-new Date(iso).getTime())/60000); if(m<1) return "pravkar"; if(m<60) return "pred "+m+" min"; const h=Math.floor(m/60); return "pred "+h+" h "+(m%60)+" min"; };
+  const vsa=(d&&d.vozila)||[];
+  const list=vsa.filter(v=>!q||((v.reg_tablica||"")+" "+(v.voznik||"")+" "+(v.lokacija||"")).toLowerCase().includes(q.toLowerCase()));
+  const vozi=vsa.filter(v=>v.hitrost>0).length;
+  return (<div>
+    <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Isci vozilo, voznika ali kraj..." style={{flex:1,padding:"10px 14px",border:"1px solid #e2e8f0",borderRadius:10,fontSize:14,outline:"none"}}/>
+      <button onClick={naloziGps} disabled={load} style={{background:"#0f2744",color:"#fff",border:"none",borderRadius:10,padding:"10px 18px",fontWeight:700,fontSize:13,cursor:load?"default":"pointer",opacity:load?0.6:1}}>{load?"Nalagam...":"Osvezi"}</button>
+    </div>
+    {vsa.length>0&&<div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap"}}>
+      <span style={{background:"#dcfce7",color:"#15803d",padding:"4px 12px",borderRadius:20,fontSize:12,fontWeight:800}}>V voznji: {vozi}</span>
+      <span style={{background:"#f1f5f9",color:"#0f2744",padding:"4px 12px",borderRadius:20,fontSize:12,fontWeight:800}}>Stoji: {vsa.length-vozi}</span>
+      {osv&&<span style={{color:"#94a3b8",fontSize:12,alignSelf:"center"}}>Osvezeno ob {osv.toLocaleTimeString("sl-SI",{hour:"2-digit",minute:"2-digit"})}</span>}
+    </div>}
+    {nap&&<div style={{background:"#fef2f2",color:"#b91c1c",border:"1px solid #fecaca",borderRadius:10,padding:14,marginBottom:12,fontSize:13}}>Napaka: {nap}</div>}
+    {load&&!d&&<div style={{textAlign:"center",color:"#94a3b8",padding:40}}>Nalagam pozicije...</div>}
+    {list.map(v=>(<div key={v.id} style={{background:"#fff",borderRadius:12,padding:14,marginBottom:10,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",borderLeft:v.hitrost>0?"4px solid #22c55e":"4px solid #cbd5e1"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+        <div style={{fontSize:16,fontWeight:800,color:"#0f2744"}}>{v.reg_tablica||"?"}</div>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          {v.hitrost>0?<span style={{background:"#dcfce7",color:"#15803d",padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:800}}>{Math.round(v.hitrost)} km/h</span>:<span style={{background:"#f1f5f9",color:"#64748b",padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:800}}>stoji</span>}
+          {v.drzava&&<span style={{background:"#eff6ff",color:"#2563eb",padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:800}}>{v.drzava}</span>}
+        </div>
+      </div>
+      {v.voznik&&<div style={{fontSize:13,color:"#334155",marginBottom:4,fontWeight:600}}>{v.voznik}</div>}
+      <div style={{fontSize:13,color:"#64748b",marginBottom:6}}>{v.lokacija||"Lokacija ni znana"}</div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{fontSize:11,color:"#94a3b8"}}>{pred(v.cas)}{v.kontakt?" | kontakt prizgan":""}</span>
+        {v.lat&&<a href={"https://www.google.com/maps?q="+v.lat+","+v.lon} target="_blank" rel="noreferrer" style={{fontSize:12,color:"#2563eb",fontWeight:700,textDecoration:"none"}}>Zemljevid</a>}
+      </div>
+    </div>))}
+    {d&&list.length===0&&!load&&<div style={{textAlign:"center",color:"#94a3b8",padding:40}}>Ni zadetkov.</div>}
+  </div>);
+}
 let _nalogiQ=""; let _nalogiUI=null; function NalogiTab({nalogi,vozniki,onSelect,openNovNalog,onEdit,onDelete,onAssign,onZaFakturo,onFakturirano}){
   const [f,setF]=useState("vsi");
   const [smerF,setSmerF]=useState("vse");
