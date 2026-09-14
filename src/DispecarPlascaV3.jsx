@@ -1133,7 +1133,7 @@ let _nalogiQ=""; let _nalogiUI=null; function NalogiTab({nalogi,vozniki,onSelect
           </div>
         </button>
         {odprt&&<div style={{borderTop:"1px solid #f1f5f9",padding:"10px 12px 4px"}}>
-          {g.nalogi.map(n=><NC key={n.id} n={n} vozniki={vozniki} onClick={()=>onSelect(n)} onEdit={onEdit} onDelete={onDelete} onZaFakturo={onZaFakturo} onFakturirano={onFakturirano}/>)}
+          {g.nalogi.map(n=><NC key={n.id} n={n} vozniki={vozniki} onClick={()=>onSelect(n)} onEdit={onEdit} onDelete={onDelete} onAssign={onAssign} onZaFakturo={onZaFakturo} onFakturirano={onFakturirano}/>)}
         </div>}
       </div>);
     })}
