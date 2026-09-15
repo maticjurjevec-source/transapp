@@ -3325,8 +3325,8 @@ function tabDatum(datum,cas){
 function tabBlago(n){
   const b=(n.blago||"").trim();
   const m=n.metri||n.ldm||"";
-  const metri=m?(/ldm|metr/i.test(String(m))?String(m):`${m} LDM`):"";
-  const k=metri||(n.kolicina||"").trim();
+  let metri=m?(/ldm|metr/i.test(String(m))?String(m):`${m} LDM`):""; if(!metri){ const src=[n.kolicina,n.blago,n.navodila,n.opombe,n.nakReferenca,n.razReferenca].map(x=>String(x||"")).join(" "); const mm=src.match(/(\d+(?:[.,]\d+)?)\s*(?:ldm\b|lm\b|lade\s?meter|load\s?meter|nakladaln\w*\s*metr\w*|metr\w*\s*nakladaln\w*)/i); if(mm) metri=mm[1].replace(".",",")+" LDM"; }
+  const kol=(n.kolicina||"").trim(); const k=[kol,(metri&&!/ldm|lade\s?meter/i.test(kol))?metri:""].filter(Boolean).join(", ");
   const t=(n.teza||"").trim();
   return [b,k,t].filter(Boolean).join(", ");
 }
