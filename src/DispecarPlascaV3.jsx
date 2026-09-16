@@ -849,10 +849,10 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
 
   return(
     <div style={s.wrap}>
-      <div style={s.header}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
-          <div style={{flex:"1 1 100%",margin:"-16px -20px 10px",order:-1}}><img src="/banner.png" alt="Jurjevec Transport - TransApp" style={{width:"100%",height:120,objectFit:"cover",display:"block"}}/><div style={{...s.sub,margin:"8px 20px 0"}}>{VOZNIKI.length} voznikov</div></div>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
+      <div style={{...s.header,padding:0,position:"relative",overflow:"hidden"}}>
+        <div style={{position:"relative"}}>
+          <div><img src="/banner.png" alt="Jurjevec Transport - TransApp" style={{width:"100%",height:120,objectFit:"cover",display:"block"}}/><div style={{position:"absolute",right:16,bottom:8,fontSize:11,color:"#fff",opacity:0.9,fontWeight:600}}>{VOZNIKI.length} voznikov</div></div>
+          <div style={{display:"flex",alignItems:"center",gap:8,position:"absolute",top:14,right:16}}>
             {loading && <div style={{fontSize:12,opacity:0.7}}>⏳ Nalagam...</div>}
             {(()=>{const zap=st.nalogi.filter(n=>n.status!=="za_fakturo"&&n.status!=="fakturirano"&&n.razDatum&&Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000)>=7);return zap.length>0?(<div onClick={()=>setShowStari(true)} title="Nalogi za fakturo" style={{position:"relative",cursor:"pointer",fontSize:22,lineHeight:1,padding:"2px 4px"}}>{"\uD83E\uDDFE"}<span style={{position:"absolute",top:-4,right:-4,minWidth:16,height:16,padding:"0 4px",background:"#dc2626",color:"#fff",fontSize:11,fontWeight:700,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",boxSizing:"border-box"}}>{zap.length}</span></div>):null;})()}<button style={s.novBtn} onClick={openNovNalog}>+ Nov nalog</button>
           </div>
