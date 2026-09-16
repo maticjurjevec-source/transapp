@@ -851,7 +851,7 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
     <div style={s.wrap}>
       <div style={s.header}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div><div style={s.logo}>⚡ TransDispečer</div><div style={s.sub}>{VOZNIKI.length} voznikov</div></div>
+                    <div style={{display:"flex",alignItems:"center",gap:12}}><img src="/logo.png" alt="TransApp" style={{width:46,height:46,borderRadius:10,background:"#fff",flexShrink:0}}/><div><div style={s.logo}>TransApp</div><div style={s.sub}>{VOZNIKI.length} voznikov</div></div></div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             {loading && <div style={{fontSize:12,opacity:0.7}}>⏳ Nalagam...</div>}
             {(()=>{const zap=st.nalogi.filter(n=>n.status!=="za_fakturo"&&n.status!=="fakturirano"&&n.razDatum&&Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000)>=7);return zap.length>0?(<div onClick={()=>setShowStari(true)} title="Nalogi za fakturo" style={{position:"relative",cursor:"pointer",fontSize:22,lineHeight:1,padding:"2px 4px"}}>{"\uD83E\uDDFE"}<span style={{position:"absolute",top:-4,right:-4,minWidth:16,height:16,padding:"0 4px",background:"#dc2626",color:"#fff",fontSize:11,fontWeight:700,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",boxSizing:"border-box"}}>{zap.length}</span></div>):null;})()}<button style={s.novBtn} onClick={openNovNalog}>+ Nov nalog</button>

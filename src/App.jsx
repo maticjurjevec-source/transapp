@@ -250,7 +250,7 @@ export default function App() {
     return (
       <div>
         <div style={s.topBar}>
-          <span style={s.topBarIme}>⚡ Dispečer</span>
+                    <span style={s.topBarIme}><img src="/logo.png" alt="" style={{width:24,height:24,borderRadius:6,verticalAlign:"-6px",marginRight:8,background:"#fff"}}/>Dispečer</span>
           <button style={s.odjavaBtn} onClick={odjava}>Odjava</button>
         </div>
         <DispecarPlasca />
