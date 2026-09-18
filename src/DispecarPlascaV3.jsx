@@ -402,7 +402,9 @@ export default function DispecarPlasca() {
 
     // Viber deeplink: številka brez "+" znaka
     const tel = v.tel.replace(/^\+/, "");
-    const url = `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
+       const jeIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+    const url = jeIOS ? `viber://forward?text=${encodeURIComponent(sporocilo)}` : `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
+    try{ const ta=document.createElement("textarea"); ta.value=sporocilo; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.focus(); ta.setSelectionRange(0,ta.value.length); document.execCommand("copy"); document.body.removeChild(ta); }catch(e){}
     navigator.clipboard.writeText(sporocilo).catch(()=>{});
     setTimeout(()=>showToast("Besedilo naloga je kopirano - v Viberju prilepi s Ctrl+V"),1500);
 
