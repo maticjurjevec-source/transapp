@@ -403,6 +403,8 @@ export default function DispecarPlasca() {
     // Viber deeplink: številka brez "+" znaka
     const tel = v.tel.replace(/^\+/, "");
     const url = `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
+    navigator.clipboard.writeText(sporocilo).catch(()=>{});
+    setTimeout(()=>showToast("Besedilo naloga je kopirano - v Viberju prilepi s Ctrl+V"),1500);
 
     window.location.href = url;
     showToast(`📤 Odpiram Viber za ${v.ime}...`);
