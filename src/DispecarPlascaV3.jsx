@@ -561,7 +561,31 @@ je_slovenska_ddv: form.jeSlovenskaDdv!==undefined?form.jeSlovenskaDdv:null,
       await naložiPodatke();closeModal();showToast("✅ Nalog posodobljen!");
     }catch(err){showToast("❌ Napaka!",true);console.error(err);}
   };
-const nastaviSmer=async(nalogId,smer)=>{
+const zamenjajNakRaz=async(n,samoNaslovi)=>{
+    const t=samoNaslovi?"firmi in naslova":"naklad in razklad v celoti";
+    if(!window.confirm("Zamenjam "+t+"?"))return;
+    try{
+      const u={
+        nak_firma:n.razFirma||null, raz_firma:n.nakFirma||null,
+        nak_kraj:n.razKraj||null,  raz_kraj:n.nakKraj||null,
+        nak_naslov:n.razNaslov||null, raz_naslov:n.nakNaslov||null,
+      };
+      if(!samoNaslovi){
+        u.nak_referenca=n.razReferenca||null; u.raz_referenca=n.nakReferenca||null;
+        u.nak_datum=n.razDatum||null;         u.raz_datum=n.nakDatum||null;
+        u.nak_cas=n.razCas||null;             u.raz_cas=n.nakCas||null;
+        if(Array.isArray(n.postanki)&&n.postanki.length>0){
+          u.postanki=n.postanki.map(p=>({...p,tip:p.tip==="naklad"?"razklad":(p.tip==="razklad"?"naklad":p.tip)}));
+        }
+      }
+      const{error}=await supabase.from('nalogi').update(u).eq('id',n.id);
+      if(error)throw error;
+      await naložiPodatke();
+      setSelNalog(null);
+      showToast("Zamenjano - odpri nalog za pregled");
+    }catch(err){showToast("Napaka pri zamenjavi!",true);console.error(err);}
+  };
+  const nastaviSmer=async(nalogId,smer)=>{
     try{
       const{error}=await supabase.from('nalogi').update({smer_rocno:smer}).eq('id',nalogId);
       if(error)throw error;
@@ -636,7 +660,7 @@ const handleDrop=async(e,editId)=>{
         slikaB64=await new Promise((res)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.readAsDataURL(file);});
       }
       if(!txt&&!slikaB64)txt=await file.text().catch(()=>file.name);
-            const promptTekst=`Iz tega transportnega naloga izvleci podatke. POZOR za polje "stranka": stranka je ŠPEDICIJA ali LOGISTIČNO PODJETJE ki je poslalo ta nalog (npr. Cargo Partner, DHL, Rooskens, ROCS Trading, Fersped ipd.) — torej tisti ki naroča prevoz. NI nakladna firma, NI razkladna firma, NI prevoznik (JURJEVEC). Poišči logo, glavo dokumenta ali polje "ordered by/Auftraggeber/naročnik" da najdeš pravo stranko. Poišči tudi ceno prevoza (price/rate/freight/Preis/Fracht) in jo vpiši v polje znesek kot število. Vrni SAMO JSON:\n{"stranka":"","stevilkaNarocnika":"","blago":"","kolicina":"","teza":"","nakFirma":"","nakKraj":"","nakNaslov":"","nakReferenca":"","nakDatum":"","nakCas":"","razFirma":"","razKraj":"","razNaslov":"","razReferenca":"","razDatum":"","razCas":"","navodila":"","kontaktEmail":"","znesek":"","jeSlovenskaDdv":true}\n\nPolja:\n- stevilkaNarocnika: OBVEZNO poisci stevilko narocila narocnika na dokumentu - izrazi: Stevilka narocila, St. narocila, Narocilo st., Auftragsnummer, Auftrags-Nr., Bestellnummer, Order No., Order number, Ref. No., Transportauftrag Nr. Vpisi tocno tako kot je zapisano (npr "9018/2026"). Ce je res ni, pusti prazno.\n- znesek: cena prevoza v EUR (samo število, npr "850.00"). Poišči v dokumentu besede kot price, rate, freight, Preis, cena.\n- jeSlovenskaDdv: true če je naročnik iz Slovenije, false če je tuj (glede na državo naročnika).\n- kontaktEmail: email za pošiljanje računa (poišči besede invoice, Rechnung, račun, faktura).\n- kolicina: nakladalni metri (LDM) ce so navedeni (npr "13,6 LDM"), sicer stevilo palet in dimenzije palet (npr "24 EUR palet 120x80 cm").\n- teza: skupna teza tovora v kg (npr "18.500 kg").\n- navodila: vse posebne zahteve in navodila iz dokumenta.\nDatumi: YYYY-MM-DD, casi: HH:MM.`;
+            const promptTekst=`Iz tega transportnega naloga izvleci podatke. POZOR za polje "stranka": stranka je ŠPEDICIJA ali LOGISTIČNO PODJETJE ki je poslalo ta nalog (npr. Cargo Partner, DHL, Rooskens, ROCS Trading, Fersped ipd.) — torej tisti ki naroča prevoz. NI nakladna firma, NI razkladna firma, NI prevoznik (JURJEVEC). Poišči logo, glavo dokumenta ali polje "ordered by/Auftraggeber/naročnik" da najdeš pravo stranko. Poišči tudi ceno prevoza (price/rate/freight/Preis/Fracht) in jo vpiši v polje znesek kot število. Vrni SAMO JSON:\n{"stranka":"","stevilkaNarocnika":"","blago":"","kolicina":"","teza":"","nakFirma":"","nakKraj":"","nakNaslov":"","nakReferenca":"","nakDatum":"","nakCas":"","razFirma":"","razKraj":"","razNaslov":"","razReferenca":"","razDatum":"","razCas":"","navodila":"","kontaktEmail":"","znesek":"","jeSlovenskaDdv":true}\n\nPolja:\n- POZOR NAKLAD/RAZKLAD: naklad je kraj PREVZEMA blaga - v dokumentu oznacen kot "Loading place", "Ladestelle", "Beladestelle", "Pickup", "Abholung", "Miejsce zaladunku", "naklad". Razklad je kraj DOSTAVE - "Unloading place", "Entladestelle", "Ablieferung", "Delivery", "Miejsce rozladunku", "razklad". Firmo, kraj, naslov, datum in uro VEDNO vzemi iz istega bloka - ne mesaj podatkov med blokoma. Ne sklepaj po drzavi ali po tem, katera firma je slovenska.\n- stevilkaNarocnika: OBVEZNO poisci stevilko narocila narocnika na dokumentu - izrazi: Stevilka narocila, St. narocila, Narocilo st., Auftragsnummer, Auftrags-Nr., Bestellnummer, Order No., Order number, Ref. No., Transportauftrag Nr. Vpisi tocno tako kot je zapisano (npr "9018/2026"). Ce je res ni, pusti prazno.\n- znesek: cena prevoza v EUR (samo število, npr "850.00"). Poišči v dokumentu besede kot price, rate, freight, Preis, cena.\n- jeSlovenskaDdv: true če je naročnik iz Slovenije, false če je tuj (glede na državo naročnika).\n- kontaktEmail: email za pošiljanje računa (poišči besede invoice, Rechnung, račun, faktura).\n- kolicina: nakladalni metri (LDM) ce so navedeni (npr "13,6 LDM"), sicer stevilo palet in dimenzije palet (npr "24 EUR palet 120x80 cm").\n- teza: skupna teza tovora v kg (npr "18.500 kg").\n- navodila: vse posebne zahteve in navodila iz dokumenta.\nDatumi: YYYY-MM-DD, casi: HH:MM.`;
       const userContent=slikaB64
         ?[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:slikaB64}},{type:"text",text:promptTekst}]
         :promptTekst+"\n\nDokument:\n"+txt;
@@ -731,6 +755,10 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
                 <button key={k} onClick={()=>nastaviSmer(n.id,k)} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid",borderColor:(n.smer_rocno||n.smerRocno)===k?"#0f2744":"#e2e8f0",background:(n.smer_rocno||n.smerRocno)===k?"#0f2744":"#fff",color:(n.smer_rocno||n.smerRocno)===k?"#fff":"#475569",fontSize:12,fontWeight:700,cursor:"pointer"}}>{l}</button>
               ))}
               <button onClick={()=>nastaviSmer(n.id,null)} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",background:"#fff",color:"#64748b",fontSize:12,fontWeight:600,cursor:"pointer"}}>↺ Samodejno</button>
+            </div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10,paddingTop:10,borderTop:"1px solid #f1f5f9"}}>
+              <button onClick={()=>zamenjajNakRaz(n,true)} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #fde68a",background:"#fffbeb",color:"#b45309",fontSize:12,fontWeight:700,cursor:"pointer"}}>⇄ Zamenjaj firmi in naslova</button>
+              <button onClick={()=>zamenjajNakRaz(n,false)} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #fecaca",background:"#fef2f2",color:"#b91c1c",fontSize:12,fontWeight:700,cursor:"pointer"}}>⇄ Zamenjaj vse (tudi datume)</button>
             </div>
           </Sec>
           <Sec title="📦 Blago"><R label="Blago" val={n.blago}/><R label="Cena" val={(n.znesek_original||n.znesekOriginal)?((n.znesek_original||n.znesekOriginal)+" EUR"):null} bold/><R label="Količina" val={n.kolicina}/><R label="Teža" val={n.teza}/></Sec>
