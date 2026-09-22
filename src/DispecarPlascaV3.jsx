@@ -3510,9 +3510,8 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
     const r=Object.values(m);
     r.forEach(g=>{
       const rocno=izbran[g.kljuc];
-      const naj=g.postanki.find(x=>x.id===rocno);
-      g.koncni=naj||g.postanki[g.postanki.length-1]||null;
-      g.rocno=!!naj;
+      if(rocno===""){ g.koncni=null; g.rocno=true; }
+      else { const naj=g.postanki.find(x=>x.id===rocno); g.koncni=naj||g.postanki[g.postanki.length-1]||null; g.rocno=!!naj; }
     });
     return r.sort((a,b)=>a.vozilo.localeCompare(b.vozilo));
   })();
@@ -3551,7 +3550,7 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
       const vo=(vozniki||[]).find(x=>_nr(x.vozilo)===_nr(v.reg_tablica));
       const g=vo?skupine.find(x=>x.kljuc===vo.id):null;
       const zadnji=(g&&g.koncni)||null;
-      const kdaj=zadnji?("Prazen "+fd(zadnji.razDatum)+(zadnji.razCas?" ob "+zadnji.razCas:"")+" v "+(zadnji.razKraj||"")):"Ni razklada ta teden";
+      const kdaj=zadnji?("Prazen "+fd(zadnji.razDatum)+(zadnji.razCas?" ob "+zadnji.razCas:"")+" v "+(zadnji.razKraj||"")):((g&&g.postanki&&g.postanki.length)?"Koncna lokacija ni dolocena":"Ni razklada ta teden");
       vrstice.push([
         v.reg_tablica+" - "+(zadnji?("prazen "+fd(zadnji.razDatum)):"prost"),
         v.lat+", "+v.lon,
@@ -3607,7 +3606,7 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
                 <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{n.razNaslov||""}</div>
                 <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{(n.stranka||"")+(n.stevilkaNaloga?" | "+n.stevilkaNaloga:"")}</div>
               </div>
-              <button onClick={(e)=>{e.stopPropagation();setIzbran(p=>({...p,[g.kljuc]:n.id}));}} title="Oznaci kot koncni razklad" style={{flexShrink:0,alignSelf:"center",fontSize:11,fontWeight:700,padding:"5px 10px",borderRadius:8,cursor:"pointer",border:"1.5px solid "+(g.koncni&&g.koncni.id===n.id?"#16a34a":"#e2e8f0"),background:g.koncni&&g.koncni.id===n.id?"#f0fdf4":"#fff",color:g.koncni&&g.koncni.id===n.id?"#15803d":"#94a3b8"}}>{g.koncni&&g.koncni.id===n.id?"\u2713 koncni":"koncni"}</button>
+              <button onClick={(e)=>{e.stopPropagation();setIzbran(p=>({...p,[g.kljuc]:(g.koncni&&g.koncni.id===n.id)?"":n.id}));}} title={g.koncni&&g.koncni.id===n.id?"Klikni za odznacitev":"Oznaci kot koncni razklad"} style={{flexShrink:0,alignSelf:"center",fontSize:11,fontWeight:700,padding:"5px 10px",borderRadius:8,cursor:"pointer",border:"1.5px solid "+(g.koncni&&g.koncni.id===n.id?"#16a34a":"#e2e8f0"),background:g.koncni&&g.koncni.id===n.id?"#f0fdf4":"#fff",color:g.koncni&&g.koncni.id===n.id?"#15803d":"#94a3b8"}}>{g.koncni&&g.koncni.id===n.id?"\u2713 koncni":"koncni"}</button>
             </div>
           ))}
         </div>
