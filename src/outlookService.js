@@ -117,6 +117,47 @@ export async function getEmailWithAttachments(messageId) {
   return { email, attachments };
 }
 
+// Ustvari osnutek maila naročniku s priloženim originalnim nalogom
+export async function ustvariOsnutekZaNarocnika({ prejemnik, zadeva, telo, pdfUrl, pdfIme }) {
+  const token = await getAccessToken();
+  const attachments = [];
+  if (pdfUrl) {
+    try {
+      const r = await fetch(pdfUrl);
+      if (r.ok) {
+        const buf = await r.arrayBuffer();
+        let bin = "";
+        const bytes = new Uint8Array(buf);
+        const chunk = 8192;
+        for (let i = 0; i < bytes.length; i += chunk) {
+          bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+        }
+        attachments.push({
+          "@odata.type": "#microsoft.graph.fileAttachment",
+          name: pdfIme || "nalog.pdf",
+          contentType: "application/pdf",
+          contentBytes: btoa(bin),
+        });
+      }
+    } catch (e) {
+      console.warn("Priloge ni bilo mogoce prenesti:", e);
+    }
+  }
+  const res = await fetch(graphConfig.graphMailEndpoint, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      subject: zadeva,
+      body: { contentType: "Text", content: telo },
+      toRecipients: prejemnik ? [{ emailAddress: { address: prejemnik } }] : [],
+      attachments,
+    }),
+  });
+  if (!res.ok) throw new Error("Graph napaka " + res.status + ": " + (await res.text()).slice(0, 200));
+  const msg = await res.json();
+  return { webLink: msg.webLink, id: msg.id, priponka: attachments.length > 0 };
+}
+
 // Označi email kot prebran (po uvozu naloga)
 export async function markEmailAsRead(messageId) {
   const token = await getAccessToken();
