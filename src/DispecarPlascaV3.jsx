@@ -400,14 +400,13 @@ export default function DispecarPlasca() {
 
     // Viber deeplink: številka brez "+" znaka
     const tel = (v && v.tel) ? v.tel.replace(/^\+/, "") : "";
-       const jeIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
-    const url = (jeIOS || !tel) ? `viber://forward?text=${encodeURIComponent(sporocilo)}` : `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
+    const url = tel ? `viber://chat?number=${tel}` : "viber://";
     const _kopiraj = () => {
       try { const ta=document.createElement("textarea"); ta.value=sporocilo; ta.setAttribute("readonly",""); ta.style.position="fixed"; ta.style.top="-2000px"; document.body.appendChild(ta); ta.focus(); ta.select(); ta.setSelectionRange(0,ta.value.length); document.execCommand("copy"); document.body.removeChild(ta); } catch(e) {}
       try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(sporocilo).catch(()=>{}); } catch(e) {}
     };
     _kopiraj();
-    showToast(tel ? `Nalog kopiran - odpiram Viber za ${v.ime}, prilepi s Ctrl+V` : "Nalog kopiran - odpiram Viber, izberi stik in prilepi");
+    showToast(tel ? `Nalog kopiran - odpiram Viber za ${v.ime}, prilepi ga v pogovor` : "Nalog kopiran - odpiram Viber, izberi stik in prilepi");
     setTimeout(() => { window.location.href = url; }, 300);
   };
 
