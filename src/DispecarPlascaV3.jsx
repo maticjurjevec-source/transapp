@@ -365,8 +365,6 @@ export default function DispecarPlasca() {
   // Pošlji nalog vozniku preko Viberja
   const posljiViber = (n) => {
     const v = voz(n.voznikId);
-    if (!v) return showToast("❌ Nalog nima dodeljenega voznika!", true);
-    if (!v.tel) return showToast(`❌ Voznik ${v.ime} nima telefonske številke!`, true);
 
     // Sestavi celotno sporočilo z vsemi podatki naloga
     const sc = SC[n.status] || {};
@@ -401,15 +399,15 @@ export default function DispecarPlasca() {
     const sporocilo = lines.filter((l, i, arr) => !(l === "" && arr[i-1] === "")).join("\n");
 
     // Viber deeplink: številka brez "+" znaka
-    const tel = v.tel.replace(/^\+/, "");
+    const tel = (v && v.tel) ? v.tel.replace(/^\+/, "") : "";
        const jeIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
-    const url = jeIOS ? `viber://forward?text=${encodeURIComponent(sporocilo)}` : `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
+    const url = (jeIOS || !tel) ? `viber://forward?text=${encodeURIComponent(sporocilo)}` : `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
     try{ const ta=document.createElement("textarea"); ta.value=sporocilo; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.focus(); ta.setSelectionRange(0,ta.value.length); document.execCommand("copy"); document.body.removeChild(ta); }catch(e){}
     navigator.clipboard.writeText(sporocilo).catch(()=>{});
     setTimeout(()=>showToast("Besedilo naloga je kopirano - v Viberju prilepi s Ctrl+V"),1500);
 
     window.location.href = url;
-    showToast(`📤 Odpiram Viber za ${v.ime}...`);
+    showToast(tel ? `📤 Odpiram Viber za ${v.ime}...` : "📤 Odpiram Viber - izberi prejemnika");
   };
 
 
@@ -813,14 +811,13 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
             </button>
           </div>}
           {(n.status==="za_fakturo"||n.status==="fakturirano")&&<button style={{...s.btnP,background:"#f59e0b",marginTop:8}} onClick={()=>{if(window.confirm("Vrniti nalog med aktivne? Status bo spet 'sprejet'."))spremenStatus(n.id,"sprejet");}}>Vrni med aktivne</button>}<div onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>handleDrop(e,n.id)} style={{...s.btnP,background:"#faf5ff",color:"#7c3aed",border:"2px dashed #c4b5fd",marginTop:8,padding:"16px",textAlign:"center",cursor:"copy",fontSize:13}}>Povleci nov dokument sem za zamenjavo naloga</div><button style={{...s.btnP,background:"#2563eb",marginTop:8}} onClick={()=>urediNalog(n.id)}>✏️ Uredi nalog</button>
-          {n.voznikId && (
+          {(
             <button
-              style={{...s.btnP, background: voz(n.voznikId)?.tel ? "#7360f2" : "#cbd5e1", marginTop:8, cursor: voz(n.voznikId)?.tel ? "pointer" : "not-allowed"}}
-              onClick={()=>voz(n.voznikId)?.tel && posljiViber(n)}
-              disabled={!voz(n.voznikId)?.tel}
-              title={voz(n.voznikId)?.tel ? `Pošlji ${voz(n.voznikId)?.ime} na Viber` : "Voznik nima telefonske številke"}
+              style={{...s.btnP, background: "#7360f2", marginTop:8, cursor:"pointer"}}
+              onClick={()=>posljiViber(n)}
+              title={voz(n.voznikId)?.tel ? `Pošlji ${voz(n.voznikId)?.ime} na Viber` : "Odpri Viber in izberi prejemnika"}
             >
-              📤 Pošlji v Viber {!voz(n.voznikId)?.tel && "(ni številke)"}
+              📤 Pošlji v Viber {!voz(n.voznikId)?.tel && "(izberi stik)"}
             </button>
           )}
           {(n.status==="nov"||n.status==="poslan")&&<button style={s.btnD} onClick={()=>izbrisiNalog(n.id)}>🗑️ Izbriši nalog</button>}
