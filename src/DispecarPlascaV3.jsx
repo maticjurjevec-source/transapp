@@ -3526,8 +3526,8 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
   };
   const izvoziCsv=()=>{
     if(!seznam.length)return showToast("Ni razkladov za izvoz",true);
-    const q=(x)=>'"'+String(x==null?"":x).replace(/"/g,'""')+'"';
-    const vrstice=[["Naziv","Naslov","Tip","Vozilo","Voznik","Kdaj","Stranka","Nalog"].map(q).join(",")];
+    const q=(x)=>{const t=String(x==null?"":x).replace(/[\r\n]+/g," ").trim();return /[",;]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t;};
+    const vrstice=["Naziv,Naslov,Tip,Vozilo,Voznik,Kdaj,Stranka,Nalog"];
     const zaIzvoz=[];
     skupine.forEach(g=>(samoKonec?(g.koncni?[g.koncni]:[]):g.postanki).forEach(n=>zaIzvoz.push(n)));
     zaIzvoz.forEach(n=>{
@@ -3562,7 +3562,7 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
         "",
       ].map(q).join(","));
     });
-    const blob=new Blob(["﻿"+vrstice.join("\r\n")],{type:"text/csv;charset=utf-8;"});
+    const blob=new Blob([vrstice.join("\r\n")],{type:"text/csv;charset=utf-8;"});
     const a=document.createElement("a");
     a.href=URL.createObjectURL(blob);
     a.download="razkladi_"+ff(obseg.od).replace(".","-")+"_"+ff(obseg.do).replace(".","-")+".csv";
