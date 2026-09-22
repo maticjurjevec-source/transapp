@@ -3487,6 +3487,8 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
   const [teden,setTeden]=useState(0);
   const [smerF,setSmerF]=useState("vse");
   const [samoKonec,setSamoKonec]=useState(true);
+  const [izbran,setIzbran]=useState(()=>{try{return JSON.parse(localStorage.getItem("razkladi_koncni")||"{}");}catch(e){return{};}});
+  useEffect(()=>{try{localStorage.setItem("razkladi_koncni",JSON.stringify(izbran));}catch(e){}},[izbran]);
   const obseg=(()=>{
     const d=new Date();d.setHours(0,0,0,0);
     const dan=d.getDay()||7;
@@ -3506,7 +3508,12 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
       m[k].postanki.push(n);
     });
     const r=Object.values(m);
-    if(samoKonec)r.forEach(g=>{g.postanki=g.postanki.slice(-1);});
+    r.forEach(g=>{
+      const rocno=izbran[g.kljuc];
+      const naj=g.postanki.find(x=>x.id===rocno);
+      g.koncni=naj||g.postanki[g.postanki.length-1]||null;
+      g.rocno=!!naj;
+    });
     return r.sort((a,b)=>a.vozilo.localeCompare(b.vozilo));
   })();
   const ff=(d)=>String(d.getDate()).padStart(2,"0")+"."+String(d.getMonth()+1).padStart(2,"0");
@@ -3523,7 +3530,7 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
     const q=(x)=>'"'+String(x==null?"":x).replace(/"/g,'""')+'"';
     const vrstice=[["Naziv","Naslov","Tip","Vozilo","Voznik","Kdaj","Stranka","Nalog"].map(q).join(",")];
     const zaIzvoz=[];
-    skupine.forEach(g=>g.postanki.forEach(n=>zaIzvoz.push(n)));
+    skupine.forEach(g=>(samoKonec?(g.koncni?[g.koncni]:[]):g.postanki).forEach(n=>zaIzvoz.push(n)));
     zaIzvoz.forEach(n=>{
       const v=(vozniki||[]).find(x=>x.id===n.voznikId);
       const voz=(v&&v.vozilo)||"brez vozila";
@@ -3543,8 +3550,7 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
       if(!v.lat||!v.lon)return;
       const vo=(vozniki||[]).find(x=>_nr(x.vozilo)===_nr(v.reg_tablica));
       const g=vo?skupine.find(x=>x.kljuc===vo.id):null;
-      const moji=(g&&g.postanki)||[];
-      const zadnji=moji.length?moji[moji.length-1]:null;
+      const zadnji=(g&&g.koncni)||null;
       const kdaj=zadnji?("Prazen "+fd(zadnji.razDatum)+(zadnji.razCas?" ob "+zadnji.razCas:"")+" v "+(zadnji.razKraj||"")):"Ni razklada ta teden";
       vrstice.push([
         v.reg_tablica+" - "+(zadnji?("prazen "+fd(zadnji.razDatum)):"prost"),
@@ -3601,6 +3607,7 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
                 <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{n.razNaslov||""}</div>
                 <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{(n.stranka||"")+(n.stevilkaNaloga?" | "+n.stevilkaNaloga:"")}</div>
               </div>
+              <button onClick={(e)=>{e.stopPropagation();setIzbran(p=>({...p,[g.kljuc]:n.id}));}} title="Oznaci kot koncni razklad" style={{flexShrink:0,alignSelf:"center",fontSize:11,fontWeight:700,padding:"5px 10px",borderRadius:8,cursor:"pointer",border:"1.5px solid "+(g.koncni&&g.koncni.id===n.id?"#16a34a":"#e2e8f0"),background:g.koncni&&g.koncni.id===n.id?"#f0fdf4":"#fff",color:g.koncni&&g.koncni.id===n.id?"#15803d":"#94a3b8"}}>{g.koncni&&g.koncni.id===n.id?"\u2713 koncni":"koncni"}</button>
             </div>
           ))}
         </div>
