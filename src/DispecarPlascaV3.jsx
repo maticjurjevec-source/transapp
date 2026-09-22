@@ -191,6 +191,20 @@ function CropCMRModal({cmr,nalStevilka,onClose,onSaved,showToast}){
 export default function DispecarPlasca() {
   const [st,setSt]=useState(initState);
   const [tab,setTab]=useState("nalogi");
+  const [gpsVozila,setGpsVozila]=useState([]);
+  useEffect(()=>{
+    let ustavi=false;
+    const preveriGps=async()=>{
+      try{
+        const {data,error}=await supabase.functions.invoke("eurowag-trips",{body:{}});
+        if(error||!data||!Array.isArray(data.vozila))return;
+        if(!ustavi)setGpsVozila(data.vozila);
+      }catch(e){}
+    };
+    preveriGps();
+    const t=setInterval(preveriGps,300000);
+    return ()=>{ustavi=true;clearInterval(t);};
+  },[]);
   const [modal,setModal]=useState(null);
   const [form,setForm]=useState({});
   const [toast,setToast]=useState(null);
@@ -667,6 +681,27 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
     setAiParsing(false);
   };
 
+  const gpsOpoz=(()=>{
+    const _nr=(x)=>(x||"").toUpperCase().replace(/[\s.-]/g,"");
+    const _akt=(st.nalogi||[]).filter(n=>n.status!=="zakljucen"&&n.status!=="fakturirano"&&n.status!=="za_fakturo");
+    const out=[];
+    (gpsVozila||[]).forEach(v=>{
+      if(v.hitrost>0||!v.stoji_od)return;
+      const min=Math.round((Date.now()-new Date(v.stoji_od).getTime())/60000);
+      if(min<120||min>4320)return;
+      const vo=(vozniki||[]).find(x=>_nr(x.vozilo)===_nr(v.reg_tablica));
+      if(!vo)return;
+      const n=_akt.find(x=>x.voznikId===vo.id);
+      if(!n)return;
+      const kraj=_nr(v.lokacija);
+      let kje="";
+      if(_nr(n.nakKraj)&&kraj.includes(_nr(n.nakKraj)))kje="na nakladu";
+      else if(_nr(n.razKraj)&&kraj.includes(_nr(n.razKraj)))kje="na razkladu";
+      if(!kje)return;
+      out.push({reg:v.reg_tablica,voznik:vo.ime,kje,nalog:n.stevilkaNaloga||"",cas:Math.floor(min/60)+" h "+(min%60)+" min"});
+    });
+    return out;
+  })();
   const stats={skupaj:st.nalogi.length,novi:st.nalogi.filter(n=>n.status==="nov").length,aktivni:st.nalogi.filter(n=>["poslan","sprejet"].includes(n.status)).length,zaFakturo:st.nalogi.filter(n=>n.status==="za_fakturo").length};
 
   const [izVoz,setIzVoz]=useState("");
@@ -884,17 +919,6 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
       </div>
       {toast&&<Toast t={toast}/>}
       <div ref={contentRef} style={s.content}>
-        {/* AI drop zone */}
-        <div style={{...s.drop,...(dragOver?s.dropA:{}),...(aiParsing?s.dropP:{})}} onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)} onDrop={handleDrop}>
-          {aiParsing?<div style={{textAlign:"center"}}><div style={{fontSize:28,marginBottom:4}}>⏳</div><div style={{fontWeight:700,color:"#0f2744"}}>AI bere dokument...</div></div>:
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:28,marginBottom:4}}>🤖</div>
-            <div style={{fontWeight:700,color:"#0f2744",marginBottom:2}}>{dragOver?"Spusti!":"Prenesi nalog sem"}</div>
-            <div style={{fontSize:12,color:"#64748b",marginBottom:8}}>PDF · Word · Slika → AI ustvari nalog</div>
-            <input type="file" id="drop-f" accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg" style={{display:"none"}} onChange={handleDrop}/>
-            <label htmlFor="drop-f" style={s.dropBtn}>📂 Izberi datoteko</label>
-          </div>}
-        </div>
        {(()=>{const zap=st.nalogi.filter(n=>n.status!=="za_fakturo"&&n.status!=="fakturirano"&&n.razDatum&&Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000)>=7);return false?(<div onClick={()=>setShowStari(true)} style={{background:"linear-gradient(135deg,#dc2626,#ef4444)",borderRadius:14,padding:"14px 16px",marginBottom:14,color:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 2px 8px rgba(220,38,38,0.3)"}}><div style={{display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:24}}>!</span><div><div style={{fontWeight:800,fontSize:15}}>{zap.length} nalogov ceka na fakturo vec kot 7 dni</div><div style={{fontSize:12,opacity:0.9}}>Klikni za pregled</div></div></div><span style={{fontSize:20}}>{">"}</span></div>):null;})()}{showStari&&(<div onClick={()=>setShowStari(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 12px",overflowY:"auto"}}><div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:16,width:"100%",maxWidth:560,padding:"18px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><div style={{fontWeight:800,fontSize:17,color:"#dc2626"}}>Nalogi za fakturo (7+ dni)</div><button onClick={()=>setShowStari(false)} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#64748b",lineHeight:1}}>{"\u00d7"}</button></div>{(()=>{const list=st.nalogi.filter(n=>n.status!=="za_fakturo"&&n.status!=="fakturirano"&&n.razDatum&&Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000)>=7).sort((a,b)=>(a.razDatum||"").localeCompare(b.razDatum||""));if(list.length===0)return <div style={{color:"#64748b",fontSize:14,padding:"10px 0"}}>Ni nalogov za fakturo.</div>;return list.map(n=>{const dni=Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000);const rdec=dni>14;const barva=rdec?"#dc2626":"#d97706";const ozadje=rdec?"#fef2f2":"#fff7ed";const rob=rdec?"#fca5a5":"#fdba74";return(<div key={n.id} onClick={()=>{setShowStari(false);odpriNalog(n);}} style={{border:"1px solid "+rob,background:ozadje,borderRadius:12,padding:"10px 12px",marginBottom:8,cursor:"pointer"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><div style={{fontWeight:700,fontSize:14,color:"#0f2744"}}>{n.stranka||"Nalog"}</div><div style={{fontSize:12,fontWeight:700,color:barva}}>{dni+" dni"}</div></div><div style={{fontSize:12,color:"#64748b",marginTop:2}}>{(n.nakKraj||"")+" -> "+(n.razKraj||"")}</div><div style={{fontSize:11,color:"#94a3b8",marginTop:3}}>{"Nakl: "+(n.nakDatum?fmt(n.nakDatum+"T00:00:00"):"-")+" | Razkl: "+(n.razDatum?fmt(n.razDatum+"T00:00:00"):"-")+((n.znesek_original||n.znesekOriginal)?" | "+(n.znesek_original||n.znesekOriginal)+" EUR":"")}</div><button onClick={(e)=>{e.stopPropagation();spremenStatus(n.id,"za_fakturo");}} style={{marginTop:8,background:"#9333ea",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>Za fakturo</button></div>);});})()}</div></div>)}{st.nalogi.filter(n=>n.status==="caka_potrditev").length>0&&(
           <div onClick={()=>setTab("nalogi")} style={{background:"linear-gradient(135deg,#ea580c,#f97316)",borderRadius:14,padding:"14px 16px",marginBottom:14,color:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 2px 8px rgba(234,88,12,0.3)"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -907,9 +931,23 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
             <span style={{fontSize:20}}>→</span>
           </div>
         )}
+        {gpsOpoz.length>0&&(
+          <div onClick={()=>setTab("gps")} style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:12,padding:"10px 14px",marginBottom:12,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:18,flexShrink:0}}>⚠️</span>
+            <div style={{minWidth:0,flex:1}}>
+              <div style={{fontSize:13,fontWeight:800,color:"#b91c1c"}}>
+                {gpsOpoz.length===1?`${gpsOpoz[0].reg} čaka ${gpsOpoz[0].cas} ${gpsOpoz[0].kje}`:`${gpsOpoz.length} vozil čaka ve\u010d kot 2 h na nakladu ali razkladu`}
+              </div>
+              <div style={{fontSize:11,color:"#dc2626",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                {gpsOpoz.map(o=>`${o.reg}${o.nalog?" ("+o.nalog+")":""}`).join(", ")}
+              </div>
+            </div>
+            <span style={{fontSize:12,fontWeight:700,color:"#b91c1c",flexShrink:0}}>Poglej</span>
+          </div>
+        )}
         {/* Tabs */}
         <div style={s.tabs}>
-          {[["nalogi","📋 Nalogi"],["poti","Poti"],["tedenski","📅 Tedenski"],["ai","🤖 AI"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["finance","🧾 Finance"],["komunikacija","📨 Komunikacija"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`],["gps","📍 GPS"]].map(([id,label])=>(
+          {[["nalogi","📋 Nalogi"],["poti","Poti"],["tedenski","📅 Tedenski"],["ai","🤖 AI"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["finance","🧾 Finance"],["komunikacija","📨 Komunikacija"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`],["gps",`📍 GPS${gpsOpoz.length>0?` ⚠️${gpsOpoz.length}`:""}`]].map(([id,label])=>(
             <button key={id} style={{...s.tab,...(tab===id?s.tabOn:{})}} onClick={()=>setTab(id)}>{label}</button>
           ))}
         </div>
