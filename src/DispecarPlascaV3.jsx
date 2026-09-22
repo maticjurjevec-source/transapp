@@ -367,12 +367,7 @@ export default function DispecarPlasca() {
     const v = voz(n.voznikId);
 
     // Sestavi celotno sporočilo z vsemi podatki naloga
-    const sc = SC[n.status] || {};
     const lines = [
-      `🚛 NALOG ${n.stevilkaNaloga || n.id}`,
-      `Status: ${sc.label || n.status}`,
-      `Stranka: ${n.stranka || "–"}`,
-      ``,
       `📦 BLAGO`,
       `${n.blago || "–"}${n.kolicina ? ` · ${n.kolicina}` : ""}${n.teza ? ` · ${n.teza}` : ""}`,
       ``,
