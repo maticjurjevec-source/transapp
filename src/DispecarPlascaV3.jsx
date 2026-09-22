@@ -693,10 +693,17 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
       if(!vo)return;
       const n=_akt.find(x=>x.voznikId===vo.id);
       if(!n)return;
-      const kraj=_nr(v.lokacija);
+      const _post=(x)=>String(x||"").match(/\b\d{4,5}\b/g)||[];
+      const _ujema=(cilj)=>{
+        if(!cilj)return false;
+        const pv=_post(v.lokacija),pc=_post(cilj);
+        if(pv.some(p=>pc.includes(p)))return true;
+        const mesto=_nr(cilj).replace(/[^A-Z]/g,"");
+        return mesto.length>3&&_nr(v.lokacija).replace(/[^A-Z]/g,"").includes(mesto);
+      };
       let kje="";
-      if(_nr(n.nakKraj)&&kraj.includes(_nr(n.nakKraj)))kje="na nakladu";
-      else if(_nr(n.razKraj)&&kraj.includes(_nr(n.razKraj)))kje="na razkladu";
+      if(_ujema(n.nakKraj)||_ujema(n.nakNaslov))kje="na nakladu";
+      else if(_ujema(n.razKraj)||_ujema(n.razNaslov))kje="na razkladu";
       if(!kje)return;
       out.push({reg:v.reg_tablica,voznik:vo.ime,kje,nalog:n.stevilkaNaloga||"",cas:Math.floor(min/60)+" h "+(min%60)+" min"});
     });
