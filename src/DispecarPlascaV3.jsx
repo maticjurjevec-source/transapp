@@ -963,7 +963,7 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
         )}
         {/* Tabs */}
         <div style={s.tabs}>
-          {[["nalogi","📋 Nalogi"],["poti","Poti"],["tedenski","📅 Tedenski"],["ai","🤖 AI"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["finance","🧾 Finance"],["komunikacija","📨 Komunikacija"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`],["gps",`📍 GPS${gpsOpoz.length>0?` ⚠️${gpsOpoz.length}`:""}`]].map(([id,label])=>(
+          {[["nalogi","📋 Nalogi"],["poti","Poti"],["tedenski","📅 Tedenski"],["ai","🤖 AI"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["finance","🧾 Finance"],["komunikacija","📨 Komunikacija"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`],["gps",`📍 GPS${gpsOpoz.length>0?` ⚠️${gpsOpoz.length}`:""}`],["razkladi","🗺️ Razkladi"]].map(([id,label])=>(
             <button key={id} style={{...s.tab,...(tab===id?s.tabOn:{})}} onClick={()=>setTab(id)}>{label}</button>
           ))}
         </div>
@@ -977,7 +977,7 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
         {tab==="prosticmr"&&<ProstiCMRTab st={st} upd={upd} showToast={showToast}/>}
         {tab==="email"&&<EmailNalogTab upd={upd} showToast={showToast} naložiPodatke={naložiPodatke} vozniki={vozniki}/>}
         {tab==="komunikacija"&&<KomunikacijaTab showToast={showToast}/>}
-        {tab==="dopusti"&&<DopustiTab vozniki={vozniki} showToast={showToast}/>}{tab==="gps"&&<GpsTab nalogi={st.nalogi} vozniki={vozniki}/>}
+        {tab==="dopusti"&&<DopustiTab vozniki={vozniki} showToast={showToast}/>}{tab==="razkladi"&&<RazkladiTab nalogi={st.nalogi} vozniki={vozniki} gpsVozila={gpsVozila} showToast={showToast} onSelect={odpriNalog}/>}{tab==="gps"&&<GpsTab nalogi={st.nalogi} vozniki={vozniki}/>}
       </div>
       {/* Nov nalog modal */}
       {modal==="nalog"&&(
@@ -3482,6 +3482,120 @@ function krajZPosto(kraj,naslov){
 }
 const NC=({n,onClick,vozniki:vl,onEdit,onDelete,onAssign,onZaFakturo,onFakturirano})=>{const sc=SC[n.status]||{};const v=(vl||VOZNIKI).find(x=>x.id===n.voznikId);const sm=smerNaloga(n);return(<div style={{width:"100%",background:n.status==="fakturirano"?"#f0fdf4":n.status==="za_fakturo"?"#faf5ff":"#fff",borderRadius:12,padding:"13px 14px",marginBottom:9,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:n.status==="fakturirano"?"1.5px solid #22c55e":n.status==="za_fakturo"?"1.5px solid #9333ea":"none",textAlign:"left",position:"relative"}}><div onClick={onClick} style={{cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5,flexWrap:"wrap"}}><span style={{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700,background:sc.bg,color:sc.color}}>{sc.label}</span>{sm&&sm.kod!=="?"&&<span style={{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700,background:sm.bg,color:sm.color}}>{sm.icon} {sm.label}</span>}<span style={{fontSize:11,fontFamily:"monospace",color:"#2563eb",fontWeight:700}}>{n.stevilkaNaloga}</span>{(n.stevilka_narocnika||n.stevilkaNarocnika)&&<span style={{fontSize:11,fontFamily:"monospace",color:"#0f2744",background:"#f1f5f9",padding:"2px 8px",borderRadius:20,fontWeight:700}}>📋 {n.stevilka_narocnika||n.stevilkaNarocnika}</span>}{v&&<span style={{fontSize:11,fontWeight:700,color:"#7c3aed",background:"#f5f3ff",padding:"2px 8px",borderRadius:20}}>🚛 {v.ime}</span>}{!v&&n.status!=="nov"&&<span style={{fontSize:11,fontWeight:600,color:"#94a3b8",background:"#f1f5f9",padding:"2px 8px",borderRadius:20}}>– ni voznika</span>}<span style={{fontSize:11,color:"#94a3b8",marginLeft:"auto"}}>{fmt(n.poslan)} ob {fmtT(n.poslan)}</span></div><div style={{fontSize:16,fontWeight:800,color:"#0f2744",marginBottom:3}}>{n.stranka||"—"}</div><div style={{fontSize:14,fontWeight:700,color:"#334155",marginBottom:2}}>{krajZPosto(n.nakKraj,n.nakNaslov)} → {krajZPosto(n.razKraj,n.razNaslov)}</div>{n.blago&&<div style={{fontSize:13,color:"#64748b"}}>📦 {n.blago}</div>}{(n.kolicina||n.znesek_original||n.znesekOriginal)&&<div style={{fontSize:13,color:"#64748b",marginTop:2}}>{[n.kolicina,((n.znesek_original||n.znesekOriginal)?((n.znesek_original||n.znesekOriginal)+" EUR"):null)].filter(Boolean).join(" | ")}</div>}{(n.nakDatum||n.razDatum)&&<div style={{fontSize:12,color:"#94a3b8",marginTop:3,display:"flex",gap:12,flexWrap:"wrap"}}>{n.nakDatum&&<span>📅 Nakl: {fmt(n.nakDatum+"T00:00:00")}{n.nakCas?` ${n.nakCas}`:""}</span>}{n.razDatum&&<span>🏁 Razkl: {fmt(n.razDatum+"T00:00:00")}{n.razCas?` ${n.razCas}`:""}</span>}</div>}</div>{(onEdit||onDelete||onAssign||onZaFakturo||onFakturirano)&&<div style={{display:"flex",gap:6,marginTop:10,paddingTop:10,borderTop:"1px solid #f1f5f9",flexWrap:"wrap",alignItems:"center"}}>{onFakturirano&&n.status!=="fakturirano"&&<button onClick={(e)=>{e.stopPropagation();onFakturirano(n.id);}} style={{background:"#dcfce7",color:"#15803d",border:"1px solid #86efac",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>🧾 Fakturirano</button>}{onZaFakturo&&n.status==="fakturirano"&&<button onClick={(e)=>{e.stopPropagation();onZaFakturo(n.id);}} style={{background:"#f8fafc",color:"#64748b",border:"1px solid #e2e8f0",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>↩ Prekliči</button>}{onZaFakturo&&n.status!=="za_fakturo"&&n.status!=="fakturirano"&&<button onClick={(e)=>{e.stopPropagation();onZaFakturo(n.id);}} style={{background:"#faf5ff",color:"#9333ea",border:"1px solid #e9d5ff",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>Za fakturo</button>}{onAssign&&<select value={n.voznikId||""} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();if(e.target.value)onAssign(n.id,e.target.value);}} style={{fontSize:12,padding:"6px 8px",borderRadius:8,border:"1px solid #cbd5e1",background:"#fff",color:"#0f2744",cursor:"pointer",maxWidth:160}}><option value="">- dodeli voznika -</option>{(vl||VOZNIKI).map(x=><option key={x.id} value={x.id}>{x.ime}</option>)}</select>}{onEdit&&<button style={{background:"#eff6ff",color:"#2563eb",border:"1px solid #bfdbfe",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}} onClick={(e)=>{e.stopPropagation();onEdit(n.id);}}>✏️ Uredi</button>}{onDelete&&<button style={{background:"#fef2f2",color:"#dc2626",border:"1px solid #fecaca",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}} onClick={(e)=>{e.stopPropagation();if(window.confirm(`Ali res želiš izbrisati nalog ${n.stevilkaNaloga}?\n\n${n.nakKraj} → ${n.razKraj}\n${n.stranka}\n\nTo dejanje je nepovratno.`)){onDelete(n.id);}}}>🗑️ Izbriši</button>}</div>}</div>);};
 const OC=({o,onClick,vozniki:vl})=>{const v=(vl||VOZNIKI).find(x=>x.id===o.voznikId);const z=(o.km||0)*0.18+(o.stranke||0)*20+(o.stroski||[]).reduce((a,x)=>a+(parseFloat(x.znesek)||0),0);return(<button style={{width:"100%",background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:9,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:"none",cursor:"pointer",textAlign:"left"}} onClick={onClick}><div style={{display:"flex",justifyContent:"space-between"}}><div><div style={{fontWeight:700,fontSize:15,color:"#0f2744"}}>{v?.ime}</div><div style={{fontSize:12,color:"#64748b"}}>{fmt(o.datZac+"T00:00:00")} – {fmt(o.datKon+"T00:00:00")} · {v?.vozilo}</div></div><div style={{fontWeight:800,fontSize:18,color:"#16a34a"}}>{z.toFixed(2)} €</div></div></button>);};
+const DNEVI=["Nedelja","Ponedeljek","Torek","Sreda","Cetrtek","Petek","Sobota"];
+function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
+  const [teden,setTeden]=useState(0);
+  const obseg=(()=>{
+    const d=new Date();d.setHours(0,0,0,0);
+    const dan=d.getDay()||7;
+    const pon=new Date(d);pon.setDate(d.getDate()-dan+1+teden*7);
+    const ned=new Date(pon);ned.setDate(pon.getDate()+6);ned.setHours(23,59,59,999);
+    return{od:pon,do:ned};
+  })();
+  const vObdobju=(x)=>{if(!x)return false;const t=new Date(x+"T12:00:00").getTime();return t>=obseg.od.getTime()&&t<=obseg.do.getTime();};
+  const naslovZa=(n)=>[n.razNaslov||"",n.razKraj||""].filter(Boolean).join(", ").trim()||n.razFirma||"";
+  const seznam=(nalogi||[]).filter(n=>n.status!=="fakturirano"&&vObdobju(n.razDatum)).sort((a,b)=>((a.razDatum||"")+(a.razCas||"")).localeCompare((b.razDatum||"")+(b.razCas||"")));
+  const skupine=(()=>{
+    const m={};
+    seznam.forEach(n=>{
+      const v=(vozniki||[]).find(x=>x.id===n.voznikId);
+      const k=v?v.id:"_brez";
+      if(!m[k])m[k]={kljuc:k,vozilo:(v&&v.vozilo)||"brez vozila",voznik:(v&&v.ime)||"Ni dodeljen",postanki:[]};
+      m[k].postanki.push(n);
+    });
+    return Object.values(m).sort((a,b)=>a.vozilo.localeCompare(b.vozilo));
+  })();
+  const ff=(d)=>String(d.getDate()).padStart(2,"0")+"."+String(d.getMonth()+1).padStart(2,"0");
+  const fd=(x)=>{if(!x)return"";const d=new Date(x+"T12:00:00");return DNEVI[d.getDay()].slice(0,3)+" "+String(d.getDate()).padStart(2,"0")+"."+String(d.getMonth()+1).padStart(2,"0");};
+  const gmapZaVozilo=(g)=>{
+    const t=g.postanki.map(naslovZa).filter(Boolean);
+    if(!t.length)return null;
+    if(t.length===1)return "https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(t[0]);
+    const wp=t.slice(1,-1).map(encodeURIComponent).join("%7C");
+    return "https://www.google.com/maps/dir/?api=1&origin="+encodeURIComponent(t[0])+"&destination="+encodeURIComponent(t[t.length-1])+(wp?"&waypoints="+wp:"")+"&travelmode=driving";
+  };
+  const izvoziCsv=()=>{
+    if(!seznam.length)return showToast("Ni razkladov za izvoz",true);
+    const q=(x)=>'"'+String(x==null?"":x).replace(/"/g,'""')+'"';
+    const vrstice=[["Naziv","Naslov","Tip","Vozilo","Voznik","Kdaj","Stranka","Nalog"].map(q).join(",")];
+    seznam.forEach(n=>{
+      const v=(vozniki||[]).find(x=>x.id===n.voznikId);
+      const voz=(v&&v.vozilo)||"brez vozila";
+      vrstice.push([
+        voz+" - razklad "+fd(n.razDatum)+" "+(n.razKraj||""),
+        naslovZa(n),
+        "Razklad",
+        voz,
+        (v&&v.ime)||"Ni dodeljen",
+        fd(n.razDatum)+(n.razCas?" ob "+n.razCas:""),
+        n.stranka||"",
+        n.stevilkaNaloga||"",
+      ].map(q).join(","));
+    });
+    const _nr=(x)=>(x||"").toUpperCase().replace(/[\s.-]/g,"");
+    (gpsVozila||[]).forEach(v=>{
+      if(!v.lat||!v.lon)return;
+      const vo=(vozniki||[]).find(x=>_nr(x.vozilo)===_nr(v.reg_tablica));
+      const moji=vo?seznam.filter(n=>n.voznikId===vo.id):[];
+      const zadnji=moji.length?moji[moji.length-1]:null;
+      const kdaj=zadnji?("Prazen "+fd(zadnji.razDatum)+(zadnji.razCas?" ob "+zadnji.razCas:"")+" v "+(zadnji.razKraj||"")):"Ni razklada ta teden";
+      vrstice.push([
+        v.reg_tablica+" - "+(zadnji?("prazen "+fd(zadnji.razDatum)):"prost"),
+        v.lat+", "+v.lon,
+        "Vozilo zdaj",
+        v.reg_tablica,
+        (vo&&vo.ime)||v.voznik||"",
+        kdaj,
+        v.lokacija||"",
+        "",
+      ].map(q).join(","));
+    });
+    const blob=new Blob(["﻿"+vrstice.join("\r\n")],{type:"text/csv;charset=utf-8;"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download="razkladi_"+ff(obseg.od).replace(".","-")+"_"+ff(obseg.do).replace(".","-")+".csv";
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+    showToast("CSV pripravljen - uvozi ga v Google My Maps");
+  };
+  return(<div>
+    <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+      {[[0,"Ta teden"],[1,"Naslednji teden"],[2,"Cez dva tedna"]].map(([v,l])=>(
+        <button key={v} onClick={()=>setTeden(v)} style={{padding:"7px 14px",borderRadius:8,border:"1.5px solid "+(teden===v?"#0f2744":"#e2e8f0"),background:teden===v?"#0f2744":"#fff",color:teden===v?"#fff":"#64748b",fontSize:13,fontWeight:700,cursor:"pointer"}}>{l}</button>
+      ))}
+      <span style={{fontSize:12,color:"#64748b",marginLeft:4}}>{ff(obseg.od)} - {ff(obseg.do)}</span>
+      <button onClick={izvoziCsv} style={{marginLeft:"auto",padding:"8px 16px",borderRadius:8,border:"none",background:"#0f2744",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Prenesi CSV za Google My Maps</button>
+    </div>
+    <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 12px",marginBottom:14,fontSize:12,color:"#1d4ed8",lineHeight:1.6}}>
+      1. Prenesi CSV &nbsp;|&nbsp; 2. Odpri <a href="https://www.google.com/mymaps" target="_blank" rel="noreferrer" style={{color:"#1d4ed8",fontWeight:700}}>Google My Maps</a> in ustvari novo karto &nbsp;|&nbsp; 3. Uvozi CSV, za polozaj izberi stolpec <b>Naslov</b>, za naziv <b>Naziv</b> &nbsp;|&nbsp; 4. Klikni <b>Group places by</b> in izberi <b>Vozilo</b> - vsako vozilo dobi svojo barvo in svoj stikalo za prikaz
+    </div>
+    {skupine.length===0&&<div style={{textAlign:"center",color:"#94a3b8",padding:30,fontSize:14}}>V tem tednu ni razkladov.</div>}
+    {skupine.map(g=>{
+      const url=gmapZaVozilo(g);
+      return(<div key={g.kljuc} style={{background:"#fff",borderRadius:12,marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",overflow:"hidden"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",borderBottom:"1px solid #f1f5f9",flexWrap:"wrap"}}>
+          <div style={{fontSize:15,fontWeight:800,color:"#0f2744"}}>{g.vozilo}</div>
+          <div style={{fontSize:12,color:"#64748b"}}>{g.voznik}</div>
+          <span style={{background:"#f1f5f9",color:"#0f2744",fontSize:12,fontWeight:800,padding:"3px 10px",borderRadius:20}}>{g.postanki.length}</span>
+          {url&&<a href={url} target="_blank" rel="noreferrer" style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:"#0f2744",background:"#fff",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"6px 12px",textDecoration:"none"}}>Odpri v Google Maps</a>}
+        </div>
+        <div style={{padding:"8px 12px 12px"}}>
+          {g.postanki.map(n=>(
+            <div key={n.id} onClick={()=>onSelect&&onSelect(n)} style={{display:"flex",gap:10,alignItems:"flex-start",padding:"8px 10px",borderRadius:8,cursor:"pointer",background:"#f8fafc",marginTop:6}}>
+              <div style={{fontSize:11,fontWeight:800,color:"#2563eb",minWidth:62}}>{fd(n.razDatum)}{n.razCas?" "+n.razCas:""}</div>
+              <div style={{minWidth:0,flex:1}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#0f2744"}}>{n.razKraj||"?"}{n.razFirma?" - "+n.razFirma:""}</div>
+                <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{n.razNaslov||""}</div>
+                <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{(n.stranka||"")+(n.stevilkaNaloga?" | "+n.stevilkaNaloga:"")}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>);
+    })}
+  </div>);
+}
+
 const Sec=({title,children})=><div style={{background:"#fff",borderRadius:12,padding:"13px 14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:11,fontWeight:700,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}}>{title}</div>{children}</div>;
 const R=({label,val,bold,mono})=><div style={{display:"flex",justifyContent:"space-between",paddingBottom:5,marginBottom:5,borderBottom:"1px solid #f8fafc"}}><span style={{fontSize:12,color:"#94a3b8"}}>{label}</span><span style={{fontSize:13,color:"#1e293b",textAlign:"right",...(bold?{fontWeight:700,color:"#0f2744"}:{}),...(mono?{fontFamily:"monospace",color:"#2563eb",fontSize:12}:{})}}>{val||"–"}</span></div>;
 const I=({label,val,set,ph,type="text"})=><div><label style={s.lbl}>{label}</label><input style={s.inp} type={type} value={val||""} onChange={e=>set(e.target.value)} placeholder={ph||""}/></div>;
