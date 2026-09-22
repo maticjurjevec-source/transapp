@@ -686,13 +686,13 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
     const _akt=(st.nalogi||[]).filter(n=>n.status!=="zakljucen"&&n.status!=="fakturirano"&&n.status!=="za_fakturo");
     const out=[];
     (gpsVozila||[]).forEach(v=>{
-      if(v.hitrost>0||!v.stoji_od)return;
+      if(v.hitrost>=5||!v.stoji_od)return;
       const min=Math.round((Date.now()-new Date(v.stoji_od).getTime())/60000);
       if(min<120||min>4320)return;
       const vo=(vozniki||[]).find(x=>_nr(x.vozilo)===_nr(v.reg_tablica));
       if(!vo)return;
-      const n=_akt.find(x=>x.voznikId===vo.id);
-      if(!n)return;
+      const _sv=_akt.filter(x=>x.voznikId===vo.id);
+      if(!_sv.length)return;
       const _post=(x)=>String(x||"").match(/\b\d{4,5}\b/g)||[];
       const _ujema=(cilj)=>{
         if(!cilj)return false;
@@ -701,11 +701,13 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
         const mesto=_nr(cilj).replace(/[^A-Z]/g,"");
         return mesto.length>3&&_nr(v.lokacija).replace(/[^A-Z]/g,"").includes(mesto);
       };
-      let kje="";
-      if(_ujema(n.nakKraj)||_ujema(n.nakNaslov))kje="na nakladu";
-      else if(_ujema(n.razKraj)||_ujema(n.razNaslov))kje="na razkladu";
+      let kje="",n=null;
+      for(const x of _sv){
+        if(_ujema(x.nakKraj)||_ujema(x.nakNaslov)){kje="na nakladu";n=x;break;}
+        if(_ujema(x.razKraj)||_ujema(x.razNaslov)){kje="na razkladu";n=x;break;}
+      }
       if(!kje)return;
-      out.push({reg:v.reg_tablica,voznik:vo.ime,kje,nalog:n.stevilkaNaloga||"",cas:Math.floor(min/60)+" h "+(min%60)+" min"});
+      out.push({reg:v.reg_tablica,voznik:vo.ime,kje,nalog:(n&&n.stevilkaNaloga)||"",cas:Math.floor(min/60)+" h "+(min%60)+" min"});
     });
     return out;
   })();
