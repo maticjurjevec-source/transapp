@@ -918,6 +918,13 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
       <div style={{...s.header,padding:0,position:"relative",overflow:"hidden"}}>
         <div style={{position:"relative"}}>
           <div><img src="/banner.png" alt="Jurjevec Transport - TransApp" style={{width:"100%",height:120,objectFit:"cover",display:"block"}}/><div style={{position:"absolute",right:16,bottom:8,fontSize:11,color:"#fff",opacity:0.9,fontWeight:600}}>{VOZNIKI.length} voznikov</div></div>
+          {gpsOpoz.length>0&&(
+            <div onClick={()=>setTab("gps")} title={gpsOpoz.map(o=>`${o.reg} - ${o.cas} ${o.kje}`).join("\n")} style={{position:"absolute",top:12,left:14,zIndex:5,display:"flex",alignItems:"center",gap:7,background:"#dc2626",color:"#fff",borderRadius:20,padding:"7px 14px 7px 11px",cursor:"pointer",boxShadow:"0 2px 8px rgba(220,38,38,0.45)",border:"2px solid #fff"}}>
+              <span style={{fontSize:18,lineHeight:1}}>⚠️</span>
+              <span style={{fontSize:14,fontWeight:800,lineHeight:1}}>{gpsOpoz.length}</span>
+              <span style={{fontSize:12,fontWeight:700,lineHeight:1,opacity:0.95}}>{gpsOpoz.length===1?"vozilo čaka":"vozil čaka"}</span>
+            </div>
+          )}
           <div style={{display:"flex",alignItems:"center",gap:8,position:"absolute",top:14,right:16}}>
             {loading && <div style={{fontSize:12,opacity:0.7}}>⏳ Nalagam...</div>}
             {(()=>{const zap=st.nalogi.filter(n=>n.status!=="za_fakturo"&&n.status!=="fakturirano"&&n.razDatum&&Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000)>=7);return zap.length>0?(<div onClick={()=>setShowStari(true)} title="Nalogi za fakturo" style={{position:"relative",cursor:"pointer",fontSize:22,lineHeight:1,padding:"2px 4px"}}>{"\uD83E\uDDFE"}<span style={{position:"absolute",top:-4,right:-4,minWidth:16,height:16,padding:"0 4px",background:"#dc2626",color:"#fff",fontSize:11,fontWeight:700,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",boxSizing:"border-box"}}>{zap.length}</span></div>):null;})()}<button style={s.novBtn} onClick={openNovNalog}>+ Nov nalog</button>
