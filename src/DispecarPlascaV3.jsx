@@ -388,7 +388,7 @@ export default function DispecarPlasca() {
       n.razDatum ? `📅 ${fmt(n.razDatum)}${n.razCas ? ` ob ${n.razCas}` : ""}` : "",
       n.razReferenca ? `Ref: ${n.razReferenca}` : "",
     ];
-    if(Array.isArray(n.postanki)&&n.postanki.length>1){const _P=n.postanki,_t=(p)=>[p.firma||"",`${p.kraj||""}${p.naslov?`, ${p.naslov}`:""}`,p.datum?`\u{1F4C5} ${fmt(p.datum)}${p.cas?` ob ${p.cas}`:""}`:"",p.referenca?`Ref: ${p.referenca}`:""],_n=_P.filter(p=>p.tip==="naklad"),_r=_P.filter(p=>p.tip==="razklad"),_o=[];_n.forEach((p,i)=>_o.push(_n.length>1?`\u{1F4CD} NAKLAD ${i+1}/${_n.length}`:`\u{1F4CD} NAKLAD`,..._t(p),``));_r.forEach((p,i)=>_o.push(_r.length>1?`\u{1F3C1} RAZKLAD ${i+1}/${_r.length}`:`\u{1F3C1} RAZKLAD`,..._t(p),``));const _i=lines.findIndex(l=>typeof l==="string"&&l.indexOf("NAKLAD")>=0);if(_i>=0&&_o.length)lines.splice(_i,lines.length-_i,..._o);} if (n.navodila) {
+    if(Array.isArray(n.postanki)&&n.postanki.length>1){const _P=n.postanki,_t=(p)=>[p.firma||"",`${p.kraj||""}${p.naslov?`, ${p.naslov}`:""}`,p.datum?`\u{1F4C5} ${fmt(p.datum)}${p.cas?` ob ${p.cas}`:""}`:"",p.referenca?`Ref: ${p.referenca}`:""],_n=_P.filter(p=>p.tip==="naklad"),_r=_P.filter(p=>p.tip==="razklad");const _iN=lines.indexOf(`\u{1F4CD} NAKLAD`);if(_iN>=0&&_n.length>1)lines[_iN]=`\u{1F4CD} NAKLAD 1/${_n.length}`;const _iR=lines.indexOf(`\u{1F3C1} RAZKLAD`);if(_iR>=0&&_r.length>1)lines[_iR]=`\u{1F3C1} RAZKLAD 1/${_r.length}`;_n.slice(1).forEach((p,i)=>lines.push(``,`\u{1F4CD} NAKLAD ${i+2}/${_n.length}`,..._t(p)));_r.slice(1).forEach((p,i)=>lines.push(``,`\u{1F3C1} RAZKLAD ${i+2}/${_r.length}`,..._t(p)));} if (n.navodila) {
       lines.push(``, `⚠️ NAVODILA`, n.navodila);
     }
     if (n.stevilka_narocnika || n.stevilkaNarocnika) {
@@ -402,12 +402,13 @@ export default function DispecarPlasca() {
     const tel = (v && v.tel) ? v.tel.replace(/^\+/, "") : "";
        const jeIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
     const url = (jeIOS || !tel) ? `viber://forward?text=${encodeURIComponent(sporocilo)}` : `viber://chat?number=${tel}&text=${encodeURIComponent(sporocilo)}`;
-    try{ const ta=document.createElement("textarea"); ta.value=sporocilo; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.focus(); ta.setSelectionRange(0,ta.value.length); document.execCommand("copy"); document.body.removeChild(ta); }catch(e){}
-    navigator.clipboard.writeText(sporocilo).catch(()=>{});
-    setTimeout(()=>showToast("Besedilo naloga je kopirano - v Viberju prilepi s Ctrl+V"),1500);
-
-    window.location.href = url;
-    showToast(tel ? `📤 Odpiram Viber za ${v.ime}...` : "📤 Odpiram Viber - izberi prejemnika");
+    const _kopiraj = () => {
+      try { const ta=document.createElement("textarea"); ta.value=sporocilo; ta.setAttribute("readonly",""); ta.style.position="fixed"; ta.style.top="-2000px"; document.body.appendChild(ta); ta.focus(); ta.select(); ta.setSelectionRange(0,ta.value.length); document.execCommand("copy"); document.body.removeChild(ta); } catch(e) {}
+      try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(sporocilo).catch(()=>{}); } catch(e) {}
+    };
+    _kopiraj();
+    showToast(tel ? `Nalog kopiran - odpiram Viber za ${v.ime}, prilepi s Ctrl+V` : "Nalog kopiran - odpiram Viber, izberi stik in prilepi");
+    setTimeout(() => { window.location.href = url; }, 300);
   };
 
 
