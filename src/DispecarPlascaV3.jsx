@@ -202,7 +202,7 @@ export default function DispecarPlasca() {
       }catch(e){}
     };
     preveriGps();
-    const t=setInterval(preveriGps,300000);
+    const t=setInterval(preveriGps,120000);
     return ()=>{ustavi=true;clearInterval(t);};
   },[]);
   const [modal,setModal]=useState(null);
@@ -686,13 +686,11 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
     const _akt=(st.nalogi||[]).filter(n=>n.status!=="zakljucen"&&n.status!=="fakturirano"&&n.status!=="za_fakturo");
     const out=[];
     (gpsVozila||[]).forEach(v=>{
-      if(v.hitrost>=5||!v.stoji_od)return;
+      if(v.hitrost>0||!v.stoji_od)return;
       const min=Math.round((Date.now()-new Date(v.stoji_od).getTime())/60000);
       if(min<120||min>4320)return;
       const vo=(vozniki||[]).find(x=>_nr(x.vozilo)===_nr(v.reg_tablica));
-      if(!vo)return;
-      const _sv=_akt.filter(x=>x.voznikId===vo.id);
-      if(!_sv.length)return;
+      const _sv=vo?_akt.filter(x=>x.voznikId===vo.id):[];
       const _post=(x)=>String(x||"").match(/\b\d{4,5}\b/g)||[];
       const _ujema=(cilj)=>{
         if(!cilj)return false;
@@ -706,11 +704,12 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
         if(_ujema(x.nakKraj)||_ujema(x.nakNaslov)){kje="na nakladu";n=x;break;}
         if(_ujema(x.razKraj)||_ujema(x.razNaslov)){kje="na razkladu";n=x;break;}
       }
-      if(!kje)return;
-      out.push({reg:v.reg_tablica,voznik:vo.ime,kje,nalog:(n&&n.stevilkaNaloga)||"",cas:Math.floor(min/60)+" h "+(min%60)+" min"});
+      if(!kje&&_nr(v.lokacija).includes("NAZARJE"))return;
+      out.push({reg:v.reg_tablica,voznik:(vo&&vo.ime)||v.voznik||"",kje:kje||("v "+(v.lokacija||"neznana lokacija")),nalog:(n&&n.stevilkaNaloga)||"",cas:Math.floor(min/60)+" h "+(min%60)+" min",huda:!!kje});
     });
     return out;
   })();
+  const gpsHuda=gpsOpoz.filter(o=>o.huda).length;
   const stats={skupaj:st.nalogi.length,novi:st.nalogi.filter(n=>n.status==="nov").length,aktivni:st.nalogi.filter(n=>["poslan","sprejet"].includes(n.status)).length,zaFakturo:st.nalogi.filter(n=>n.status==="za_fakturo").length};
 
   const [izVoz,setIzVoz]=useState("");
@@ -921,10 +920,10 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
         <div style={{position:"relative"}}>
           <div><img src="/banner.png" alt="Jurjevec Transport - TransApp" style={{width:"100%",height:120,objectFit:"cover",display:"block"}}/><div style={{position:"absolute",right:16,bottom:8,fontSize:11,color:"#fff",opacity:0.9,fontWeight:600}}>{VOZNIKI.length} voznikov</div></div>
           {gpsOpoz.length>0&&(
-            <div onClick={()=>setTab("gps")} title={gpsOpoz.map(o=>`${o.reg} - ${o.cas} ${o.kje}`).join("\n")} style={{position:"absolute",top:12,left:14,zIndex:5,display:"flex",alignItems:"center",gap:7,background:"#dc2626",color:"#fff",borderRadius:20,padding:"7px 14px 7px 11px",cursor:"pointer",boxShadow:"0 2px 8px rgba(220,38,38,0.45)",border:"2px solid #fff"}}>
+            <div onClick={()=>setTab("gps")} title={gpsOpoz.map(o=>`${o.reg}${o.voznik?" - "+o.voznik:""} - stoji ${o.cas} ${o.kje}${o.nalog?" ("+o.nalog+")":""}`).join("\n")} style={{position:"absolute",top:12,left:14,zIndex:5,display:"flex",alignItems:"center",gap:7,background:gpsHuda>0?"#dc2626":"#d97706",color:"#fff",borderRadius:20,padding:"7px 14px 7px 11px",cursor:"pointer",boxShadow:gpsHuda>0?"0 2px 8px rgba(220,38,38,0.45)":"0 2px 8px rgba(217,119,6,0.45)",border:"2px solid #fff"}}>
               <span style={{fontSize:18,lineHeight:1}}>⚠️</span>
               <span style={{fontSize:14,fontWeight:800,lineHeight:1}}>{gpsOpoz.length}</span>
-              <span style={{fontSize:12,fontWeight:700,lineHeight:1,opacity:0.95}}>{gpsOpoz.length===1?"vozilo čaka":"vozil čaka"}</span>
+              <span style={{fontSize:12,fontWeight:700,lineHeight:1,opacity:0.95}}>{gpsOpoz.length===1?"vozilo stoji":"vozil stoji"}</span>
             </div>
           )}
           <div style={{display:"flex",alignItems:"center",gap:8,position:"absolute",top:14,right:16}}>
@@ -948,17 +947,17 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
           </div>
         )}
         {gpsOpoz.length>0&&(
-          <div onClick={()=>setTab("gps")} style={{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:12,padding:"10px 14px",marginBottom:12,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>
+          <div onClick={()=>setTab("gps")} style={{background:gpsHuda>0?"#fef2f2":"#fffbeb",border:"1.5px solid "+(gpsHuda>0?"#fecaca":"#fde68a"),borderRadius:12,padding:"10px 14px",marginBottom:12,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>
             <span style={{fontSize:18,flexShrink:0}}>⚠️</span>
             <div style={{minWidth:0,flex:1}}>
-              <div style={{fontSize:13,fontWeight:800,color:"#b91c1c"}}>
-                {gpsOpoz.length===1?`${gpsOpoz[0].reg} čaka ${gpsOpoz[0].cas} ${gpsOpoz[0].kje}`:`${gpsOpoz.length} vozil čaka ve\u010d kot 2 h na nakladu ali razkladu`}
+              <div style={{fontSize:13,fontWeight:800,color:gpsHuda>0?"#b91c1c":"#b45309"}}>
+                {gpsOpoz.length===1?`${gpsOpoz[0].reg} stoji ${gpsOpoz[0].cas} ${gpsOpoz[0].kje}`:`${gpsOpoz.length} vozil stoji ve\u010d kot 2 h${gpsHuda>0?` (${gpsHuda} na nakladu ali razkladu)`:""}`}
               </div>
-              <div style={{fontSize:11,color:"#dc2626",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                {gpsOpoz.map(o=>`${o.reg}${o.nalog?" ("+o.nalog+")":""}`).join(", ")}
+              <div style={{fontSize:11,color:gpsHuda>0?"#dc2626":"#d97706",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                {gpsOpoz.map(o=>`${o.reg} ${o.cas}${o.nalog?" ("+o.nalog+")":""}`).join(", ")}
               </div>
             </div>
-            <span style={{fontSize:12,fontWeight:700,color:"#b91c1c",flexShrink:0}}>Poglej</span>
+            <span style={{fontSize:12,fontWeight:700,color:gpsHuda>0?"#b91c1c":"#b45309",flexShrink:0}}>Poglej</span>
           </div>
         )}
         {/* Tabs */}
