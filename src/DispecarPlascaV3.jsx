@@ -1234,7 +1234,7 @@ function KontaktiVoznikov({vozniki,showToast,gpsVozila,onReload}){
     try{if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(txt).catch(()=>{});}catch(e){}
     showToast(msg||"Kopirano");
   };
-  const najava=(v)=>{const p=pod(v);return [p.ime,p.tel?"tel. "+p.tel:"",p.vozilo?"vlečno "+p.vozilo:"",p.prikolica?"prikolica "+p.prikolica:""].filter(Boolean).join(", ");};
+  const najava=(v)=>{const p=pod(v);return [p.ime,p.tel?"tel. "+p.tel:"",p.vozilo||"",p.prikolica||""].filter(Boolean).join(", ");};
   const seznam=(vozniki||[]).filter(v=>{const p=pod(v);return !q||((p.ime||"")+" "+(p.tel||"")+" "+(p.vozilo||"")+" "+(p.prikolica||"")).toLowerCase().includes(q.toLowerCase());});
   const nr=(x)=>(x||"").toUpperCase().replace(/[\s.-]/g,"");
   const vGps=(reg)=>!reg||!(gpsVozila||[]).length||(gpsVozila||[]).some(x=>nr(x.reg_tablica)===nr(reg));
@@ -1314,7 +1314,7 @@ function KontaktiVoznikov({vozniki,showToast,gpsVozila,onReload}){
           </tbody>
         </table>
       </div>
-      <div style={{fontSize:11,color:"#94a3b8",marginTop:8}}>📋 pri vozniku kopira vrstico za najavo: Fuad Smajlovic, tel. +386 41 123 456, vlečno CE-PG-007, prikolica CE-AB-123</div>
+      <div style={{fontSize:11,color:"#94a3b8",marginTop:8}}>📋 pri vozniku kopira vrstico za najavo: Fuad Smajlovic, tel. +38641123456, CE-PG-007, CE-AB-123</div>
     </div>}
   </div>);
 }
