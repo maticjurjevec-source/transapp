@@ -3741,11 +3741,32 @@ function KontaktSec({n,vozniki,showToast}){
   const ref=(n.stevilka_narocnika||n.stevilkaNarocnika||n.nakReferenca||n.stevilkaNaloga||"");
   const rel=(n.nakKraj||"?")+" - "+(n.razKraj||"?");
   const pdf=n.original_pdf_url||n.originalPdfUrl||"";
-  const info="Nalog: "+ref+"\nRelacija: "+rel+"\nNaklad: "+(n.nakDatum||"-")+" "+(n.nakCas||"")+"\nRazklad: "+(n.razDatum||"-")+" "+(n.razCas||"")+"\nVozilo: "+((vz&&vz.vozilo)||"-")+"\nVoznik: "+((vz&&vz.ime)||"-");
-  const zad="Nalog "+ref+" | "+rel;
-  const sablone=[["Potrditev"," - potrditev","potrjujemo prevzem naloga in dodelitev vozila."],["Nalozeno"," - nalozeno","obvescamo vas, da je vozilo nalozeno in na poti na razklad."],["Razlozeno"," - razlozeno","obvescamo vas, da je bilo blago razlozeno. CMR sledi."],["Zamuda"," - zamuda","obvescamo vas o zamudi pri izvedbi naloga. Nov predviden cas prihoda sporocimo v najkrajsem casu."],["Prazno","",""]];
-  const telo=(t)=>"Pozdravljeni,\n\n"+(t?t+"\n\n":"")+info+"\n\nV prilogi je originalni nalog.\n\nLep pozdrav,\nMatjaz Jurjevec s.p.";
-  const mailto=(z,t)=>"mailto:"+em+"?subject="+encodeURIComponent(z)+"&body="+encodeURIComponent(telo(t).replace("V prilogi je originalni nalog.",pdf?("Originalni nalog: "+pdf):""));
+  const izUrl=(()=>{try{const f=decodeURIComponent(String(pdf).split("/").pop().split("?")[0]).replace(/\.[A-Za-z0-9]+$/,"");const b=f.replace(/^\d{8,}[-_]/,"");return /^[A-Za-z0-9][A-Za-z0-9._\/-]{3,40}$/.test(b)?b:"";}catch(e){return "";}})();
+  const stNar=String(n.stevilka_narocnika||n.stevilkaNarocnika||"").trim()||izUrl;
+  const jezikIz=(e)=>{const t=(String(e||"").split("@")[1]||"").toLowerCase();
+    if(!t)return "sl";
+    if(/\.si$/.test(t))return "sl";
+    if(/\.(de|at|ch)$/.test(t))return "de";
+    if(/\.it$/.test(t))return "it";
+    return "en";};
+  const [jezRocno,setJezRocno]=useState("");
+  const jezik=jezRocno||jezikIz(em);
+  const T={
+    sl:{ime:"SLO",poz:"Pozdravljeni,",pri:"V prilogi je originalni nalog.",kon:"Lep pozdrav,",nal:"Nalog",vase:"Vasa st. naloga",rel:"Relacija",nak:"Naklad",raz:"Razklad",voz:"Vozilo",vzn:"Voznik",
+      s:[["Potrditev"," - potrditev","potrjujemo prevzem naloga in dodelitev vozila."],["Nalozeno"," - nalozeno","obvescamo vas, da je vozilo nalozeno in na poti na razklad."],["Razlozeno"," - razlozeno","obvescamo vas, da je bilo blago razlozeno. CMR sledi."],["Zamuda"," - zamuda","obvescamo vas o zamudi pri izvedbi naloga. Nov predviden cas prihoda sporocimo v najkrajsem casu."],["Prazno","",""]]},
+    de:{ime:"DE",poz:"Guten Tag,",pri:"Den Originalauftrag finden Sie im Anhang.",kon:"Mit freundlichen Gruessen,",nal:"Auftrag",vase:"Ihre Auftragsnummer",rel:"Relation",nak:"Beladung",raz:"Entladung",voz:"Fahrzeug",vzn:"Fahrer",
+      s:[["Potrditev"," - Bestaetigung","hiermit bestaetigen wir die Uebernahme des Auftrags und die Disposition des Fahrzeugs."],["Nalozeno"," - beladen","wir teilen Ihnen mit, dass das Fahrzeug beladen ist und sich auf dem Weg zur Entladestelle befindet."],["Razlozeno"," - entladen","wir teilen Ihnen mit, dass die Ware entladen wurde. Der CMR folgt."],["Zamuda"," - Verspaetung","wir muessen Ihnen leider eine Verspaetung bei der Durchfuehrung des Auftrags mitteilen. Die neue voraussichtliche Ankunftszeit melden wir Ihnen umgehend."],["Prazno","",""]]},
+    en:{ime:"EN",poz:"Dear Sir or Madam,",pri:"Please find the original order attached.",kon:"Kind regards,",nal:"Order",vase:"Your order no.",rel:"Route",nak:"Loading",raz:"Unloading",voz:"Vehicle",vzn:"Driver",
+      s:[["Potrditev"," - confirmation","we confirm acceptance of the order and that a vehicle has been assigned."],["Nalozeno"," - loaded","please be informed that the vehicle has been loaded and is on its way to the unloading point."],["Razlozeno"," - unloaded","please be informed that the goods have been unloaded. The CMR will follow."],["Zamuda"," - delay","we must inform you of a delay in carrying out the order. We will confirm the new estimated time of arrival as soon as possible."],["Prazno","",""]]},
+    it:{ime:"IT",poz:"Buongiorno,",pri:"In allegato trovate l ordine originale.",kon:"Cordiali saluti,",nal:"Ordine",vase:"Vostro n. ordine",rel:"Tratta",nak:"Carico",raz:"Scarico",voz:"Veicolo",vzn:"Autista",
+      s:[["Potrditev"," - conferma","confermiamo la presa in carico dell ordine e l assegnazione del veicolo."],["Nalozeno"," - caricato","vi informiamo che il veicolo e stato caricato ed e in viaggio verso il luogo di scarico."],["Razlozeno"," - scaricato","vi informiamo che la merce e stata scaricata. Il CMR seguira."],["Zamuda"," - ritardo","vi informiamo di un ritardo nell esecuzione dell ordine. Comunicheremo al piu presto il nuovo orario previsto di arrivo."],["Prazno","",""]]},
+  };
+  const L=T[jezik]||T.sl;
+  const info=(stNar?L.vase+": "+stNar+"\n":"")+L.nal+": "+(n.stevilkaNaloga||ref)+"\n"+L.rel+": "+rel+"\n"+L.nak+": "+(n.nakDatum||"-")+" "+(n.nakCas||"")+"\n"+L.raz+": "+(n.razDatum||"-")+" "+(n.razCas||"")+"\n"+L.voz+": "+((vz&&vz.vozilo)||"-")+"\n"+L.vzn+": "+((vz&&vz.ime)||"-");
+  const zad=L.nal+" "+(stNar||ref)+" | "+rel;
+  const sablone=L.s;
+  const telo=(t)=>L.poz+"\n\n"+(t?t+"\n\n":"")+info+"\n\n"+L.pri+"\n\n"+L.kon+"\nMatjaz Jurjevec s.p.";
+  const mailto=(z,t)=>"mailto:"+em+"?subject="+encodeURIComponent(z)+"&body="+encodeURIComponent(telo(t).replace(L.pri,pdf?pdf:""));
   const osnutek=async(z,t,naslov)=>{
     const na=(naslov||em||"").trim();
     if(!na) return showToast("Najprej vpisi e-naslov",true);
@@ -3799,6 +3820,11 @@ function KontaktSec({n,vozniki,showToast}){
       {vsiE.map(e=><button key={e} title={"Klikni: odpre osnutek v Outlooku z originalnim nalogom v prilogi"} onClick={()=>{setIzbran(e);setRocni("");osnutek(zad,"",e);}} style={{fontSize:12,fontFamily:"monospace",fontWeight:700,padding:"5px 10px",borderRadius:8,cursor:"pointer",border:"1.5px solid "+(em===e?"#2563eb":"#e2e8f0"),background:em===e?"#eff6ff":"#fff",color:em===e?"#2563eb":"#64748b"}}>{e}</button>)}
     </div>}
     {vsiE.length>0&&<div style={{fontSize:11,color:"#64748b",marginBottom:8}}>Klikni e-naslov in odpre se osnutek v Outlooku z originalnim nalogom v prilogi.</div>}
+    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+      <span style={{fontSize:11,color:"#64748b"}}>Jezik maila:</span>
+      {["sl","de","en","it"].map(k=><button key={k} onClick={()=>setJezRocno(jezRocno===k?"":k)} style={{fontSize:11,fontWeight:800,padding:"4px 9px",borderRadius:7,cursor:"pointer",border:"1.5px solid "+(jezik===k?"#2563eb":"#e2e8f0"),background:jezik===k?"#eff6ff":"#fff",color:jezik===k?"#2563eb":"#94a3b8"}}>{T[k].ime}</button>)}
+      {!jezRocno&&<span style={{fontSize:11,color:"#94a3b8"}}>po koncnici e-naslova</span>}
+    </div>
     <input value={rocni} onChange={ev=>setRocni(ev.target.value)} placeholder={vsiE.length?"ali vpisi drug e-naslov...":"vpisi e-naslov narocnika..."} style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",border:"1px solid #e2e8f0",borderRadius:8,fontSize:13,marginBottom:8,outline:"none"}}/>
     <div style={{fontSize:11,color:pdf?"#15803d":"#b45309",marginBottom:8}}>{pdf?"Originalni nalog bo prilozen mailu":"Original ni nalozen - mail bo brez priloge"}</div>
     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
