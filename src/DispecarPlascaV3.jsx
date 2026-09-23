@@ -17,12 +17,12 @@ const natisniVse=(n,cmrSlike=[])=>{
   if(!w){alert("Brskalnik je blokiral pojavno okno. Dovoli pojavna okna za tiskanje.");return;}
   const jePdf=nalUrl&&/\.pdf(\?|$)/i.test(nalUrl);
   const datum=new Date().toLocaleDateString("sl-SI");
-  const header=(naslov)=>`<div class="hdr"><div><div class="hdr-l">${naslov}</div><div class="hdr-num">${nalStevilka}</div></div><div class="hdr-r"><div><b>MATJA\u017d JURJEVEC s.p.</b></div><div>${datum}</div></div></div>`;
+  const header=(naslov)=>`<div class="hdr"><div><div class="hdr-l">${naslov}</div><div class="hdr-num">${nalStevilka}</div></div><div class="hdr-r"><div><b>MATJAŽ JURJEVEC s.p.</b></div><div>${datum}</div></div></div>`;
   let body="";
   if(nalUrl){
     body+=jePdf
-      ?`<div class="page">${header("Original nalog naro\u010dnika")}<embed src="${nalUrl}" type="application/pdf" class="pdf"/></div>`
-      :`<div class="page">${header("Original nalog naro\u010dnika")}<img src="${nalUrl}" class="doc"/></div>`;
+      ?`<div class="page">${header("Original nalog naročnika")}<embed src="${nalUrl}" type="application/pdf" class="pdf"/></div>`
+      :`<div class="page">${header("Original nalog naročnika")}<img src="${nalUrl}" class="doc"/></div>`;
   }
   (cmrSlike||[]).forEach((sl,i)=>{
     const url=sl.url||sl.img;
@@ -273,7 +273,10 @@ export default function DispecarPlasca() {
         const mapped = sbVozniki.map(v=>({
           id: v.id,
           ime: `${v.ime} ${v.priimek}`,
+          imeOnly: v.ime||"",
+          priimekOnly: v.priimek||"",
           vozilo: v.vozilo||"",
+          prikolica: v.prikolica||"",
           tel: v.tel||"",
         }));
         setVozniki(mapped);
@@ -397,7 +400,7 @@ export default function DispecarPlasca() {
       n.razDatum ? `📅 ${fmt(n.razDatum)}${n.razCas ? ` ob ${n.razCas}` : ""}` : "",
       n.razReferenca ? `Ref: ${n.razReferenca}` : "",
     ];
-    if(Array.isArray(n.postanki)&&n.postanki.length>1){const _P=n.postanki,_t=(p)=>[p.firma||"",`${p.kraj||""}${p.naslov?`, ${p.naslov}`:""}`,p.datum?`\u{1F4C5} ${fmt(p.datum)}${p.cas?` ob ${p.cas}`:""}`:"",p.referenca?`Ref: ${p.referenca}`:""],_n=_P.filter(p=>p.tip==="naklad"),_r=_P.filter(p=>p.tip==="razklad");const _iN=lines.indexOf(`\u{1F4CD} NAKLAD`);if(_iN>=0&&_n.length>1)lines[_iN]=`\u{1F4CD} NAKLAD 1/${_n.length}`;const _iR=lines.indexOf(`\u{1F3C1} RAZKLAD`);if(_iR>=0&&_r.length>1)lines[_iR]=`\u{1F3C1} RAZKLAD 1/${_r.length}`;_n.slice(1).forEach((p,i)=>lines.push(``,`\u{1F4CD} NAKLAD ${i+2}/${_n.length}`,..._t(p)));_r.slice(1).forEach((p,i)=>lines.push(``,`\u{1F3C1} RAZKLAD ${i+2}/${_r.length}`,..._t(p)));} if (n.navodila) {
+    if(Array.isArray(n.postanki)&&n.postanki.length>1){const _P=n.postanki,_t=(p)=>[p.firma||"",`${p.kraj||""}${p.naslov?`, ${p.naslov}`:""}`,p.datum?`📅 ${fmt(p.datum)}${p.cas?` ob ${p.cas}`:""}`:"",p.referenca?`Ref: ${p.referenca}`:""],_n=_P.filter(p=>p.tip==="naklad"),_r=_P.filter(p=>p.tip==="razklad");const _iN=lines.indexOf(`📍 NAKLAD`);if(_iN>=0&&_n.length>1)lines[_iN]=`📍 NAKLAD 1/${_n.length}`;const _iR=lines.indexOf(`🏁 RAZKLAD`);if(_iR>=0&&_r.length>1)lines[_iR]=`🏁 RAZKLAD 1/${_r.length}`;_n.slice(1).forEach((p,i)=>lines.push(``,`📍 NAKLAD ${i+2}/${_n.length}`,..._t(p)));_r.slice(1).forEach((p,i)=>lines.push(``,`🏁 RAZKLAD ${i+2}/${_r.length}`,..._t(p)));} if (n.navodila) {
       lines.push(``, `⚠️ NAVODILA`, n.navodila);
     }
     if (n.stevilka_narocnika || n.stevilkaNarocnika) {
@@ -928,13 +931,13 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
           )}
           <div style={{display:"flex",alignItems:"center",gap:8,position:"absolute",top:14,right:16}}>
             {loading && <div style={{fontSize:12,opacity:0.7}}>⏳ Nalagam...</div>}
-            {(()=>{const zap=st.nalogi.filter(n=>n.status!=="za_fakturo"&&n.status!=="fakturirano"&&n.razDatum&&Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000)>=7);return zap.length>0?(<div onClick={()=>setShowStari(true)} title="Nalogi za fakturo" style={{position:"relative",cursor:"pointer",fontSize:22,lineHeight:1,padding:"2px 4px"}}>{"\uD83E\uDDFE"}<span style={{position:"absolute",top:-4,right:-4,minWidth:16,height:16,padding:"0 4px",background:"#dc2626",color:"#fff",fontSize:11,fontWeight:700,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",boxSizing:"border-box"}}>{zap.length}</span></div>):null;})()}<button style={s.novBtn} onClick={openNovNalog}>+ Nov nalog</button>
+            {(()=>{const zap=st.nalogi.filter(n=>n.status!=="za_fakturo"&&n.status!=="fakturirano"&&n.razDatum&&Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000)>=7);return zap.length>0?(<div onClick={()=>setShowStari(true)} title="Nalogi za fakturo" style={{position:"relative",cursor:"pointer",fontSize:22,lineHeight:1,padding:"2px 4px"}}>{"🧾"}<span style={{position:"absolute",top:-4,right:-4,minWidth:16,height:16,padding:"0 4px",background:"#dc2626",color:"#fff",fontSize:11,fontWeight:700,borderRadius:999,display:"flex",alignItems:"center",justifyContent:"center",boxSizing:"border-box"}}>{zap.length}</span></div>):null;})()}<button style={s.novBtn} onClick={openNovNalog}>+ Nov nalog</button>
           </div>
         </div>
       </div>
       {toast&&<Toast t={toast}/>}
       <div ref={contentRef} style={s.content}>
-       {(()=>{const zap=st.nalogi.filter(n=>n.status!=="za_fakturo"&&n.status!=="fakturirano"&&n.razDatum&&Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000)>=7);return false?(<div onClick={()=>setShowStari(true)} style={{background:"linear-gradient(135deg,#dc2626,#ef4444)",borderRadius:14,padding:"14px 16px",marginBottom:14,color:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 2px 8px rgba(220,38,38,0.3)"}}><div style={{display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:24}}>!</span><div><div style={{fontWeight:800,fontSize:15}}>{zap.length} nalogov ceka na fakturo vec kot 7 dni</div><div style={{fontSize:12,opacity:0.9}}>Klikni za pregled</div></div></div><span style={{fontSize:20}}>{">"}</span></div>):null;})()}{showStari&&(<div onClick={()=>setShowStari(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 12px",overflowY:"auto"}}><div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:16,width:"100%",maxWidth:560,padding:"18px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><div style={{fontWeight:800,fontSize:17,color:"#dc2626"}}>Nalogi za fakturo (7+ dni)</div><button onClick={()=>setShowStari(false)} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#64748b",lineHeight:1}}>{"\u00d7"}</button></div>{(()=>{const list=st.nalogi.filter(n=>n.status!=="za_fakturo"&&n.status!=="fakturirano"&&n.razDatum&&Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000)>=7).sort((a,b)=>(a.razDatum||"").localeCompare(b.razDatum||""));if(list.length===0)return <div style={{color:"#64748b",fontSize:14,padding:"10px 0"}}>Ni nalogov za fakturo.</div>;return list.map(n=>{const dni=Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000);const rdec=dni>14;const barva=rdec?"#dc2626":"#d97706";const ozadje=rdec?"#fef2f2":"#fff7ed";const rob=rdec?"#fca5a5":"#fdba74";return(<div key={n.id} onClick={()=>{setShowStari(false);odpriNalog(n);}} style={{border:"1px solid "+rob,background:ozadje,borderRadius:12,padding:"10px 12px",marginBottom:8,cursor:"pointer"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><div style={{fontWeight:700,fontSize:14,color:"#0f2744"}}>{n.stranka||"Nalog"}</div><div style={{fontSize:12,fontWeight:700,color:barva}}>{dni+" dni"}</div></div><div style={{fontSize:12,color:"#64748b",marginTop:2}}>{(n.nakKraj||"")+" -> "+(n.razKraj||"")}</div><div style={{fontSize:11,color:"#94a3b8",marginTop:3}}>{"Nakl: "+(n.nakDatum?fmt(n.nakDatum+"T00:00:00"):"-")+" | Razkl: "+(n.razDatum?fmt(n.razDatum+"T00:00:00"):"-")+((n.znesek_original||n.znesekOriginal)?" | "+(n.znesek_original||n.znesekOriginal)+" EUR":"")}</div><button onClick={(e)=>{e.stopPropagation();spremenStatus(n.id,"za_fakturo");}} style={{marginTop:8,background:"#9333ea",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>Za fakturo</button></div>);});})()}</div></div>)}{st.nalogi.filter(n=>n.status==="caka_potrditev").length>0&&(
+       {(()=>{const zap=st.nalogi.filter(n=>n.status!=="za_fakturo"&&n.status!=="fakturirano"&&n.razDatum&&Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000)>=7);return false?(<div onClick={()=>setShowStari(true)} style={{background:"linear-gradient(135deg,#dc2626,#ef4444)",borderRadius:14,padding:"14px 16px",marginBottom:14,color:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 2px 8px rgba(220,38,38,0.3)"}}><div style={{display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:24}}>!</span><div><div style={{fontWeight:800,fontSize:15}}>{zap.length} nalogov ceka na fakturo vec kot 7 dni</div><div style={{fontSize:12,opacity:0.9}}>Klikni za pregled</div></div></div><span style={{fontSize:20}}>{">"}</span></div>):null;})()}{showStari&&(<div onClick={()=>setShowStari(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 12px",overflowY:"auto"}}><div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:16,width:"100%",maxWidth:560,padding:"18px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><div style={{fontWeight:800,fontSize:17,color:"#dc2626"}}>Nalogi za fakturo (7+ dni)</div><button onClick={()=>setShowStari(false)} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#64748b",lineHeight:1}}>{"×"}</button></div>{(()=>{const list=st.nalogi.filter(n=>n.status!=="za_fakturo"&&n.status!=="fakturirano"&&n.razDatum&&Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000)>=7).sort((a,b)=>(a.razDatum||"").localeCompare(b.razDatum||""));if(list.length===0)return <div style={{color:"#64748b",fontSize:14,padding:"10px 0"}}>Ni nalogov za fakturo.</div>;return list.map(n=>{const dni=Math.floor((Date.now()-new Date(n.razDatum+"T00:00:00"))/86400000);const rdec=dni>14;const barva=rdec?"#dc2626":"#d97706";const ozadje=rdec?"#fef2f2":"#fff7ed";const rob=rdec?"#fca5a5":"#fdba74";return(<div key={n.id} onClick={()=>{setShowStari(false);odpriNalog(n);}} style={{border:"1px solid "+rob,background:ozadje,borderRadius:12,padding:"10px 12px",marginBottom:8,cursor:"pointer"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><div style={{fontWeight:700,fontSize:14,color:"#0f2744"}}>{n.stranka||"Nalog"}</div><div style={{fontSize:12,fontWeight:700,color:barva}}>{dni+" dni"}</div></div><div style={{fontSize:12,color:"#64748b",marginTop:2}}>{(n.nakKraj||"")+" -> "+(n.razKraj||"")}</div><div style={{fontSize:11,color:"#94a3b8",marginTop:3}}>{"Nakl: "+(n.nakDatum?fmt(n.nakDatum+"T00:00:00"):"-")+" | Razkl: "+(n.razDatum?fmt(n.razDatum+"T00:00:00"):"-")+((n.znesek_original||n.znesekOriginal)?" | "+(n.znesek_original||n.znesekOriginal)+" EUR":"")}</div><button onClick={(e)=>{e.stopPropagation();spremenStatus(n.id,"za_fakturo");}} style={{marginTop:8,background:"#9333ea",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>Za fakturo</button></div>);});})()}</div></div>)}{st.nalogi.filter(n=>n.status==="caka_potrditev").length>0&&(
           <div onClick={()=>setTab("nalogi")} style={{background:"linear-gradient(135deg,#ea580c,#f97316)",borderRadius:14,padding:"14px 16px",marginBottom:14,color:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 2px 8px rgba(234,88,12,0.3)"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <span style={{fontSize:24}}>📥</span>
@@ -951,7 +954,7 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
             <span style={{fontSize:18,flexShrink:0}}>⚠️</span>
             <div style={{minWidth:0,flex:1}}>
               <div style={{fontSize:13,fontWeight:800,color:gpsHuda>0?"#b91c1c":"#b45309"}}>
-                {gpsOpoz.length===1?`${gpsOpoz[0].reg} stoji ${gpsOpoz[0].cas} ${gpsOpoz[0].kje}`:`${gpsOpoz.length} vozil stoji ve\u010d kot 2 h${gpsHuda>0?` (${gpsHuda} na nakladu ali razkladu)`:""}`}
+                {gpsOpoz.length===1?`${gpsOpoz[0].reg} stoji ${gpsOpoz[0].cas} ${gpsOpoz[0].kje}`:`${gpsOpoz.length} vozil stoji več kot 2 h${gpsHuda>0?` (${gpsHuda} na nakladu ali razkladu)`:""}`}
               </div>
               <div style={{fontSize:11,color:gpsHuda>0?"#dc2626":"#d97706",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                 {gpsOpoz.map(o=>`${o.reg} ${o.cas}${o.nalog?" ("+o.nalog+")":""}`).join(", ")}
@@ -970,7 +973,7 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
         {tab==="nalogi"&&<NalogiTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog} openNovNalog={openNovNalog} onEdit={urediNalog} onDelete={izbrisiNalog} onAssign={dodelijNalog} onZaFakturo={(id)=>spremenStatus(id,"za_fakturo")} onFakturirano={(id)=>spremenStatus(id,"fakturirano")}/>}
         {tab==="ai"&&<AiIskalnikTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog} showToast={showToast}/>}
         {tab==="tedenski"&&<TedenskiPregledTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog} showToast={showToast}/>}{tab==="poti"&&<PotiTab showToast={showToast}/>}
-        {tab==="vozniki"&&<VoznikiTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog}/>}
+        {tab==="vozniki"&&<VoznikiTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog} showToast={showToast} gpsVozila={gpsVozila} onReload={naložiPodatke}/>}
         {tab==="obracuni"&&<ObracuniTab obracuni={st.obracuni} onSelect={setSelObracun}/>}
         {tab==="finance"&&<FinanceTab st={st} upd={upd} showToast={showToast} supabase={supabase} setActiveTab={setTab}/>}
         {tab==="prosticmr"&&<ProstiCMRTab st={st} upd={upd} showToast={showToast}/>}
@@ -1093,7 +1096,7 @@ function GpsTab({nalogi,vozniki}){
         </div>
       </div>
       {(()=>{const o=opozorilo(v);return o?<div style={{background:o.huda?"#fef2f2":"#fffbeb",color:o.huda?"#b91c1c":"#b45309",border:"1px solid "+(o.huda?"#fecaca":"#fde68a"),borderRadius:8,padding:"6px 10px",fontSize:12,fontWeight:700,marginBottom:6}}>{o.tekst}</div>:null;})()}{v.voznik&&<div style={{fontSize:13,color:"#334155",marginBottom:4,fontWeight:600}}>{v.voznik}</div>}
-      <div style={{fontSize:13,color:"#64748b",marginBottom:6}}>{v.lokacija||"Lokacija ni znana"}</div>{(()=>{const nr=(x)=>(x||"").toUpperCase().replace(/[\s.-]/g,"");const vo=(vozniki||[]).find(x=>nr(x.vozilo)===nr(v.reg_tablica));if(!vo)return null;const ms=(x)=>x?new Date(x+"T00:00:00").getTime():0;const akt=(nalogi||[]).filter(x=>x.voznikId===vo.id&&x.status!=="zakljucen"&&x.status!=="fakturirano"&&x.status!=="za_fakturo").sort((a,b)=>ms(a.nakDatum)-ms(b.nakDatum));if(!akt.length)return null;const post=(x)=>String(x||"").match(/\b\d{4,5}\b/g)||[];const ujema=(cilj)=>{if(!cilj)return false;const pv=post(v.lokacija),pc=post(cilj);if(pv.some(p=>pc.includes(p)))return true;const mesto=nr(cilj).replace(/[^A-Z]/g,"");return mesto.length>3&&nr(v.lokacija).replace(/[^A-Z]/g,"").includes(mesto);};const naMestu=v.hitrost<5?akt.map(n=>{if(ujema(n.nakKraj)||ujema(n.nakNaslov))return{tip:"nakladu",n:n};if(ujema(n.razKraj)||ujema(n.razNaslov))return{tip:"razkladu",n:n};return null;}).find(Boolean):null;const odp=!!odpV[v.id];const now=Date.now();const g=(c)=>"https://www.google.com/maps/dir/?api=1&origin="+v.lat+","+v.lon+"&destination="+encodeURIComponent(c)+"&travelmode=driving";const bs={fontSize:12,color:"#0f2744",background:"#fff",border:"1px solid #e2e8f0",padding:"5px 12px",borderRadius:8,fontWeight:700,textDecoration:"none",display:"inline-block"};return <div style={{marginBottom:8}}>{naMestu&&<div style={{background:naMestu.tip==="nakladu"?"#ecfdf5":"#eff6ff",color:naMestu.tip==="nakladu"?"#047857":"#1d4ed8",border:"1px solid "+(naMestu.tip==="nakladu"?"#a7f3d0":"#bfdbfe"),borderRadius:8,padding:"6px 10px",fontSize:12,fontWeight:700,marginBottom:6}}>{"Na "+naMestu.tip+" - "+(naMestu.n.stevilkaNaloga||"")}</div>}<div onClick={()=>setOdpV(p=>({...p,[v.id]:!p[v.id]}))} style={{fontSize:12,color:"#2563eb",fontWeight:700,marginBottom:odp?8:0,cursor:"pointer",background:"#eff6ff",borderRadius:8,padding:"6px 10px",display:"inline-block"}}>{akt.length+(akt.length===1?" aktiven nalog ":" aktivni nalogi ")+(odp?"\u25b2":"\u25bc")}</div>{odp&&akt.map(n=>{const teku=ms(n.nakDatum)<=now&&ms(n.razDatum)+86400000>=now;return <div key={n.id} style={{background:"#f8fafc",borderRadius:8,padding:"8px 10px",marginTop:6,borderLeft:teku?"3px solid #2563eb":"3px solid #e2e8f0"}}><div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:3}}><span style={{fontSize:11,fontFamily:"monospace",color:"#2563eb",fontWeight:700}}>{n.stevilkaNaloga}</span>{teku&&<span style={{fontSize:10,background:"#dbeafe",color:"#1d4ed8",padding:"1px 7px",borderRadius:20,fontWeight:700}}>v teku</span>}<span style={{fontSize:11,color:"#94a3b8"}}>{n.stranka||""}</span></div><div style={{fontSize:12,color:"#334155",fontWeight:600,marginBottom:3}}>{(n.nakKraj||"?")+" \u2192 "+(n.razKraj||"?")}</div><div style={{fontSize:11,color:"#64748b",marginBottom:6}}>{"Nakl.: "+(n.nakDatum||"-")+" "+(n.nakCas||"")+"  |  Razkl.: "+(n.razDatum||"-")+" "+(n.razCas||"")}</div>{v.lat&&<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{(n.nakNaslov||n.nakKraj)&&<a href={g(n.nakNaslov||n.nakKraj)} target="_blank" rel="noreferrer" style={bs}>Do naklada</a>}{(n.razNaslov||n.razKraj)&&<a href={g(n.razNaslov||n.razKraj)} target="_blank" rel="noreferrer" style={bs}>Do razklada</a>}</div>}</div>;})}</div>;})()}
+      <div style={{fontSize:13,color:"#64748b",marginBottom:6}}>{v.lokacija||"Lokacija ni znana"}</div>{(()=>{const nr=(x)=>(x||"").toUpperCase().replace(/[\s.-]/g,"");const vo=(vozniki||[]).find(x=>nr(x.vozilo)===nr(v.reg_tablica));if(!vo)return null;const ms=(x)=>x?new Date(x+"T00:00:00").getTime():0;const akt=(nalogi||[]).filter(x=>x.voznikId===vo.id&&x.status!=="zakljucen"&&x.status!=="fakturirano"&&x.status!=="za_fakturo").sort((a,b)=>ms(a.nakDatum)-ms(b.nakDatum));if(!akt.length)return null;const post=(x)=>String(x||"").match(/\b\d{4,5}\b/g)||[];const ujema=(cilj)=>{if(!cilj)return false;const pv=post(v.lokacija),pc=post(cilj);if(pv.some(p=>pc.includes(p)))return true;const mesto=nr(cilj).replace(/[^A-Z]/g,"");return mesto.length>3&&nr(v.lokacija).replace(/[^A-Z]/g,"").includes(mesto);};const naMestu=v.hitrost<5?akt.map(n=>{if(ujema(n.nakKraj)||ujema(n.nakNaslov))return{tip:"nakladu",n:n};if(ujema(n.razKraj)||ujema(n.razNaslov))return{tip:"razkladu",n:n};return null;}).find(Boolean):null;const odp=!!odpV[v.id];const now=Date.now();const g=(c)=>"https://www.google.com/maps/dir/?api=1&origin="+v.lat+","+v.lon+"&destination="+encodeURIComponent(c)+"&travelmode=driving";const bs={fontSize:12,color:"#0f2744",background:"#fff",border:"1px solid #e2e8f0",padding:"5px 12px",borderRadius:8,fontWeight:700,textDecoration:"none",display:"inline-block"};return <div style={{marginBottom:8}}>{naMestu&&<div style={{background:naMestu.tip==="nakladu"?"#ecfdf5":"#eff6ff",color:naMestu.tip==="nakladu"?"#047857":"#1d4ed8",border:"1px solid "+(naMestu.tip==="nakladu"?"#a7f3d0":"#bfdbfe"),borderRadius:8,padding:"6px 10px",fontSize:12,fontWeight:700,marginBottom:6}}>{"Na "+naMestu.tip+" - "+(naMestu.n.stevilkaNaloga||"")}</div>}<div onClick={()=>setOdpV(p=>({...p,[v.id]:!p[v.id]}))} style={{fontSize:12,color:"#2563eb",fontWeight:700,marginBottom:odp?8:0,cursor:"pointer",background:"#eff6ff",borderRadius:8,padding:"6px 10px",display:"inline-block"}}>{akt.length+(akt.length===1?" aktiven nalog ":" aktivni nalogi ")+(odp?"▲":"▼")}</div>{odp&&akt.map(n=>{const teku=ms(n.nakDatum)<=now&&ms(n.razDatum)+86400000>=now;return <div key={n.id} style={{background:"#f8fafc",borderRadius:8,padding:"8px 10px",marginTop:6,borderLeft:teku?"3px solid #2563eb":"3px solid #e2e8f0"}}><div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:3}}><span style={{fontSize:11,fontFamily:"monospace",color:"#2563eb",fontWeight:700}}>{n.stevilkaNaloga}</span>{teku&&<span style={{fontSize:10,background:"#dbeafe",color:"#1d4ed8",padding:"1px 7px",borderRadius:20,fontWeight:700}}>v teku</span>}<span style={{fontSize:11,color:"#94a3b8"}}>{n.stranka||""}</span></div><div style={{fontSize:12,color:"#334155",fontWeight:600,marginBottom:3}}>{(n.nakKraj||"?")+" → "+(n.razKraj||"?")}</div><div style={{fontSize:11,color:"#64748b",marginBottom:6}}>{"Nakl.: "+(n.nakDatum||"-")+" "+(n.nakCas||"")+"  |  Razkl.: "+(n.razDatum||"-")+" "+(n.razCas||"")}</div>{v.lat&&<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{(n.nakNaslov||n.nakKraj)&&<a href={g(n.nakNaslov||n.nakKraj)} target="_blank" rel="noreferrer" style={bs}>Do naklada</a>}{(n.razNaslov||n.razKraj)&&<a href={g(n.razNaslov||n.razKraj)} target="_blank" rel="noreferrer" style={bs}>Do razklada</a>}</div>}</div>;})}</div>;})()}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <span style={{fontSize:11,color:"#94a3b8"}}>{pred(v.cas)}{v.kontakt?" | kontakt prizgan":""}</span>
         {v.lat&&<a href={"https://www.google.com/maps?q="+v.lat+","+v.lon} target="_blank" rel="noreferrer" style={{fontSize:12,color:"#2563eb",fontWeight:700,textDecoration:"none"}}>Zemljevid</a>}
@@ -1217,7 +1220,106 @@ let _nalogiQ=""; let _nalogiUI=null; function NalogiTab({nalogi,vozniki,onSelect
   </div>);
 }
 
-function VoznikiTab({nalogi,vozniki,onSelect}){
+function KontaktiVoznikov({vozniki,showToast,gpsVozila,onReload}){
+  const [odpr,setOdpr]=useState(true);
+  const [q,setQ]=useState("");
+  const [over,setOver]=useState({});
+  const [urej,setUrej]=useState(null);
+  const [f,setF]=useState({ime:"",priimek:"",tel:"",vozilo:"",prikolica:""});
+  const [shr,setShr]=useState(false);
+  const [nov,setNov]=useState(false);
+  const pod=(v)=>({...v,...(over[v.id]||{})});
+  const kop=(txt,msg)=>{
+    try{const ta=document.createElement("textarea");ta.value=txt;ta.setAttribute("readonly","");ta.style.position="fixed";ta.style.top="-2000px";document.body.appendChild(ta);ta.focus();ta.select();ta.setSelectionRange(0,ta.value.length);document.execCommand("copy");document.body.removeChild(ta);}catch(e){}
+    try{if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(txt).catch(()=>{});}catch(e){}
+    showToast(msg||"Kopirano");
+  };
+  const najava=(v)=>{const p=pod(v);return [p.ime,p.tel?"tel. "+p.tel:"",p.vozilo?"vlečno "+p.vozilo:"",p.prikolica?"prikolica "+p.prikolica:""].filter(Boolean).join(", ");};
+  const seznam=(vozniki||[]).filter(v=>{const p=pod(v);return !q||((p.ime||"")+" "+(p.tel||"")+" "+(p.vozilo||"")+" "+(p.prikolica||"")).toLowerCase().includes(q.toLowerCase());});
+  const nr=(x)=>(x||"").toUpperCase().replace(/[\s.-]/g,"");
+  const vGps=(reg)=>!reg||!(gpsVozila||[]).length||(gpsVozila||[]).some(x=>nr(x.reg_tablica)===nr(reg));
+  const zacni=(v)=>{const p=pod(v);setNov(false);setUrej(v.id);setF({ime:p.imeOnly||(p.ime||"").split(" ")[0]||"",priimek:p.priimekOnly||(p.ime||"").split(" ").slice(1).join(" ")||"",tel:p.tel||"",vozilo:p.vozilo||"",prikolica:p.prikolica||""});};
+  const zacniNov=()=>{setUrej("NOV");setNov(true);setF({ime:"",priimek:"",tel:"",vozilo:"",prikolica:""});setOdpr(true);};
+  const polja=()=>({ime:f.ime.trim(),priimek:f.priimek.trim(),tel:f.tel.trim()||null,vozilo:f.vozilo.trim().toUpperCase()||null,prikolica:f.prikolica.trim().toUpperCase()||null});
+  const shrani=async(v)=>{
+    if(!f.ime.trim()||!f.priimek.trim()){showToast("Ime in priimek sta obvezna",true);return;}
+    setShr(true);
+    const d=polja();
+    if(nov){
+      const {error}=await supabase.from("vozniki").insert([{...d,aktiven:true}]);
+      setShr(false);
+      if(error){showToast("Napaka: "+(error.message||"shranjevanje ni uspelo"),true);return;}
+      setUrej(null);setNov(false);showToast("Voznik dodan");
+      if(onReload)onReload();
+      return;
+    }
+    const {error}=await supabase.from("vozniki").update(d).eq("id",v.id);
+    setShr(false);
+    if(error){showToast("Napaka: "+(error.message||"shranjevanje ni uspelo"),true);return;}
+    setOver(o=>({...o,[v.id]:{ime:(d.ime+" "+d.priimek).trim(),imeOnly:d.ime,priimekOnly:d.priimek,tel:d.tel||"",vozilo:d.vozilo||"",prikolica:d.prikolica||""}}));
+    setUrej(null);showToast("Shranjeno");
+  };
+  const odstrani=async(v)=>{
+    const p=pod(v);
+    if(!window.confirm("Odstranim "+p.ime+" s seznama aktivnih voznikov?\n\nNalogi in obračuni ostanejo, voznik se samo ne prikazuje več."))return;
+    const {error}=await supabase.from("vozniki").update({aktiven:false}).eq("id",v.id);
+    if(error){showToast("Napaka: "+(error.message||"ni uspelo"),true);return;}
+    showToast(p.ime+" odstranjen");
+    if(onReload)onReload();
+  };
+  const vse=()=>kop(["Ime\tPriimek\tTelefon\tVlečno\tPrikolica",...seznam.map(v=>{const p=pod(v);return [p.imeOnly||"",p.priimekOnly||"",p.tel||"",p.vozilo||"",p.prikolica||""].join("\t");})].join("\n"),"Vsi vozniki kopirani - prilepi v Excel ali mail");
+  const th={padding:"6px 8px",fontSize:11,color:"#64748b",textTransform:"uppercase",letterSpacing:0.4,textAlign:"left",fontWeight:800};
+  const inp={padding:"6px 8px",borderRadius:8,border:"1px solid #cbd5e1",fontSize:13,outline:"none"};
+  const mini={padding:"6px 10px",borderRadius:8,border:"1px solid #cbd5e1",background:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"};
+  const vrsticaUrej=(v,kljuc)=>(<tr key={kljuc} style={{borderTop:"1px solid #f1f5f9",background:"#f8fafc"}}>
+    <td style={{padding:"8px"}}><input autoFocus value={f.ime} onChange={e=>setF(x=>({...x,ime:e.target.value}))} placeholder="Ime" style={{...inp,width:110}}/></td>
+    <td style={{padding:"8px"}}><input value={f.priimek} onChange={e=>setF(x=>({...x,priimek:e.target.value}))} placeholder="Priimek" style={{...inp,width:130}}/></td>
+    <td style={{padding:"8px"}}><input value={f.tel} onChange={e=>setF(x=>({...x,tel:e.target.value}))} placeholder="+386..." style={{...inp,width:140}}/></td>
+    <td style={{padding:"8px"}}><input value={f.vozilo} onChange={e=>setF(x=>({...x,vozilo:e.target.value}))} placeholder="CE-XX-123" style={{...inp,width:115,textTransform:"uppercase",borderColor:vGps(f.vozilo)?"#cbd5e1":"#f59e0b"}}/>{!vGps(f.vozilo)&&<div style={{fontSize:10,color:"#b45309",marginTop:3,maxWidth:120}}>Ni med vozili v Eurowagu</div>}</td>
+    <td style={{padding:"8px"}}><input value={f.prikolica} onChange={e=>setF(x=>({...x,prikolica:e.target.value}))} placeholder="CE-XX-123" style={{...inp,width:115,textTransform:"uppercase"}}/></td>
+    <td style={{padding:"8px",whiteSpace:"nowrap",textAlign:"right"}}>
+      <button disabled={shr} onClick={()=>shrani(v)} style={{...mini,border:"none",background:"#16a34a",color:"#fff",marginRight:6}}>{shr?"...":"Shrani"}</button>
+      <button onClick={()=>{setUrej(null);setNov(false);}} style={{...mini,color:"#64748b"}}>Prekliči</button>
+    </td>
+  </tr>);
+  return(<div style={{background:"#fff",borderRadius:14,padding:14,marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+    <div style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}} onClick={()=>setOdpr(o=>!o)}>
+      <span style={{fontSize:18}}>📇</span>
+      <div style={{flex:1,fontWeight:800,fontSize:15,color:"#0f2744"}}>Kontakti in registrske</div>
+      <span style={{fontSize:12,color:"#64748b",fontWeight:700}}>{odpr?"Skrij ▲":"Prikaži ▼"}</span>
+    </div>
+    {odpr&&<div style={{marginTop:12}}>
+      <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+        <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Išči voznika, telefon, registrsko..." style={{...inp,flex:"1 1 180px",minWidth:0,padding:"9px 12px",borderRadius:10}}/>
+        <button onClick={zacniNov} style={{padding:"9px 14px",borderRadius:10,border:"1px solid #cbd5e1",background:"#fff",color:"#0f2744",fontWeight:700,fontSize:13,cursor:"pointer"}}>+ Nov voznik</button>
+        <button onClick={vse} style={{padding:"9px 14px",borderRadius:10,border:"none",background:"#0f2744",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>📋 Kopiraj vse</button>
+      </div>
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:720}}>
+          <thead><tr><th style={th}>Ime</th><th style={th}>Priimek</th><th style={th}>Telefon</th><th style={th}>Vlečno</th><th style={th}>Prikolica</th><th style={{...th,width:1}}></th></tr></thead>
+          <tbody>
+            {nov&&vrsticaUrej(null,"NOV")}
+            {seznam.map(v=>{const p=pod(v);if(urej===v.id)return vrsticaUrej(v,v.id);return(<tr key={v.id} style={{borderTop:"1px solid #f1f5f9"}}>
+              <td style={{padding:"8px",fontWeight:700,color:"#0f2744",whiteSpace:"nowrap"}}>{p.imeOnly||(p.ime||"").split(" ")[0]}</td>
+              <td style={{padding:"8px",fontWeight:700,color:"#0f2744",whiteSpace:"nowrap"}}>{p.priimekOnly||(p.ime||"").split(" ").slice(1).join(" ")}</td>
+              <td style={{padding:"8px",whiteSpace:"nowrap"}}>{p.tel?<a href={"tel:"+p.tel} style={{color:"#1d4ed8",textDecoration:"none",fontWeight:600}}>{p.tel}</a>:<span style={{color:"#cbd5e1"}}>—</span>}</td>
+              <td style={{padding:"8px",whiteSpace:"nowrap",fontWeight:600}}>{p.vozilo?<span style={{color:vGps(p.vozilo)?"#0f2744":"#b45309"}} title={vGps(p.vozilo)?"":"Ta registrska ni med vozili v Eurowagu"}>{p.vozilo}{vGps(p.vozilo)?"":" ⚠️"}</span>:<span style={{color:"#cbd5e1"}}>—</span>}</td>
+              <td style={{padding:"8px",whiteSpace:"nowrap"}}>{p.prikolica?<span style={{fontWeight:600}}>{p.prikolica}</span>:<span style={{color:"#cbd5e1"}}>—</span>}</td>
+              <td style={{padding:"8px",whiteSpace:"nowrap",textAlign:"right"}}>
+                <button title="Kopiraj za najavo" onClick={()=>kop(najava(v),"Kopirano: "+p.ime)} style={{...mini,marginRight:6}}>📋</button>
+                <button title="Uredi" onClick={()=>zacni(v)} style={{...mini,marginRight:6}}>✏️</button>
+                <button title="Odstrani s seznama" onClick={()=>odstrani(v)} style={{...mini,color:"#b91c1c"}}>🗑</button>
+              </td>
+            </tr>);})}
+          </tbody>
+        </table>
+      </div>
+      <div style={{fontSize:11,color:"#94a3b8",marginTop:8}}>📋 pri vozniku kopira vrstico za najavo: Fuad Smajlovic, tel. +386 41 123 456, vlečno CE-PG-007, prikolica CE-AB-123</div>
+    </div>}
+  </div>);
+}
+
+function VoznikiTab({nalogi,vozniki,onSelect,showToast,gpsVozila,onReload}){
   const [selVoznik,setSelVoznik]=useState(null);
   const [naDopustu,setNaDopustu]=useState(new Set());
   useEffect(()=>{
@@ -1232,13 +1334,14 @@ function VoznikiTab({nalogi,vozniki,onSelect}){
       <button style={{...s.fBtn,marginBottom:12}} onClick={()=>setSelVoznik(null)}>← Nazaj na voznike</button>
       <div style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:14,padding:16,color:"#fff",marginBottom:14,display:"flex",alignItems:"center",gap:12}}>
         <div style={{width:44,height:44,borderRadius:"50%",background:"rgba(255,255,255,0.2)",fontSize:18,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>{selVoznik.ime.charAt(0)}</div>
-        <div><div style={{fontSize:17,fontWeight:800}}>{selVoznik.ime}</div><div style={{fontSize:12,opacity:0.7}}>{selVoznik.vozilo} · {vn.length} nalogov</div></div>
+        <div><div style={{fontSize:17,fontWeight:800}}>{selVoznik.ime}</div><div style={{fontSize:12,opacity:0.7}}>{[selVoznik.vozilo,selVoznik.prikolica,selVoznik.tel].filter(Boolean).join(" · ")} · {vn.length} nalogov</div></div>
       </div>
       {vn.length===0&&<div style={s.empty}>Ni nalogov za tega voznika.</div>}
       {vn.map(n=><NC key={n.id} n={n} onClick={()=>onSelect(n)}/>)}
     </div>);
   }
   return(<div>
+    <KontaktiVoznikov vozniki={vozniki} showToast={showToast} gpsVozila={gpsVozila} onReload={onReload}/>
     <div style={{fontWeight:700,fontSize:15,color:"#0f2744",marginBottom:12}}>Vozniki ({vozniki.length})</div>
     {vozniki.map(v=>{
       const vn=nalogi.filter(n=>n.voznikId===v.id);
@@ -3580,7 +3683,7 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
       {[["vse","Vse smeri"],["izvoz","\U0001F7E2 Izvoz"],["uvoz","\U0001F535 Uvoz"],["domaci","\U0001F3E0 Domaci"]].map(([v,l])=>(
         <button key={v} onClick={()=>setSmerF(v)} style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid "+(smerF===v?"#0f2744":"#e2e8f0"),background:smerF===v?"#0f2744":"#fff",color:smerF===v?"#fff":"#64748b",fontSize:12,fontWeight:700,cursor:"pointer"}}>{l}</button>
       ))}
-      <button onClick={()=>setSamoKonec(x=>!x)} style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid "+(samoKonec?"#16a34a":"#e2e8f0"),background:samoKonec?"#f0fdf4":"#fff",color:samoKonec?"#15803d":"#64748b",fontSize:12,fontWeight:700,cursor:"pointer"}}>{samoKonec?"\u2713 Samo koncna lokacija":"Vsi razkladi"}</button>
+      <button onClick={()=>setSamoKonec(x=>!x)} style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid "+(samoKonec?"#16a34a":"#e2e8f0"),background:samoKonec?"#f0fdf4":"#fff",color:samoKonec?"#15803d":"#64748b",fontSize:12,fontWeight:700,cursor:"pointer"}}>{samoKonec?"✓ Samo koncna lokacija":"Vsi razkladi"}</button>
       <button onClick={izvoziCsv} style={{marginLeft:"auto",padding:"8px 16px",borderRadius:8,border:"none",background:"#0f2744",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Prenesi CSV za Google My Maps</button>
     </div>
     <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 12px",marginBottom:14,fontSize:12,color:"#1d4ed8",lineHeight:1.6}}>
@@ -3605,7 +3708,7 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
                 <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{n.razNaslov||""}</div>
                 <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{(n.stranka||"")+(n.stevilkaNaloga?" | "+n.stevilkaNaloga:"")}</div>
               </div>
-              <button onClick={(e)=>{e.stopPropagation();setIzbran(p=>({...p,[g.kljuc]:(g.koncni&&g.koncni.id===n.id)?"":n.id}));}} title={g.koncni&&g.koncni.id===n.id?"Klikni za odznacitev":"Oznaci kot koncni razklad"} style={{flexShrink:0,alignSelf:"center",fontSize:11,fontWeight:700,padding:"5px 10px",borderRadius:8,cursor:"pointer",border:"1.5px solid "+(g.koncni&&g.koncni.id===n.id?"#16a34a":"#e2e8f0"),background:g.koncni&&g.koncni.id===n.id?"#f0fdf4":"#fff",color:g.koncni&&g.koncni.id===n.id?"#15803d":"#94a3b8"}}>{g.koncni&&g.koncni.id===n.id?"\u2713 koncni":"koncni"}</button>
+              <button onClick={(e)=>{e.stopPropagation();setIzbran(p=>({...p,[g.kljuc]:(g.koncni&&g.koncni.id===n.id)?"":n.id}));}} title={g.koncni&&g.koncni.id===n.id?"Klikni za odznacitev":"Oznaci kot koncni razklad"} style={{flexShrink:0,alignSelf:"center",fontSize:11,fontWeight:700,padding:"5px 10px",borderRadius:8,cursor:"pointer",border:"1.5px solid "+(g.koncni&&g.koncni.id===n.id?"#16a34a":"#e2e8f0"),background:g.koncni&&g.koncni.id===n.id?"#f0fdf4":"#fff",color:g.koncni&&g.koncni.id===n.id?"#15803d":"#94a3b8"}}>{g.koncni&&g.koncni.id===n.id?"✓ koncni":"koncni"}</button>
             </div>
           ))}
         </div>
