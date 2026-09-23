@@ -303,6 +303,8 @@ export default function DispecarPlasca() {
         razDatum: n.raz_datum,
         razCas: n.raz_cas, postanki: n.postanki,
         navodila: n.navodila,
+        kontaktEmail: n.kontakt_email||"",
+        emaili: n.emaili||"",
         voznikId: n.voznik_id,
         poslan: n.poslan_cas || n.created_at,
         sprejetCas: n.sprejet_cas,
@@ -491,6 +493,8 @@ export default function DispecarPlasca() {
         navodila: form.navodila,
         voznik_id: form.voznikId||null,
         original_pdf_url: form.originalPdfUrl||null,
+        kontakt_email: form.kontaktEmail||null,
+        emaili: form.emaili||null,
 znesek_original: form.znesek||null,
 je_slovenska_ddv: form.jeSlovenskaDdv!==undefined?form.jeSlovenskaDdv:null,
       }]).select().single();
@@ -553,7 +557,7 @@ je_slovenska_ddv: form.jeSlovenskaDdv!==undefined?form.jeSlovenskaDdv:null,
 
   const urediNalog=async(id)=>{
     const n=st.nalogi.find(x=>x.id===id);if(!n)return;
-    setForm({editId:id,voznikId:n.voznikId||"",stranka:n.stranka||"",blago:n.blago||"",kolicina:n.kolicina||"",teza:n.teza||"",nakFirma:n.nakFirma||"",nakKraj:n.nakKraj||"",nakNaslov:n.nakNaslov||"",nakReferenca:n.nakReferenca||"",nakDatum:n.nakDatum||"",nakCas:n.nakCas||"",razFirma:n.razFirma||"",razKraj:n.razKraj||"",razNaslov:n.razNaslov||"",razReferenca:n.razReferenca||"",razDatum:n.razDatum||"",razCas:n.razCas||"",navodila:n.navodila||"",kontaktEmail:n.kontaktEmail||"",znesek:n.znesek_original||n.znesekOriginal||"",stevilkaNarocnika:n.stevilka_narocnika||n.stevilkaNarocnika||""});
+    setForm({editId:id,voznikId:n.voznikId||"",stranka:n.stranka||"",blago:n.blago||"",kolicina:n.kolicina||"",teza:n.teza||"",nakFirma:n.nakFirma||"",nakKraj:n.nakKraj||"",nakNaslov:n.nakNaslov||"",nakReferenca:n.nakReferenca||"",nakDatum:n.nakDatum||"",nakCas:n.nakCas||"",razFirma:n.razFirma||"",razKraj:n.razKraj||"",razNaslov:n.razNaslov||"",razReferenca:n.razReferenca||"",razDatum:n.razDatum||"",razCas:n.razCas||"",navodila:n.navodila||"",kontaktEmail:n.kontaktEmail||"",emaili:n.emaili||"",znesek:n.znesek_original||n.znesekOriginal||"",stevilkaNarocnika:n.stevilka_narocnika||n.stevilkaNarocnika||""});
     setModal("nalog");setSelNalog(null);
   };
   const submitEdit=async()=>{
@@ -567,6 +571,7 @@ je_slovenska_ddv: form.jeSlovenskaDdv!==undefined?form.jeSlovenskaDdv:null,
         raz_datum:form.razDatum||null,raz_cas:form.razCas?form.razCas.slice(0,5):null,
         navodila:form.navodila,voznik_id:form.voznikId||null,
         znesek_original:form.znesek||null,stevilka_narocnika:form.stevilkaNarocnika||null,
+        kontakt_email:form.kontaktEmail||null,emaili:form.emaili||null,
       }).eq('id',form.editId);
       if(error)throw error;
       await naložiPodatke();closeModal();showToast("✅ Nalog posodobljen!");
@@ -671,7 +676,7 @@ const handleDrop=async(e,editId)=>{
         slikaB64=await new Promise((res)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.readAsDataURL(file);});
       }
       if(!txt&&!slikaB64)txt=await file.text().catch(()=>file.name);
-            const promptTekst=`Iz tega transportnega naloga izvleci podatke. POZOR za polje "stranka": stranka je ŠPEDICIJA ali LOGISTIČNO PODJETJE ki je poslalo ta nalog (npr. Cargo Partner, DHL, Rooskens, ROCS Trading, Fersped ipd.) — torej tisti ki naroča prevoz. NI nakladna firma, NI razkladna firma, NI prevoznik (JURJEVEC). Poišči logo, glavo dokumenta ali polje "ordered by/Auftraggeber/naročnik" da najdeš pravo stranko. Poišči tudi ceno prevoza (price/rate/freight/Preis/Fracht) in jo vpiši v polje znesek kot število. Vrni SAMO JSON:\n{"stranka":"","stevilkaNarocnika":"","blago":"","kolicina":"","teza":"","nakFirma":"","nakKraj":"","nakNaslov":"","nakReferenca":"","nakDatum":"","nakCas":"","razFirma":"","razKraj":"","razNaslov":"","razReferenca":"","razDatum":"","razCas":"","navodila":"","kontaktEmail":"","znesek":"","jeSlovenskaDdv":true}\n\nPolja:\n- POZOR NAKLAD/RAZKLAD: naklad je kraj PREVZEMA blaga - v dokumentu oznacen kot "Loading place", "Ladestelle", "Beladestelle", "Pickup", "Abholung", "Miejsce zaladunku", "naklad". Razklad je kraj DOSTAVE - "Unloading place", "Entladestelle", "Ablieferung", "Delivery", "Miejsce rozladunku", "razklad". Firmo, kraj, naslov, datum in uro VEDNO vzemi iz istega bloka - ne mesaj podatkov med blokoma. Ne sklepaj po drzavi ali po tem, katera firma je slovenska.\n- stevilkaNarocnika: OBVEZNO poisci stevilko narocila narocnika na dokumentu - izrazi: Stevilka narocila, St. narocila, Narocilo st., Auftragsnummer, Auftrags-Nr., Bestellnummer, Order No., Order number, Ref. No., Transportauftrag Nr. Vpisi tocno tako kot je zapisano (npr "9018/2026"). Ce je res ni, pusti prazno.\n- znesek: cena prevoza v EUR (samo število, npr "850.00"). Poišči v dokumentu besede kot price, rate, freight, Preis, cena.\n- jeSlovenskaDdv: true če je naročnik iz Slovenije, false če je tuj (glede na državo naročnika).\n- kontaktEmail: email za pošiljanje računa (poišči besede invoice, Rechnung, račun, faktura).\n- kolicina: nakladalni metri (LDM) ce so navedeni (npr "13,6 LDM"), sicer stevilo palet in dimenzije palet (npr "24 EUR palet 120x80 cm").\n- teza: skupna teza tovora v kg (npr "18.500 kg").\n- navodila: vse posebne zahteve in navodila iz dokumenta.\nDatumi: YYYY-MM-DD, casi: HH:MM.`;
+            const promptTekst=`Iz tega transportnega naloga izvleci podatke. POZOR za polje "stranka": stranka je ŠPEDICIJA ali LOGISTIČNO PODJETJE ki je poslalo ta nalog (npr. Cargo Partner, DHL, Rooskens, ROCS Trading, Fersped ipd.) — torej tisti ki naroča prevoz. NI nakladna firma, NI razkladna firma, NI prevoznik (JURJEVEC). Poišči logo, glavo dokumenta ali polje "ordered by/Auftraggeber/naročnik" da najdeš pravo stranko. Poišči tudi ceno prevoza (price/rate/freight/Preis/Fracht) in jo vpiši v polje znesek kot število. Vrni SAMO JSON:\n{"stranka":"","stevilkaNarocnika":"","blago":"","kolicina":"","teza":"","nakFirma":"","nakKraj":"","nakNaslov":"","nakReferenca":"","nakDatum":"","nakCas":"","razFirma":"","razKraj":"","razNaslov":"","razReferenca":"","razDatum":"","razCas":"","navodila":"","kontaktEmail":"","emaili":"","znesek":"","jeSlovenskaDdv":true}\n\nPolja:\n- POZOR NAKLAD/RAZKLAD: naklad je kraj PREVZEMA blaga - v dokumentu oznacen kot "Loading place", "Ladestelle", "Beladestelle", "Pickup", "Abholung", "Miejsce zaladunku", "naklad". Razklad je kraj DOSTAVE - "Unloading place", "Entladestelle", "Ablieferung", "Delivery", "Miejsce rozladunku", "razklad". Firmo, kraj, naslov, datum in uro VEDNO vzemi iz istega bloka - ne mesaj podatkov med blokoma. Ne sklepaj po drzavi ali po tem, katera firma je slovenska.\n- stevilkaNarocnika: OBVEZNO poisci stevilko narocila narocnika na dokumentu - izrazi: Stevilka narocila, St. narocila, Narocilo st., Auftragsnummer, Auftrags-Nr., Bestellnummer, Order No., Order number, Ref. No., Transportauftrag Nr. Vpisi tocno tako kot je zapisano (npr "9018/2026"). Ce je res ni, pusti prazno.\n- znesek: cena prevoza v EUR (samo število, npr "850.00"). Poišči v dokumentu besede kot price, rate, freight, Preis, cena.\n- jeSlovenskaDdv: true če je naročnik iz Slovenije, false če je tuj (glede na državo naročnika).\n- kontaktEmail: email za pošiljanje računa (poišči besede invoice, Rechnung, račun, faktura).\n- emaili: VSI e-naslovi, ki se pojavijo kjerkoli na dokumentu - v glavi, nogi, pri kontaktni osebi, pri disponentu, pri nakladu in razkladu. Loci jih z vejico. Ne izpusti nobenega.\n- kolicina: nakladalni metri (LDM) ce so navedeni (npr "13,6 LDM"), sicer stevilo palet in dimenzije palet (npr "24 EUR palet 120x80 cm").\n- teza: skupna teza tovora v kg (npr "18.500 kg").\n- navodila: vse posebne zahteve in navodila iz dokumenta.\nDatumi: YYYY-MM-DD, casi: HH:MM.`;
       const userContent=slikaB64
         ?[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:slikaB64}},{type:"text",text:promptTekst}]
         :promptTekst+"\n\nDokument:\n"+txt;
@@ -680,7 +685,7 @@ const handleDrop=async(e,editId)=>{
       const rawTxt=(data.content?.map(i=>i.text||"").join("")||"").replace(/```json|```/g,"").trim();
       const m=rawTxt.match(/\{[\s\S]*\}/);
       const parsed=JSON.parse(m?m[0]:rawTxt);
-if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = posodobi takoj\nPreklici = odpri za popravek")){await supabase.from('nalogi').update({stranka:parsed.stranka,blago:parsed.blago,kolicina:parsed.kolicina,teza:parsed.teza,nak_firma:parsed.nakFirma,nak_kraj:parsed.nakKraj,nak_naslov:parsed.nakNaslov,nak_referenca:parsed.nakReferenca,nak_datum:parsed.nakDatum||null,nak_cas:parsed.nakCas?parsed.nakCas.slice(0,5):null,raz_firma:parsed.razFirma,raz_kraj:parsed.razKraj,raz_naslov:parsed.razNaslov,raz_referenca:parsed.razReferenca,raz_datum:parsed.razDatum||null,raz_cas:parsed.razCas?parsed.razCas.slice(0,5):null,navodila:parsed.navodila,znesek_original:parsed.znesek||null,stevilka_narocnika:parsed.stevilkaNarocnika||null,...(pdfUrl?{original_pdf_url:pdfUrl}:{})}).eq('id',editId);await naložiPodatke();setSelNalog(null);setModal(null);showToast("✅ Nalog posodobljen!");}else{setForm(f=>({...f,...parsed,editId,originalPdfUrl:pdfUrl||""}));setSelNalog(null);setModal("nalog");}}else{setForm(f=>({...f,...parsed,originalPdfUrl:pdfUrl||""}));setModal("nalog");showToast("✅ AI izpolnil nalog!");}    }catch(err){setForm({...(editId?{editId}:{}),originalPdfUrl:pdfUrl||""});setSelNalog(null);setModal("nalog");showToast("⚠️ AI ni mogel prebrati – izpolni ročno.",true);}
+if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = posodobi takoj\nPreklici = odpri za popravek")){await supabase.from('nalogi').update({stranka:parsed.stranka,blago:parsed.blago,kolicina:parsed.kolicina,teza:parsed.teza,nak_firma:parsed.nakFirma,nak_kraj:parsed.nakKraj,nak_naslov:parsed.nakNaslov,nak_referenca:parsed.nakReferenca,nak_datum:parsed.nakDatum||null,nak_cas:parsed.nakCas?parsed.nakCas.slice(0,5):null,raz_firma:parsed.razFirma,raz_kraj:parsed.razKraj,raz_naslov:parsed.razNaslov,raz_referenca:parsed.razReferenca,raz_datum:parsed.razDatum||null,raz_cas:parsed.razCas?parsed.razCas.slice(0,5):null,navodila:parsed.navodila,znesek_original:parsed.znesek||null,stevilka_narocnika:parsed.stevilkaNarocnika||null,kontakt_email:parsed.kontaktEmail||null,emaili:parsed.emaili||null,...(pdfUrl?{original_pdf_url:pdfUrl}:{})}).eq('id',editId);await naložiPodatke();setSelNalog(null);setModal(null);showToast("✅ Nalog posodobljen!");}else{setForm(f=>({...f,...parsed,editId,originalPdfUrl:pdfUrl||""}));setSelNalog(null);setModal("nalog");}}else{setForm(f=>({...f,...parsed,originalPdfUrl:pdfUrl||""}));setModal("nalog");showToast("✅ AI izpolnil nalog!");}    }catch(err){setForm({...(editId?{editId}:{}),originalPdfUrl:pdfUrl||""});setSelNalog(null);setModal("nalog");showToast("⚠️ AI ni mogel prebrati – izpolni ročno.",true);}
     setAiParsing(false);
   };
 
@@ -3724,10 +3729,13 @@ const Toast=({t})=><div style={{position:"fixed",top:20,right:20,color:"#fff",pa
 
 function KontaktSec({n,vozniki,showToast}){
   const najdi=(t)=>String(t||"").match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)||[];
-  const vsi=[...new Set([...(n.kontaktEmail?[n.kontaktEmail]:[]),...najdi(n.navodila),...najdi(n.opombe),...najdi(n.nakReferenca),...najdi(n.razReferenca)])];
+  const vsi=[...new Set([...(n.kontaktEmail?[n.kontaktEmail]:[]),...najdi(n.emaili),...najdi(n.navodila),...najdi(n.opombe),...najdi(n.nakFirmaKontakt),...najdi(n.nakReferenca),...najdi(n.razReferenca)])];
+  const [dodatni,setDodatni]=useState([]);
+  const vsiE=[...new Set([...vsi,...dodatni])];
   const [izbran,setIzbran]=useState(vsi[0]||"");
   const [rocni,setRocni]=useState("");
   const [posilja,setPosilja]=useState("");
+  const [isce,setIsce]=useState(false);
   const em=(rocni.trim()||izbran||"").trim();
   const vz=(vozniki||[]).find(x=>x.id===n.voznikId);
   const ref=(n.stevilka_narocnika||n.stevilkaNarocnika||n.nakReferenca||n.stevilkaNaloga||"");
@@ -3738,25 +3746,60 @@ function KontaktSec({n,vozniki,showToast}){
   const sablone=[["Potrditev"," - potrditev","potrjujemo prevzem naloga in dodelitev vozila."],["Nalozeno"," - nalozeno","obvescamo vas, da je vozilo nalozeno in na poti na razklad."],["Razlozeno"," - razlozeno","obvescamo vas, da je bilo blago razlozeno. CMR sledi."],["Zamuda"," - zamuda","obvescamo vas o zamudi pri izvedbi naloga. Nov predviden cas prihoda sporocimo v najkrajsem casu."],["Prazno","",""]];
   const telo=(t)=>"Pozdravljeni,\n\n"+(t?t+"\n\n":"")+info+"\n\nV prilogi je originalni nalog.\n\nLep pozdrav,\nMatjaz Jurjevec s.p.";
   const mailto=(z,t)=>"mailto:"+em+"?subject="+encodeURIComponent(z)+"&body="+encodeURIComponent(telo(t).replace("V prilogi je originalni nalog.",pdf?("Originalni nalog: "+pdf):""));
-  const osnutek=async(z,t)=>{
-    if(!em) return showToast("Najprej vpisi e-naslov",true);
+  const osnutek=async(z,t,naslov)=>{
+    const na=(naslov||em||"").trim();
+    if(!na) return showToast("Najprej vpisi e-naslov",true);
     setPosilja(z);
     try{
-      const r=await ustvariOsnutekZaNarocnika({prejemnik:em,zadeva:z,telo:telo(t),pdfUrl:pdf,pdfIme:"Nalog-"+(ref||n.stevilkaNaloga||"")+".pdf"});
+      const r=await ustvariOsnutekZaNarocnika({prejemnik:na,zadeva:z,telo:telo(t),pdfUrl:pdf,pdfIme:"Nalog-"+(ref||n.stevilkaNaloga||"")+".pdf"});
       showToast(r.priponka?"Osnutek z originalom je pripravljen":"Osnutek je pripravljen (brez priloge)");
       if(r.webLink) window.open(r.webLink,"_blank");
     }catch(e){
       showToast("Outlook ni na voljo - odpiram obicajni mail",true);
-      window.location.href=mailto(z,t);
+      window.location.href=mailto(z,t).replace("mailto:"+em,"mailto:"+na);
     }
     setPosilja("");
   };
+  const poisci=async(tiho)=>{
+    if(!pdf)return tiho?null:showToast("Ni originalnega naloga",true);
+    setIsce(true);
+    try{
+      const lib=await new Promise((res,rej)=>{if(window.pdfjsLib)return res(window.pdfjsLib);const sc=document.createElement("script");sc.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";sc.onload=()=>{window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";res(window.pdfjsLib);};sc.onerror=rej;document.head.appendChild(sc);});
+      const ab=await (await fetch(pdf)).arrayBuffer();
+      const doc=await lib.getDocument({data:ab}).promise;
+      let txt="";
+      for(let i=1;i<=Math.min(doc.numPages,6);i++){const pg=await doc.getPage(i);const tc=await pg.getTextContent();txt+=tc.items.map(x=>x.str).join(" ")+"\n";}
+      let e=[...new Set(najdi(txt.replace(/\s*@\s*/g,"@")))];
+      if(!e.length){
+        const pg=await doc.getPage(1);
+        const vp=pg.getViewport({scale:2.0});
+        const cv=document.createElement("canvas");cv.width=vp.width;cv.height=vp.height;
+        await pg.render({canvasContext:cv.getContext("2d"),viewport:vp}).promise;
+        const b64=cv.toDataURL("image/jpeg",0.85).split(",")[1];
+        const r=await fetch("/api/parse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:400,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},{type:"text",text:"Iz tega dokumenta izpisi VSE e-naslove, ki se pojavijo kjerkoli - v glavi, nogi, pri kontaktni osebi, disponentu, nakladu in razkladu. Vrni SAMO JSON: {\"emaili\":[\"...\"]}"}]}]})});
+        const d=await r.json();
+        const t=(d&&d.content&&d.content[0]&&d.content[0].text)||"";
+        e=[...new Set(najdi(t))];
+      }
+      const brez=e.filter(x=>!/jurjevec/i.test(x));
+      const kon=(brez.length?brez:e);
+      if(!kon.length){if(!tiho)showToast("Na originalu ni najdenega e-naslova",true);setIsce(false);return;}
+      setDodatni(kon);
+      if(!izbran&&!rocni)setIzbran(kon[0]);
+      try{await supabase.from("nalogi").update({emaili:kon.join(", ")}).eq("id",n.id);}catch(x){}
+      showToast(kon.length===1?"Najden 1 e-naslov na originalu":"Najdenih "+kon.length+" e-naslovov na originalu");
+    }catch(err){if(!tiho)showToast("Originala ni bilo mogoce prebrati",true);}
+    setIsce(false);
+  };
+  useEffect(()=>{ if(!vsi.length&&pdf)poisci(true); },[]);
   const bs={fontSize:12,fontWeight:700,color:"#0f2744",background:"#fff",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"8px 12px",textDecoration:"none",display:"inline-block",cursor:"pointer"};
   return (<Sec title="✉️ Kontakt narocnika">
-    {vsi.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
-      {vsi.map(e=><button key={e} onClick={()=>{setIzbran(e);setRocni("");}} style={{fontSize:12,fontFamily:"monospace",fontWeight:700,padding:"5px 10px",borderRadius:8,cursor:"pointer",border:"1.5px solid "+(em===e?"#2563eb":"#e2e8f0"),background:em===e?"#eff6ff":"#fff",color:em===e?"#2563eb":"#64748b"}}>{e}</button>)}
+    {pdf&&<div style={{marginBottom:8}}><button onClick={()=>poisci(false)} disabled={isce} style={{...bs,background:"#eff6ff",borderColor:"#bfdbfe",color:"#1d4ed8",opacity:isce?0.6:1}}>{isce?"Berem original...":"🔍 Poisci e-naslove na originalu"}</button></div>}
+    {vsiE.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+      {vsiE.map(e=><button key={e} title={"Klikni: odpre osnutek v Outlooku z originalnim nalogom v prilogi"} onClick={()=>{setIzbran(e);setRocni("");osnutek(zad,"",e);}} style={{fontSize:12,fontFamily:"monospace",fontWeight:700,padding:"5px 10px",borderRadius:8,cursor:"pointer",border:"1.5px solid "+(em===e?"#2563eb":"#e2e8f0"),background:em===e?"#eff6ff":"#fff",color:em===e?"#2563eb":"#64748b"}}>{e}</button>)}
     </div>}
-    <input value={rocni} onChange={ev=>setRocni(ev.target.value)} placeholder={vsi.length?"ali vpisi drug e-naslov...":"vpisi e-naslov narocnika..."} style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",border:"1px solid #e2e8f0",borderRadius:8,fontSize:13,marginBottom:8,outline:"none"}}/>
+    {vsiE.length>0&&<div style={{fontSize:11,color:"#64748b",marginBottom:8}}>Klikni e-naslov in odpre se osnutek v Outlooku z originalnim nalogom v prilogi.</div>}
+    <input value={rocni} onChange={ev=>setRocni(ev.target.value)} placeholder={vsiE.length?"ali vpisi drug e-naslov...":"vpisi e-naslov narocnika..."} style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",border:"1px solid #e2e8f0",borderRadius:8,fontSize:13,marginBottom:8,outline:"none"}}/>
     <div style={{fontSize:11,color:pdf?"#15803d":"#b45309",marginBottom:8}}>{pdf?"Originalni nalog bo prilozen mailu":"Original ni nalozen - mail bo brez priloge"}</div>
     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
       {sablone.map(([l,z,t])=><button key={l} disabled={!em||!!posilja} onClick={()=>osnutek(zad+z,t)} style={{...bs,opacity:(!em||posilja)?0.5:1}}>{posilja===zad+z?"Pripravljam...":l}</button>)}
