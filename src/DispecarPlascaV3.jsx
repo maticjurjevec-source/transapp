@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { supabase } from './supabase'; import PotiTab from './PotiTab';
-import { loginToOutlook, logoutFromOutlook, getActiveAccount, getRecentEmails, getEmailWithAttachments, markEmailAsRead, ustvariOsnutekZaNarocnika, ustvariOsnutekSPrilogami } from './outlookService';
+import { loginToOutlook, logoutFromOutlook, getActiveAccount, getRecentEmails, getEmailWithAttachments, markEmailAsRead, ustvariOsnutekZaNarocnika } from './outlookService';
 
 const pad=(n)=>String(n).padStart(2,"0");
 const fmt=(iso)=>{if(!iso)return"–";const d=new Date(iso);return`${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()}`;};
@@ -970,7 +970,7 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
         )}
         {/* Tabs */}
         <div style={s.tabs}>
-          {[["nalogi","📋 Nalogi"],["poti","Poti"],["tedenski","📅 Tedenski"],["ai","🤖 AI"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["finance","🧾 Finance"],["komunikacija","📨 Komunikacija"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`],["gps",`📍 GPS${gpsOpoz.length>0?` ⚠️${gpsOpoz.length}`:""}`],["razkladi","🗺️ Razkladi"],["dokumenti","📁 Dokumenti"]].map(([id,label])=>(
+          {[["nalogi","📋 Nalogi"],["poti","Poti"],["tedenski","📅 Tedenski"],["ai","🤖 AI"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["finance","🧾 Finance"],["komunikacija","📨 Komunikacija"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`],["gps",`📍 GPS${gpsOpoz.length>0?` ⚠️${gpsOpoz.length}`:""}`],["razkladi","🗺️ Razkladi"]].map(([id,label])=>(
             <button key={id} style={{...s.tab,...(tab===id?s.tabOn:{})}} onClick={()=>setTab(id)}>{label}</button>
           ))}
         </div>
@@ -978,7 +978,6 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
         {tab==="nalogi"&&<NalogiTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog} openNovNalog={openNovNalog} onEdit={urediNalog} onDelete={izbrisiNalog} onAssign={dodelijNalog} onZaFakturo={(id)=>spremenStatus(id,"za_fakturo")} onFakturirano={(id)=>spremenStatus(id,"fakturirano")}/>}
         {tab==="ai"&&<AiIskalnikTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog} showToast={showToast}/>}
         {tab==="tedenski"&&<TedenskiPregledTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog} showToast={showToast}/>}{tab==="poti"&&<PotiTab showToast={showToast}/>}
-        {tab==="dokumenti"&&<DokumentiTab showToast={showToast}/>}
         {tab==="vozniki"&&<VoznikiTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog} showToast={showToast} gpsVozila={gpsVozila} onReload={naložiPodatke}/>}
         {tab==="obracuni"&&<ObracuniTab obracuni={st.obracuni} onSelect={setSelObracun}/>}
         {tab==="finance"&&<FinanceTab st={st} upd={upd} showToast={showToast} supabase={supabase} setActiveTab={setTab}/>}
@@ -1239,150 +1238,6 @@ let _nalogiQ=""; let _nalogiUI=null; function NalogiTab({nalogi,vozniki,onSelect
         </div>}
       </div>);
     })}
-  </div>);
-}
-
-function DokumentiTab({showToast}){
-  const KAT=["Licenca","Zavarovanje","CMR zavarovanje","ADR","Registracija vozila","Potrdilo","Obrazec","Ostalo"];
-  const [dok,setDok]=useState([]);
-  const [load,setLoad]=useState(true);
-  const [q,setQ]=useState("");
-  const [izb,setIzb]=useState({});
-  const [nalaga,setNalaga]=useState(false);
-  const [urej,setUrej]=useState(null);
-  const [f,setF]=useState({naziv:"",kategorija:"Licenca",velja_do:"",opombe:""});
-  const [prejemnik,setPrejemnik]=useState("");
-  const [posilja,setPosilja]=useState(false);
-  const [jez,setJez]=useState("");
-  const nalozi=async()=>{ setLoad(true); const {data,error}=await supabase.from("dokumenti").select("*").order("kategorija").order("naziv"); if(!error&&data)setDok(data); setLoad(false); };
-  useEffect(()=>{ nalozi(); },[]);
-  const dni=(d)=>{ if(!d)return null; return Math.ceil((new Date(d+"T00:00:00").getTime()-Date.now())/86400000); };
-  const stanje=(d)=>{ const x=dni(d.velja_do); if(x===null)return {t:"",b:"",c:""}; if(x<0)return {t:"Poteklo",b:"#fef2f2",c:"#b91c1c"}; if(x<=30)return {t:"Poteče čez "+x+" dni",b:"#fffbeb",c:"#b45309"}; return {t:"Velja do "+d.velja_do,b:"#f0fdf4",c:"#15803d"}; };
-  const seznam=dok.filter(d=>!q||((d.naziv||"")+" "+(d.kategorija||"")+" "+(d.opombe||"")).toLowerCase().includes(q.toLowerCase()));
-  const izbrani=dok.filter(d=>izb[d.id]);
-  const poteka=dok.filter(d=>{const x=dni(d.velja_do);return x!==null&&x<=30;});
-  const naloziDatoteko=async(file,meta)=>{
-    setNalaga(true);
-    try{
-      const ime=`${crypto.randomUUID()}/${Date.now()}-${file.name}`;
-      const {error:e1}=await supabase.storage.from("dokumenti").upload(ime,file,{cacheControl:"3600",upsert:false});
-      if(e1)throw e1;
-      const {data:u}=supabase.storage.from("dokumenti").getPublicUrl(ime);
-      const {error:e2}=await supabase.from("dokumenti").insert([{naziv:meta.naziv||file.name,kategorija:meta.kategorija||"Ostalo",url:u?.publicUrl||"",ime_datoteke:file.name,velja_do:meta.velja_do||null,opombe:meta.opombe||null}]);
-      if(e2)throw e2;
-      showToast("Dokument naložen");
-      setF({naziv:"",kategorija:"Licenca",velja_do:"",opombe:""});
-      await nalozi();
-    }catch(err){ showToast("Napaka: "+((err&&err.message)||"nalaganje ni uspelo"),true); }
-    setNalaga(false);
-  };
-  const shraniUrej=async(d)=>{
-    const {error}=await supabase.from("dokumenti").update({naziv:f.naziv,kategorija:f.kategorija,velja_do:f.velja_do||null,opombe:f.opombe||null}).eq("id",d.id);
-    if(error)return showToast("Napaka: "+error.message,true);
-    setUrej(null); showToast("Shranjeno"); nalozi();
-  };
-  const izbrisi=async(d)=>{
-    if(!window.confirm("Izbrišem dokument "+d.naziv+"?"))return;
-    const {error}=await supabase.from("dokumenti").delete().eq("id",d.id);
-    if(error)return showToast("Napaka: "+error.message,true);
-    try{const pot=decodeURIComponent(String(d.url).split("/dokumenti/")[1]||"");if(pot)await supabase.storage.from("dokumenti").remove([pot]);}catch(e){}
-    showToast("Izbrisano"); nalozi();
-  };
-  const TX={
-    sl:{ime:"SLO",zad:"Dokumenti prevoznika - Matjaz Jurjevec s.p.",telo:"Pozdravljeni,\\n\\nv prilogi posiljamo zahtevane dokumente:\\n\\n%S%\\n\\nCe potrebujete se kaj, nam sporocite.\\n\\nLep pozdrav,\\nMatjaz Jurjevec s.p."},
-    de:{ime:"DE",zad:"Unterlagen des Frachtfuehrers - Matjaz Jurjevec s.p.",telo:"Guten Tag,\\n\\nanbei senden wir Ihnen die angeforderten Unterlagen:\\n\\n%S%\\n\\nFuer weitere Unterlagen stehen wir gerne zur Verfuegung.\\n\\nMit freundlichen Gruessen,\\nMatjaz Jurjevec s.p."},
-    en:{ime:"EN",zad:"Carrier documents - Matjaz Jurjevec s.p.",telo:"Dear Sir or Madam,\\n\\nplease find the requested documents attached:\\n\\n%S%\\n\\nShould you need anything else, please let us know.\\n\\nKind regards,\\nMatjaz Jurjevec s.p."},
-    it:{ime:"IT",zad:"Documenti del vettore - Matjaz Jurjevec s.p.",telo:"Buongiorno,\\n\\nin allegato inviamo i documenti richiesti:\\n\\n%S%\\n\\nRestiamo a disposizione per ulteriori documenti.\\n\\nCordiali saluti,\\nMatjaz Jurjevec s.p."},
-  };
-  const jezikIz=(e)=>{const t=(String(e||"").split("@")[1]||"").toLowerCase();if(!t)return "sl";if(/\.si$/.test(t))return "sl";if(/\.(de|at|ch)$/.test(t))return "de";if(/\.it$/.test(t))return "it";return "en";};
-  const jezik=jez||jezikIz(prejemnik);
-  const posljiIzbrane=async()=>{
-    if(!izbrani.length)return showToast("Najprej označi dokumente",true);
-    if(!prejemnik.trim())return showToast("Vpiši e-naslov prejemnika",true);
-    setPosilja(true);
-    const L=TX[jezik]||TX.sl;
-    const sez=izbrani.map(d=>"- "+d.naziv).join("\\n");
-    try{
-      const r=await ustvariOsnutekSPrilogami({prejemnik:prejemnik.trim(),zadeva:L.zad,telo:L.telo.replace("%S%",sez),priloge:izbrani.map(d=>({url:d.url,ime:d.ime_datoteke||(d.naziv+".pdf")}))});
-      showToast(r.spodletelo&&r.spodletelo.length?("Osnutek pripravljen, brez: "+r.spodletelo.join(", ")):("Osnutek z "+r.priloge+" prilogami je v Outlooku pod Osnutki"));
-      if(r.webLink)window.open(r.webLink,"_blank");
-    }catch(e){ showToast("Outlook ni na voljo - prijavi se v zavihku Email",true); }
-    setPosilja(false);
-  };
-  const novMail=()=>{
-    if(!izbrani.length)return showToast("Najprej označi dokumente",true);
-    const L=TX[jezik]||TX.sl;
-    const sez=izbrani.map(d=>"- "+d.naziv+"\n  "+d.url).join("\n");
-    window.location.href="mailto:"+encodeURIComponent(prejemnik.trim())+"?subject="+encodeURIComponent(L.zad)+"&body="+encodeURIComponent(L.telo.replace("%S%",sez));
-  };
-  const inp={padding:"8px 10px",borderRadius:8,border:"1px solid #cbd5e1",fontSize:13,outline:"none"};
-  const mini={padding:"6px 10px",borderRadius:8,border:"1px solid #cbd5e1",background:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"};
-  return(<div>
-    {poteka.length>0&&<div style={{background:"#fffbeb",border:"1.5px solid #fde68a",borderRadius:12,padding:"10px 14px",marginBottom:12}}>
-      <div style={{fontSize:13,fontWeight:800,color:"#b45309"}}>⚠️ {poteka.length===1?"1 dokument potrebuje pozornost":poteka.length+" dokumentov potrebuje pozornost"}</div>
-      <div style={{fontSize:12,color:"#d97706",marginTop:2}}>{poteka.map(d=>d.naziv+" ("+(dni(d.velja_do)<0?"poteklo":"še "+dni(d.velja_do)+" dni")+")").join(", ")}</div>
-    </div>}
-
-    <div style={{background:"#fff",borderRadius:14,padding:14,marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
-      <div style={{fontWeight:800,fontSize:15,color:"#0f2744",marginBottom:10}}>➕ Naloži nov dokument</div>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
-        <input value={f.naziv} onChange={e=>setF(x=>({...x,naziv:e.target.value}))} placeholder="Naziv (npr. Licenca Skupnosti)" style={{...inp,flex:"2 1 220px",minWidth:0}}/>
-        <select value={f.kategorija} onChange={e=>setF(x=>({...x,kategorija:e.target.value}))} style={{...inp,flex:"1 1 150px"}}>{KAT.map(k=><option key={k}>{k}</option>)}</select>
-        <input type="date" value={f.velja_do} onChange={e=>setF(x=>({...x,velja_do:e.target.value}))} title="Velja do" style={{...inp,flex:"1 1 140px"}}/>
-      </div>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-        <input value={f.opombe} onChange={e=>setF(x=>({...x,opombe:e.target.value}))} placeholder="Opomba (neobvezno)" style={{...inp,flex:"1 1 220px",minWidth:0}}/>
-        <input type="file" id="dokFile" style={{display:"none"}} accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" onChange={e=>{const file=e.target.files&&e.target.files[0];if(!file)return;naloziDatoteko(file,f);e.target.value="";}}/>
-        <label htmlFor="dokFile" style={{background:nalaga?"#94a3b8":"#0f2744",color:"#fff",padding:"9px 16px",borderRadius:10,fontSize:13,fontWeight:700,cursor:nalaga?"default":"pointer"}}>{nalaga?"Nalagam...":"📂 Izberi datoteko in naloži"}</label>
-      </div>
-    </div>
-
-    <div style={{background:"#fff",borderRadius:14,padding:14,marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:10}}>
-        <input value={prejemnik} onChange={e=>setPrejemnik(e.target.value)} placeholder="E-naslov podjetja, ki potrebuje dokumente" style={{...inp,flex:"1 1 240px",minWidth:0}}/>
-        {["sl","de","en","it"].map(k=><button key={k} onClick={()=>setJez(jez===k?"":k)} style={{fontSize:11,fontWeight:800,padding:"6px 9px",borderRadius:7,cursor:"pointer",border:"1.5px solid "+(jezik===k?"#2563eb":"#e2e8f0"),background:jezik===k?"#eff6ff":"#fff",color:jezik===k?"#2563eb":"#94a3b8"}}>{TX[k].ime}</button>)}
-        <button onClick={posljiIzbrane} disabled={posilja||!izbrani.length} title="Osnutek v Outlooku z dokumenti kot prilogami" style={{padding:"9px 16px",borderRadius:10,border:"none",background:(posilja||!izbrani.length)?"#94a3b8":"#16a34a",color:"#fff",fontWeight:700,fontSize:13,cursor:(posilja||!izbrani.length)?"default":"pointer"}}>{posilja?"Pripravljam...":"📎 Osnutek s prilogami ("+izbrani.length+")"}</button>
-        <button onClick={novMail} disabled={!izbrani.length} title="Odpre novo sporocilo v namiznem Outlooku, s povezavami do dokumentov" style={{padding:"9px 16px",borderRadius:10,border:"1.5px solid #cbd5e1",background:"#fff",color:!izbrani.length?"#cbd5e1":"#0f2744",fontWeight:700,fontSize:13,cursor:!izbrani.length?"default":"pointer"}}>✉️ Nov mail s povezavami</button>
-      </div>
-      <div style={{fontSize:11,color:"#94a3b8",marginBottom:8}}>📎 naredi osnutek s pravimi prilogami — v namiznem Outlooku ga najdeš pod Osnutki. ✉️ odpre novo sporočilo v namiznem Outlooku, a namesto prilog vstavi povezave do dokumentov.</div>
-      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Išči dokument..." style={{...inp,width:"100%",boxSizing:"border-box"}}/>
-    </div>
-
-    {load&&<div style={{textAlign:"center",color:"#64748b",fontSize:14,padding:20}}>Nalagam...</div>}
-    {!load&&seznam.length===0&&<div style={{textAlign:"center",color:"#94a3b8",fontSize:14,padding:20}}>Ni naloženih dokumentov.</div>}
-    {KAT.filter(k=>seznam.some(d=>(d.kategorija||"Ostalo")===k)).concat(seznam.some(d=>!KAT.includes(d.kategorija||"Ostalo"))?["Drugo"]:[]).map(k=>(
-      <div key={k} style={{marginBottom:14}}>
-        <div style={{fontSize:12,fontWeight:800,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>{k}</div>
-        {seznam.filter(d=>k==="Drugo"?!KAT.includes(d.kategorija||"Ostalo"):(d.kategorija||"Ostalo")===k).map(d=>{
-          const st=stanje(d); const u=urej===d.id;
-          return(<div key={d.id} style={{background:"#fff",borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",display:"flex",gap:10,alignItems:"flex-start"}}>
-            <input type="checkbox" checked={!!izb[d.id]} onChange={()=>setIzb(p=>({...p,[d.id]:!p[d.id]}))} style={{width:18,height:18,marginTop:2,cursor:"pointer",flexShrink:0}}/>
-            <div style={{flex:1,minWidth:0}}>
-              {u?(<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                <input value={f.naziv} onChange={e=>setF(x=>({...x,naziv:e.target.value}))} style={{...inp,flex:"2 1 180px",minWidth:0}}/>
-                <select value={f.kategorija} onChange={e=>setF(x=>({...x,kategorija:e.target.value}))} style={{...inp,flex:"1 1 130px"}}>{KAT.map(x=><option key={x}>{x}</option>)}</select>
-                <input type="date" value={f.velja_do} onChange={e=>setF(x=>({...x,velja_do:e.target.value}))} style={{...inp,flex:"1 1 130px"}}/>
-                <input value={f.opombe} onChange={e=>setF(x=>({...x,opombe:e.target.value}))} placeholder="Opomba" style={{...inp,flex:"1 1 160px",minWidth:0}}/>
-              </div>):(<>
-                <div style={{fontWeight:700,fontSize:14,color:"#0f2744"}}>{d.naziv}</div>
-                <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{d.ime_datoteke||""}{d.opombe?" · "+d.opombe:""}</div>
-                {st.t&&<span style={{display:"inline-block",marginTop:5,fontSize:11,fontWeight:700,padding:"3px 9px",borderRadius:20,background:st.b,color:st.c}}>{st.t}</span>}
-              </>)}
-            </div>
-            <div style={{display:"flex",gap:6,flexShrink:0,flexWrap:"wrap",justifyContent:"flex-end"}}>
-              {u?(<>
-                <button onClick={()=>shraniUrej(d)} style={{...mini,border:"none",background:"#16a34a",color:"#fff"}}>Shrani</button>
-                <button onClick={()=>setUrej(null)} style={{...mini,color:"#64748b"}}>Prekliči</button>
-              </>):(<>
-                <a href={d.url} target="_blank" rel="noreferrer" style={{...mini,textDecoration:"none",color:"#2563eb",display:"inline-block"}}>Odpri ↗</a>
-                <button title="Uredi" onClick={()=>{setUrej(d.id);setF({naziv:d.naziv||"",kategorija:d.kategorija||"Ostalo",velja_do:d.velja_do||"",opombe:d.opombe||""});}} style={mini}>✏️</button>
-                <button title="Izbriši" onClick={()=>izbrisi(d)} style={{...mini,color:"#b91c1c"}}>🗑</button>
-              </>)}
-            </div>
-          </div>);
-        })}
-      </div>
-    ))}
   </div>);
 }
 
