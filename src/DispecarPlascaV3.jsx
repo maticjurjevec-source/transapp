@@ -3819,32 +3819,57 @@ function KontaktSec({n,vozniki,showToast}){
   const poisci=async(tiho)=>{
     if(!pdf)return tiho?null:showToast("Ni originalnega naloga",true);
     setIsce(true);
+    const _skripta=(url,glob)=>new Promise((res,rej)=>{if(window[glob])return res(window[glob]);const sc=document.createElement("script");sc.src=url;sc.onload=()=>res(window[glob]);sc.onerror=rej;document.head.appendChild(sc);});
+    const _b64=(ab)=>{const b=new Uint8Array(ab);let s="";for(let i=0;i<b.length;i+=8192)s+=String.fromCharCode.apply(null,b.subarray(i,i+8192));return btoa(s);};
+    const _ai=async(b64,tip)=>{
+      const r=await fetch("/api/parse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:400,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:tip||"image/jpeg",data:b64}},{type:"text",text:"Iz tega dokumenta izpisi VSE e-naslove, ki se pojavijo kjerkoli - v glavi, nogi, pri kontaktni osebi, disponentu, nakladu in razkladu. Vrni SAMO JSON: {\"emaili\":[\"...\"]}"}]}]})});
+      const d=await r.json();
+      return (d&&d.content&&d.content[0]&&d.content[0].text)||"";
+    };
     try{
-      const lib=await new Promise((res,rej)=>{if(window.pdfjsLib)return res(window.pdfjsLib);const sc=document.createElement("script");sc.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";sc.onload=()=>{window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";res(window.pdfjsLib);};sc.onerror=rej;document.head.appendChild(sc);});
+      const url=String(pdf).split("?")[0].toLowerCase();
+      const jePdf=/\.pdf$/.test(url);
+      const jeDocx=/\.(docx|dotx)$/.test(url);
+      const jeSlika=/\.(jpg|jpeg|png|gif|webp)$/.test(url);
       const ab=await (await fetch(pdf)).arrayBuffer();
-      const doc=await lib.getDocument({data:ab}).promise;
       let txt="";
-      for(let i=1;i<=Math.min(doc.numPages,6);i++){const pg=await doc.getPage(i);const tc=await pg.getTextContent();txt+=tc.items.map(x=>x.str).join(" ")+"\n";}
-      let e=[...new Set(najdi(txt.replace(/\s*@\s*/g,"@")))];
-      if(!e.length){
+      let doc=null;
+      if(jePdf){
+        const lib=await _skripta("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js","pdfjsLib");
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        doc=await lib.getDocument({data:ab}).promise;
+        for(let i=1;i<=Math.min(doc.numPages,6);i++){const pg=await doc.getPage(i);const tc=await pg.getTextContent();txt+=tc.items.map(x=>x.str).join(" ")+"\n";}
+      }else if(jeDocx){
+        const JZ=await _skripta("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js","JSZip");
+        const zip=await JZ.loadAsync(ab);
+        for(const ime of Object.keys(zip.files)){
+          if(!/^word\/(document|header\d*|footer\d*|footnotes|endnotes)\.xml$/.test(ime))continue;
+          const x=await zip.file(ime).async("string");
+          txt+=x.replace(/<\/w:p>/g,"\n").replace(/<[^>]+>/g,"")+"\n";
+        }
+      }else if(!jeSlika){
+        try{txt=new TextDecoder("windows-1252").decode(new Uint8Array(ab));}catch(x){txt="";}
+      }
+      let e=[...new Set(najdi(txt.replace(/\s*@\s*/g,"@").replace(/&amp;/g,"&")))];
+      if(!e.length&&jeSlika){
+        const tip=/\.png$/.test(url)?"image/png":/\.gif$/.test(url)?"image/gif":/\.webp$/.test(url)?"image/webp":"image/jpeg";
+        e=[...new Set(najdi(await _ai(_b64(ab),tip)))];
+      }
+      if(!e.length&&jePdf&&doc){
         const pg=await doc.getPage(1);
         const vp=pg.getViewport({scale:2.0});
         const cv=document.createElement("canvas");cv.width=vp.width;cv.height=vp.height;
         await pg.render({canvasContext:cv.getContext("2d"),viewport:vp}).promise;
-        const b64=cv.toDataURL("image/jpeg",0.85).split(",")[1];
-        const r=await fetch("/api/parse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:400,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},{type:"text",text:"Iz tega dokumenta izpisi VSE e-naslove, ki se pojavijo kjerkoli - v glavi, nogi, pri kontaktni osebi, disponentu, nakladu in razkladu. Vrni SAMO JSON: {\"emaili\":[\"...\"]}"}]}]})});
-        const d=await r.json();
-        const t=(d&&d.content&&d.content[0]&&d.content[0].text)||"";
-        e=[...new Set(najdi(t))];
+        e=[...new Set(najdi(await _ai(cv.toDataURL("image/jpeg",0.85).split(",")[1],"image/jpeg")))];
       }
       const brez=e.filter(x=>!/jurjevec/i.test(x));
-      const kon=(brez.length?brez:e);
+      const kon=(brez.length?brez:e).filter(x=>!/\.(png|jpg|jpeg|gif|wmf|emf|xml|rels)$/i.test(x));
       if(!kon.length){if(!tiho)showToast("Na originalu ni najdenega e-naslova",true);setIsce(false);return;}
       setDodatni(kon);
       if(!izbran&&!rocni)setIzbran(kon[0]);
       try{await supabase.from("nalogi").update({emaili:kon.join(", ")}).eq("id",n.id);}catch(x){}
       showToast(kon.length===1?"Najden 1 e-naslov na originalu":"Najdenih "+kon.length+" e-naslovov na originalu");
-    }catch(err){if(!tiho)showToast("Originala ni bilo mogoce prebrati",true);}
+    }catch(err){if(!tiho)showToast("Originala ni bilo mogoce prebrati - poskusi rocno",true);}
     setIsce(false);
   };
   useEffect(()=>{ if(!vsi.length&&pdf)poisci(true); },[]);
