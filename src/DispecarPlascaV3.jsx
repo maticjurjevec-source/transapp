@@ -3774,7 +3774,7 @@ function KontaktSec({n,vozniki,showToast}){
   const najdi=(t)=>String(t||"").match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)||[];
   const vsi=[...new Set([...(n.kontaktEmail?[n.kontaktEmail]:[]),...najdi(n.emaili),...najdi(n.navodila),...najdi(n.opombe),...najdi(n.nakFirmaKontakt),...najdi(n.nakReferenca),...najdi(n.razReferenca)])];
   const [dodatni,setDodatni]=useState([]);
-  const vsiE=[...new Set([...vsi,...dodatni])];
+  const vsiE=(()=>{const vid=new Set(),out=[];[...vsi,...dodatni].forEach(x=>{const k=String(x||"").toLowerCase();if(!k||vid.has(k))return;vid.add(k);out.push(x);});return out;})();
   const [izbran,setIzbran]=useState(vsi[0]||"");
   const [rocni,setRocni]=useState("");
   const [posilja,setPosilja]=useState("");
@@ -3870,6 +3870,7 @@ function KontaktSec({n,vozniki,showToast}){
         await pg.render({canvasContext:cv.getContext("2d"),viewport:vp}).promise;
         e=[...new Set(najdi(await _ai(cv.toDataURL("image/jpeg",0.85).split(",")[1],"image/jpeg")))];
       }
+      const _vid=new Set();e=e.filter(x=>{const k=String(x||"").toLowerCase();if(_vid.has(k))return false;_vid.add(k);return true;});
       const brez=e.filter(x=>!/jurjevec/i.test(x));
       const kon=(brez.length?brez:e).filter(x=>!/\.(png|jpg|jpeg|gif|wmf|emf|xml|rels)$/i.test(x));
       if(!kon.length){if(!tiho)showToast("Na originalu ni najdenega e-naslova",true);setIsce(false);return;}
@@ -3880,7 +3881,7 @@ function KontaktSec({n,vozniki,showToast}){
     }catch(err){if(!tiho)showToast("Originala ni bilo mogoce prebrati - poskusi rocno",true);}
     setIsce(false);
   };
-  useEffect(()=>{ if(!vsi.length&&pdf)poisci(true); },[]);
+  useEffect(()=>{ if(pdf&&!String(n.emaili||"").trim())poisci(true); },[]);
   const bs={fontSize:12,fontWeight:700,color:"#0f2744",background:"#fff",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"8px 12px",textDecoration:"none",display:"inline-block",cursor:"pointer"};
   return (<Sec title="✉️ Kontakt narocnika">
     {pdf&&<div style={{marginBottom:8}}><button onClick={()=>poisci(false)} disabled={isce} style={{...bs,background:"#eff6ff",borderColor:"#bfdbfe",color:"#1d4ed8",opacity:isce?0.6:1}}>{isce?"Berem original...":"🔍 Poisci e-naslove na originalu"}</button></div>}
