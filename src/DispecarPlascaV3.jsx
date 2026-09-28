@@ -3620,6 +3620,8 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
   const [samoKonec,setSamoKonec]=useState(true);
   const [izbran,setIzbran]=useState(()=>{try{return JSON.parse(localStorage.getItem("razkladi_koncni")||"{}");}catch(e){return{};}});
   useEffect(()=>{try{localStorage.setItem("razkladi_koncni",JSON.stringify(izbran));}catch(e){}},[izbran]);
+  const [vecBrez,setVecBrez]=useState(()=>{try{return JSON.parse(localStorage.getItem("razkladi_brez")||"{}");}catch(e){return{};}});
+  useEffect(()=>{try{localStorage.setItem("razkladi_brez",JSON.stringify(vecBrez));}catch(e){}},[vecBrez]);
   const obseg=(()=>{
     const d=new Date();d.setHours(0,0,0,0);
     const dan=d.getDay()||7;
@@ -3640,6 +3642,12 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
     });
     const r=Object.values(m);
     r.forEach(g=>{
+      if(g.kljuc==="_brez"){
+        g.vec=true;
+        g.izbrani=g.postanki.filter(x=>vecBrez[x.id]);
+        g.koncni=null;
+        return;
+      }
       const rocno=izbran[g.kljuc];
       if(rocno===""){ g.koncni=null; g.rocno=true; }
       else { const naj=g.postanki.find(x=>x.id===rocno); g.koncni=naj||g.postanki[g.postanki.length-1]||null; g.rocno=!!naj; }
@@ -3649,7 +3657,8 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
   const ff=(d)=>String(d.getDate()).padStart(2,"0")+"."+String(d.getMonth()+1).padStart(2,"0");
   const fd=(x)=>{if(!x)return"";const d=new Date(x+"T12:00:00");return DNEVI[d.getDay()].slice(0,3)+" "+String(d.getDate()).padStart(2,"0")+"."+String(d.getMonth()+1).padStart(2,"0");};
   const gmapZaVozilo=(g)=>{
-    const t=g.postanki.map(naslovZa).filter(Boolean);
+    const vir=(g.vec&&g.izbrani&&g.izbrani.length)?g.izbrani:g.postanki;
+    const t=vir.map(naslovZa).filter(Boolean);
     if(!t.length)return null;
     if(t.length===1)return "https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(t[0]);
     const wp=t.slice(1,-1).map(encodeURIComponent).join("%7C");
@@ -3660,7 +3669,7 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
     const q=(x)=>{const t=String(x==null?"":x).replace(/[\r\n]+/g," ").trim();return /[",;]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t;};
     const vrstice=["Naziv,Naslov,Tip,Vozilo,Voznik,Kdaj,Stranka,Nalog"];
     const zaIzvoz=[];
-    skupine.forEach(g=>(samoKonec?(g.koncni?[g.koncni]:[]):g.postanki).forEach(n=>zaIzvoz.push(n)));
+    skupine.forEach(g=>(samoKonec?(g.vec?(g.izbrani||[]):(g.koncni?[g.koncni]:[])):g.postanki).forEach(n=>zaIzvoz.push(n)));
     zaIzvoz.forEach(n=>{
       const v=(vozniki||[]).find(x=>x.id===n.voznikId);
       const voz=(v&&v.vozilo)||"brez vozila";
@@ -3725,7 +3734,7 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",borderBottom:"1px solid #f1f5f9",flexWrap:"wrap"}}>
           <div style={{fontSize:15,fontWeight:800,color:"#0f2744"}}>{g.vozilo}</div>
           <div style={{fontSize:12,color:"#64748b"}}>{g.voznik}</div>
-          <span style={{background:"#f1f5f9",color:"#0f2744",fontSize:12,fontWeight:800,padding:"3px 10px",borderRadius:20}}>{g.postanki.length}</span>
+          <span style={{background:"#f1f5f9",color:"#0f2744",fontSize:12,fontWeight:800,padding:"3px 10px",borderRadius:20}}>{g.postanki.length}</span>{g.vec&&<>{(g.izbrani&&g.izbrani.length>0)&&<span style={{background:"#f0fdf4",color:"#15803d",fontSize:12,fontWeight:800,padding:"3px 10px",borderRadius:20}}>{"izbranih "+g.izbrani.length}</span>}<button onClick={()=>setVecBrez(p=>{const c={...p};g.postanki.forEach(x=>{delete c[x.id];});return c;})} style={{fontSize:11,fontWeight:700,color:"#64748b",background:"#fff",border:"1px solid #e2e8f0",borderRadius:8,padding:"4px 10px",cursor:"pointer"}}>Počisti</button><button onClick={()=>setVecBrez(p=>{const c={...p};g.postanki.forEach(x=>{c[x.id]=true;});return c;})} style={{fontSize:11,fontWeight:700,color:"#0f2744",background:"#fff",border:"1px solid #e2e8f0",borderRadius:8,padding:"4px 10px",cursor:"pointer"}}>Izberi vse</button></>}
           {url&&<a href={url} target="_blank" rel="noreferrer" style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:"#0f2744",background:"#fff",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"6px 12px",textDecoration:"none"}}>Odpri v Google Maps</a>}
         </div>
         <div style={{padding:"8px 12px 12px"}}>
@@ -3737,7 +3746,8 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
                 <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{n.razNaslov||""}</div>
                 <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{(n.stranka||"")+(n.stevilkaNaloga?" | "+n.stevilkaNaloga:"")}</div>
               </div>
-              <button onClick={(e)=>{e.stopPropagation();setIzbran(p=>({...p,[g.kljuc]:(g.koncni&&g.koncni.id===n.id)?"":n.id}));}} title={g.koncni&&g.koncni.id===n.id?"Klikni za odznacitev":"Oznaci kot koncni razklad"} style={{flexShrink:0,alignSelf:"center",fontSize:11,fontWeight:700,padding:"5px 10px",borderRadius:8,cursor:"pointer",border:"1.5px solid "+(g.koncni&&g.koncni.id===n.id?"#16a34a":"#e2e8f0"),background:g.koncni&&g.koncni.id===n.id?"#f0fdf4":"#fff",color:g.koncni&&g.koncni.id===n.id?"#15803d":"#94a3b8"}}>{g.koncni&&g.koncni.id===n.id?"✓ koncni":"koncni"}</button>
+              {(()=>{const ozn=g.vec?!!vecBrez[n.id]:!!(g.koncni&&g.koncni.id===n.id);
+                return <button onClick={(e)=>{e.stopPropagation();if(g.vec)setVecBrez(p=>({...p,[n.id]:!p[n.id]}));else setIzbran(p=>({...p,[g.kljuc]:ozn?"":n.id}));}} title={g.vec?(ozn?"Klikni za odznacitev":"Oznaci za zemljevid"):(ozn?"Klikni za odznacitev":"Oznaci kot koncni razklad")} style={{flexShrink:0,alignSelf:"center",fontSize:11,fontWeight:700,padding:"5px 10px",borderRadius:8,cursor:"pointer",border:"1.5px solid "+(ozn?"#16a34a":"#e2e8f0"),background:ozn?"#f0fdf4":"#fff",color:ozn?"#15803d":"#94a3b8"}}>{g.vec?(ozn?"✓ izbran":"izberi"):(ozn?"✓ koncni":"koncni")}</button>;})()}
             </div>
           ))}
         </div>
