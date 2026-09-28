@@ -3620,6 +3620,8 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
   const [samoKonec,setSamoKonec]=useState(true);
   const [izbran,setIzbran]=useState(()=>{try{return JSON.parse(localStorage.getItem("razkladi_koncni")||"{}");}catch(e){return{};}});
   useEffect(()=>{try{localStorage.setItem("razkladi_koncni",JSON.stringify(izbran));}catch(e){}},[izbran]);
+  const [zVozili,setZVozili]=useState(()=>{try{return localStorage.getItem("razkladi_zvozili")==="1";}catch(e){return false;}});
+  useEffect(()=>{try{localStorage.setItem("razkladi_zvozili",zVozili?"1":"0");}catch(e){}},[zVozili]);
   const [vecBrez,setVecBrez]=useState(()=>{try{return JSON.parse(localStorage.getItem("razkladi_brez")||"{}");}catch(e){return{};}});
   useEffect(()=>{try{localStorage.setItem("razkladi_brez",JSON.stringify(vecBrez));}catch(e){}},[vecBrez]);
   const obseg=(()=>{
@@ -3674,7 +3676,7 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
       const v=(vozniki||[]).find(x=>x.id===n.voznikId);
       const voz=(v&&v.vozilo)||"brez vozila";
       vrstice.push([
-        voz+" - razklad "+fd(n.razDatum)+" "+(n.razKraj||""),
+        ((v&&v.ime)||"Brez voznika")+" - "+(n.razKraj||"")+" "+fd(n.razDatum)+(n.razCas?" "+n.razCas:""),
         naslovZa(n),
         "Razklad",
         voz,
@@ -3685,14 +3687,14 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
       ].map(q).join(","));
     });
     const _nr=(x)=>(x||"").toUpperCase().replace(/[\s.-]/g,"");
-    (gpsVozila||[]).forEach(v=>{
+    (zVozili?(gpsVozila||[]):[]).forEach(v=>{
       if(!v.lat||!v.lon)return;
       const vo=(vozniki||[]).find(x=>_nr(x.vozilo)===_nr(v.reg_tablica));
       const g=vo?skupine.find(x=>x.kljuc===vo.id):null;
       const zadnji=(g&&g.koncni)||null;
       const kdaj=zadnji?("Prazen "+fd(zadnji.razDatum)+(zadnji.razCas?" ob "+zadnji.razCas:"")+" v "+(zadnji.razKraj||"")):((g&&g.postanki&&g.postanki.length)?"Koncna lokacija ni dolocena":"Ni razklada ta teden");
       vrstice.push([
-        v.reg_tablica+" - "+(zadnji?("prazen "+fd(zadnji.razDatum)):"prost"),
+        ((vo&&vo.ime)||v.voznik||v.reg_tablica)+" - zdaj ("+v.reg_tablica+")",
         v.lat+", "+v.lon,
         "Vozilo zdaj",
         v.reg_tablica,
@@ -3708,7 +3710,7 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
     a.download="razkladi_"+ff(obseg.od).replace(".","-")+"_"+ff(obseg.do).replace(".","-")+".csv";
     document.body.appendChild(a);a.click();document.body.removeChild(a);
     setTimeout(()=>URL.revokeObjectURL(a.href),2000);
-    showToast("CSV pripravljen - uvozi ga v Google My Maps");
+    showToast(zVozili?"CSV pripravljen (z lokacijami vozil) - uvozi ga v Google My Maps":"CSV pripravljen - uvozi ga v Google My Maps");
   };
   return(<div>
     <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
@@ -3721,6 +3723,7 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
       {[["vse","Vse smeri"],["izvoz","\U0001F7E2 Izvoz"],["uvoz","\U0001F535 Uvoz"],["domaci","\U0001F3E0 Domaci"]].map(([v,l])=>(
         <button key={v} onClick={()=>setSmerF(v)} style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid "+(smerF===v?"#0f2744":"#e2e8f0"),background:smerF===v?"#0f2744":"#fff",color:smerF===v?"#fff":"#64748b",fontSize:12,fontWeight:700,cursor:"pointer"}}>{l}</button>
       ))}
+      <button onClick={()=>setZVozili(x=>!x)} title="V CSV doda tudi trenutne lokacije vozil" style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid "+(zVozili?"#2563eb":"#e2e8f0"),background:zVozili?"#eff6ff":"#fff",color:zVozili?"#1d4ed8":"#64748b",fontSize:12,fontWeight:700,cursor:"pointer"}}>{zVozili?"✓ Z lokacijami vozil":"Brez lokacij vozil"}</button>
       <button onClick={()=>setSamoKonec(x=>!x)} style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid "+(samoKonec?"#16a34a":"#e2e8f0"),background:samoKonec?"#f0fdf4":"#fff",color:samoKonec?"#15803d":"#64748b",fontSize:12,fontWeight:700,cursor:"pointer"}}>{samoKonec?"✓ Samo koncna lokacija":"Vsi razkladi"}</button>
       <button onClick={izvoziCsv} style={{marginLeft:"auto",padding:"8px 16px",borderRadius:8,border:"none",background:"#0f2744",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Prenesi CSV za Google My Maps</button>
     </div>
