@@ -3829,15 +3829,22 @@ function ZemljevidGumbi({firma,kraj,naslov,datum,cas,n,vozniki,gpsVozila}){
         km=2*R*Math.asin(Math.sqrt(a))*1.25; zracna=true;
       }
       const voznja=km/hitrost;
-      const odmori=Math.floor(voznja/4.5)*0.75;
-      const skupaj=voznja+odmori;
+      let ostalo=voznja,odmori=0,pocitki=0,odOdmora=0,danesVozil=0;
+      while(ostalo>0.0001){
+        const korak=Math.min(ostalo,4.5-odOdmora,9-danesVozil);
+        ostalo-=korak;odOdmora+=korak;danesVozil+=korak;
+        if(ostalo<=0.0001)break;
+        if(danesVozil>=9-0.0001){pocitki+=9;danesVozil=0;odOdmora=0;}
+        else if(odOdmora>=4.5-0.0001){odmori+=0.75;odOdmora=0;}
+      }
+      const skupaj=voznja+odmori+pocitki;
       const prihod=new Date(Date.now()+skupaj*3600000);
       let zamuda=null;
       if(datum){
         const rok=new Date(datum+"T"+((cas&&cas.length>=4)?cas.slice(0,5):"23:59")+":00");
         zamuda=(prihod.getTime()-rok.getTime())/3600000;
       }
-      setEta({km,voznja,odmori,skupaj,prihod,zamuda,zracna});
+      setEta({km,voznja,odmori,pocitki,skupaj,prihod,zamuda,zracna});
     }catch(e){setEta({napaka:(e&&e.message)||"Izracun ni uspel"});}
     setRacuna(false);
   };
@@ -3854,9 +3861,9 @@ function ZemljevidGumbi({firma,kraj,naslov,datum,cas,n,vozniki,gpsVozila}){
     {eta&&<div style={{marginTop:8,fontSize:12,borderRadius:8,padding:"8px 10px",background:eta.napaka?"#fef2f2":"#eff6ff",border:"1px solid "+(eta.napaka?"#fecaca":"#bfdbfe"),color:eta.napaka?"#b91c1c":"#1d4ed8"}}>
       {eta.napaka?eta.napaka:<>
         <div style={{fontWeight:800}}>{"Prihod "+dcas(eta.prihod)}</div>
-        <div style={{marginTop:2}}>{Math.round(eta.km)+" km · "+hm(eta.voznja)+" vožnje"+(eta.odmori>0?" + "+hm(eta.odmori)+" odmora":"")+" · pri "+hitrost+" km/h"}</div>
+        <div style={{marginTop:2}}>{Math.round(eta.km)+" km · "+hm(eta.voznja)+" vožnje"+(eta.odmori>0?" + "+hm(eta.odmori)+" odmorov":"")+(eta.pocitki>0?" + "+hm(eta.pocitki)+" počitka":"")+" · pri "+hitrost+" km/h"}</div>
         {eta.zracna&&<div style={{marginTop:2,color:"#94a3b8"}}>Cestna razdalja ni bila dosegljiva – ocena iz zračne črte.</div>}
-        <div style={{marginTop:2,color:"#94a3b8"}}>Ocena iz lege vozila, brez dnevnega počitka in časa na nakladu.</div>
+        <div style={{marginTop:2,color:"#94a3b8"}}>{"Ocena iz lege vozila: 45 min odmora na 4,5 h in 9 h počitka po 9 h vožnje. Brez ur, ki jih je voznik danes že porabil, in brez časa na nakladu."}</div>
       </>}
     </div>}
   </div>;
