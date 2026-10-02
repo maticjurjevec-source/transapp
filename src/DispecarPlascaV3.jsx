@@ -815,8 +815,8 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
             </div>
           </Sec>
           <Sec title="📦 Blago"><R label="Blago" val={n.blago}/><R label="Cena" val={(n.znesek_original||n.znesekOriginal)?((n.znesek_original||n.znesekOriginal)+" EUR"):null} bold/><R label="Količina" val={n.kolicina}/><R label="Teža" val={n.teza}/></Sec>
-          <Sec title="📍 Naklad"><R label="Firma" val={n.nakFirma} bold/><R label="Kraj" val={n.nakKraj}/><R label="Naslov" val={n.nakNaslov}/><R label="Referenca" val={n.nakReferenca} mono/><R label="Datum" val={n.nakDatum?(n.nakCas?`${fmt(n.nakDatum)} ob ${n.nakCas}`:fmt(n.nakDatum)):"–"}/><ZemljevidGumbi firma={n.nakFirma} kraj={n.nakKraj} naslov={n.nakNaslov} n={n} vozniki={vozniki} gpsVozila={gpsVozila}/></Sec>
-          <Sec title="🏁 Razklad"><R label="Firma" val={n.razFirma} bold/><R label="Kraj" val={n.razKraj}/><R label="Naslov" val={n.razNaslov}/><R label="Referenca" val={n.razReferenca} mono/><R label="Datum" val={n.razDatum?(n.razCas?`${fmt(n.razDatum)} ob ${n.razCas}`:fmt(n.razDatum)):"–"}/><ZemljevidGumbi firma={n.razFirma} kraj={n.razKraj} naslov={n.razNaslov} n={n} vozniki={vozniki} gpsVozila={gpsVozila}/></Sec>
+          <Sec title="📍 Naklad"><R label="Firma" val={n.nakFirma} bold/><R label="Kraj" val={n.nakKraj}/><R label="Naslov" val={n.nakNaslov}/><R label="Referenca" val={n.nakReferenca} mono/><R label="Datum" val={n.nakDatum?(n.nakCas?`${fmt(n.nakDatum)} ob ${n.nakCas}`:fmt(n.nakDatum)):"–"}/><ZemljevidGumbi firma={n.nakFirma} kraj={n.nakKraj} naslov={n.nakNaslov} datum={n.nakDatum} cas={n.nakCas} n={n} vozniki={vozniki} gpsVozila={gpsVozila}/></Sec>
+          <Sec title="🏁 Razklad"><R label="Firma" val={n.razFirma} bold/><R label="Kraj" val={n.razKraj}/><R label="Naslov" val={n.razNaslov}/><R label="Referenca" val={n.razReferenca} mono/><R label="Datum" val={n.razDatum?(n.razCas?`${fmt(n.razDatum)} ob ${n.razCas}`:fmt(n.razDatum)):"–"}/><ZemljevidGumbi firma={n.razFirma} kraj={n.razKraj} naslov={n.razNaslov} datum={n.razDatum} cas={n.razCas} n={n} vozniki={vozniki} gpsVozila={gpsVozila}/></Sec>
           {Array.isArray(n.postanki)&&n.postanki.length>0&&<Sec title="Vsi postanki"><div>{n.postanki.map((p,i)=><div key={i} style={{fontSize:13,padding:"8px 10px",background:p.tip==="naklad"?"#eff6ff":"#fef2f2",border:"1px solid #e2e8f0",borderRadius:8,marginBottom:6}}><span style={{fontWeight:700,color:p.tip==="naklad"?"#1d4ed8":"#dc2626"}}>{p.tip==="naklad"?"NAKLAD":"RAZKLAD"}</span> {(p.firma?p.firma+" - ":"")+(p.kraj||"")+(p.naslov?", "+p.naslov:"")}{(p.datum?" ("+p.datum+(p.cas?" "+p.cas:"")+")":"")}{(p.naslov||p.kraj)&&<a href={"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent([p.firma,p.naslov||p.kraj].filter(Boolean).join(", "))} target="_blank" rel="noreferrer" style={{marginLeft:8,fontSize:12,fontWeight:700,color:"#2563eb",textDecoration:"none",whiteSpace:"nowrap"}}>🗺️ zemljevid</a>}</div>)}</div></Sec>}{n.navodila&&<Sec title="⚠️ Navodila"><div style={{fontSize:13,background:"#fffbeb",borderRadius:8,padding:"10px 12px",border:"1px solid #fde68a"}}>{n.navodila}</div></Sec>}
           {(n.stevilka_narocnika||n.stevilkaNarocnika)&&<Sec title="📋 Št. naloga naročnika"><div style={{fontFamily:"monospace",fontSize:16,fontWeight:800,color:"#2563eb"}}>{n.stevilka_narocnika||n.stevilkaNarocnika}</div></Sec>}
                     <KontaktSec n={n} vozniki={vozniki} showToast={showToast}/>
@@ -3764,8 +3764,12 @@ const R=({label,val,bold,mono})=><div style={{display:"flex",justifyContent:"spa
 const I=({label,val,set,ph,type="text"})=><div><label style={s.lbl}>{label}</label><input style={s.inp} type={type} value={val||""} onChange={e=>set(e.target.value)} placeholder={ph||""}/></div>;
 const Toast=({t})=><div style={{position:"fixed",top:20,right:20,color:"#fff",padding:"12px 24px",borderRadius:12,fontWeight:700,fontSize:14,zIndex:400,background:t.err?"#dc2626":"#16a34a",boxShadow:"0 4px 20px rgba(0,0,0,0.25)"}}>{t.txt}</div>;
 
-function ZemljevidGumbi({firma,kraj,naslov,n,vozniki,gpsVozila}){
+function ZemljevidGumbi({firma,kraj,naslov,datum,cas,n,vozniki,gpsVozila}){
   const cilj=[firma,naslov||kraj].filter(Boolean).join(", ");
+  const [eta,setEta]=useState(null);
+  const [racuna,setRacuna]=useState(false);
+  const [hitrost,setHitrost]=useState(()=>{const x=parseInt(localStorage.getItem("eta_hitrost")||"75",10);return isNaN(x)?75:x;});
+  useEffect(()=>{try{localStorage.setItem("eta_hitrost",String(hitrost));}catch(e){}},[hitrost]);
   if(!cilj)return null;
   const q=encodeURIComponent(cilj);
   const _nr=(x)=>(x||"").toUpperCase().replace(/[\s.-]/g,"");
@@ -3776,10 +3780,65 @@ function ZemljevidGumbi({firma,kraj,naslov,n,vozniki,gpsVozila}){
   const _ozn=_gv?_gv.reg_tablica:"moja lokacija";
   const _tip=_gv?("Od trenutne lege vozila "+_gv.reg_tablica+(_gv.lokacija?" ("+_gv.lokacija+")":"")):(_vo?("Vozilo "+(_vo.vozilo||"")+" nima GPS lege - navigacija gre od tvoje lokacije"):"Voznik ni dodeljen - navigacija gre od tvoje lokacije");
   const st={fontSize:12,fontWeight:700,textDecoration:"none",borderRadius:8,padding:"7px 12px",display:"inline-block"};
-  return <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10,paddingTop:10,borderTop:"1px solid #f1f5f9"}}>
-    <a href={"https://www.google.com/maps/search/?api=1&query="+q} target="_blank" rel="noreferrer" style={{...st,background:"#0f2744",color:"#fff"}}>🗺️ Poglej na zemljevidu</a>
-    <a href={_nav} target="_blank" rel="noreferrer" title={_tip} style={{...st,background:"#fff",color:"#2563eb",border:"1.5px solid #bfdbfe"}}>{"🧭 Navigiraj ("+_ozn+")"}</a>
-    <button onClick={()=>{try{const t=document.createElement("textarea");t.value=cilj;t.style.position="fixed";t.style.top="-2000px";document.body.appendChild(t);t.select();document.execCommand("copy");document.body.removeChild(t);}catch(e){} try{if(navigator.clipboard)navigator.clipboard.writeText(cilj).catch(()=>{});}catch(e){}}} style={{...st,background:"#fff",color:"#64748b",border:"1.5px solid #e2e8f0",cursor:"pointer"}}>📋 Kopiraj naslov</button>
+  const hm=(h)=>{const m=Math.round(h*60);return Math.floor(m/60)+" h "+String(m%60).padStart(2,"0")+" min";};
+  const dcas=(d)=>{const dn=new Date();const jutri=new Date(dn);jutri.setDate(dn.getDate()+1);
+    const iste=(a,b)=>a.getDate()===b.getDate()&&a.getMonth()===b.getMonth()&&a.getFullYear()===b.getFullYear();
+    const ura=String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+    if(iste(d,dn))return "danes ob "+ura;
+    if(iste(d,jutri))return "jutri ob "+ura;
+    return String(d.getDate()).padStart(2,"0")+"."+String(d.getMonth()+1).padStart(2,"0")+". ob "+ura;};
+  const izracunaj=async()=>{
+    if(!_gv)return;
+    setRacuna(true);setEta(null);
+    try{
+      const gr=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+q,{headers:{"Accept":"application/json"}});
+      const gj=await gr.json();
+      if(!gj||!gj.length)throw new Error("Naslova ni bilo mogoce najti na zemljevidu");
+      const la=parseFloat(gj[0].lat),lo=parseFloat(gj[0].lon);
+      let km=null;
+      try{
+        const rr=await fetch("https://router.project-osrm.org/route/v1/driving/"+_gv.lon+","+_gv.lat+";"+lo+","+la+"?overview=false");
+        const rj=await rr.json();
+        if(rj&&rj.routes&&rj.routes[0])km=rj.routes[0].distance/1000;
+      }catch(e){}
+      let zracna=false;
+      if(km==null){
+        const R=6371,t=(x)=>x*Math.PI/180;
+        const dLa=t(la-_gv.lat),dLo=t(lo-_gv.lon);
+        const a=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(t(_gv.lat))*Math.cos(t(la))*Math.sin(dLo/2)*Math.sin(dLo/2);
+        km=2*R*Math.asin(Math.sqrt(a))*1.25; zracna=true;
+      }
+      const voznja=km/hitrost;
+      const odmori=Math.floor(voznja/4.5)*0.75;
+      const skupaj=voznja+odmori;
+      const prihod=new Date(Date.now()+skupaj*3600000);
+      let zamuda=null;
+      if(datum){
+        const rok=new Date(datum+"T"+((cas&&cas.length>=4)?cas.slice(0,5):"23:59")+":00");
+        zamuda=(prihod.getTime()-rok.getTime())/3600000;
+      }
+      setEta({km,voznja,odmori,skupaj,prihod,zamuda,zracna});
+    }catch(e){setEta({napaka:(e&&e.message)||"Izracun ni uspel"});}
+    setRacuna(false);
+  };
+  return <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #f1f5f9"}}>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+      <a href={"https://www.google.com/maps/search/?api=1&query="+q} target="_blank" rel="noreferrer" style={{...st,background:"#0f2744",color:"#fff"}}>🗺️ Poglej na zemljevidu</a>
+      <a href={_nav} target="_blank" rel="noreferrer" title={_tip} style={{...st,background:"#fff",color:"#2563eb",border:"1.5px solid #bfdbfe"}}>{"🧭 Navigiraj ("+_ozn+")"}</a>
+      <button onClick={()=>{try{const t=document.createElement("textarea");t.value=cilj;t.style.position="fixed";t.style.top="-2000px";document.body.appendChild(t);t.select();document.execCommand("copy");document.body.removeChild(t);}catch(e){} try{if(navigator.clipboard)navigator.clipboard.writeText(cilj).catch(()=>{});}catch(e){}}} style={{...st,background:"#fff",color:"#64748b",border:"1.5px solid #e2e8f0",cursor:"pointer"}}>📋 Kopiraj naslov</button>
+      {_gv&&<button onClick={izracunaj} disabled={racuna} style={{...st,background:racuna?"#e2e8f0":"#eff6ff",color:"#1d4ed8",border:"1.5px solid #bfdbfe",cursor:racuna?"default":"pointer"}}>{racuna?"Računam...":"⏱️ Kdaj je lahko tam"}</button>}
+      {_gv&&<select value={hitrost} onChange={e=>{setHitrost(parseInt(e.target.value,10));setEta(null);}} title="Povprecna hitrost tovornjaka" style={{fontSize:12,fontWeight:700,borderRadius:8,padding:"7px 8px",border:"1.5px solid #e2e8f0",background:"#fff",color:"#64748b",cursor:"pointer"}}>
+        <option value={60}>60 km/h</option><option value={65}>65 km/h</option><option value={70}>70 km/h</option><option value={75}>75 km/h</option><option value={80}>80 km/h</option>
+      </select>}
+    </div>
+    {eta&&<div style={{marginTop:8,fontSize:12,borderRadius:8,padding:"8px 10px",background:eta.napaka?"#fef2f2":"#eff6ff",border:"1px solid "+(eta.napaka?"#fecaca":"#bfdbfe"),color:eta.napaka?"#b91c1c":"#1d4ed8"}}>
+      {eta.napaka?eta.napaka:<>
+        <div style={{fontWeight:800}}>{"Prihod "+dcas(eta.prihod)}</div>
+        <div style={{marginTop:2}}>{Math.round(eta.km)+" km · "+hm(eta.voznja)+" vožnje"+(eta.odmori>0?" + "+hm(eta.odmori)+" odmora":"")+" · pri "+hitrost+" km/h"}</div>
+        {eta.zracna&&<div style={{marginTop:2,color:"#94a3b8"}}>Cestna razdalja ni bila dosegljiva – ocena iz zračne črte.</div>}
+        <div style={{marginTop:2,color:"#94a3b8"}}>Ocena iz lege vozila, brez dnevnega počitka in časa na nakladu.</div>
+      </>}
+    </div>}
   </div>;
 }
 
