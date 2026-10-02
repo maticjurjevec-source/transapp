@@ -3768,6 +3768,10 @@ function ZemljevidGumbi({firma,kraj,naslov,datum,cas,n,vozniki,gpsVozila}){
   const cilj=[firma,naslov||kraj].filter(Boolean).join(", ");
   const [eta,setEta]=useState(null);
   const [racuna,setRacuna]=useState(false);
+  const _tahKljuc="tah_"+((n&&n.voznikId)||"x");
+  const [tah,setTah]=useState(()=>{try{const r=JSON.parse(localStorage.getItem("tah_"+((n&&n.voznikId)||"x"))||"null");if(r&&r.ts&&Date.now()-r.ts<6*3600000)return r;}catch(e){}return null;});
+  const [tahOdpr,setTahOdpr]=useState(false);
+  const [tahBere,setTahBere]=useState(false);
   const [hitrost,setHitrost]=useState(()=>{const x=parseInt(localStorage.getItem("eta_hitrost")||"75",10);return isNaN(x)?75:x;});
   useEffect(()=>{try{localStorage.setItem("eta_hitrost",String(hitrost));}catch(e){}},[hitrost]);
   if(!cilj)return null;
@@ -3787,6 +3791,25 @@ function ZemljevidGumbi({firma,kraj,naslov,datum,cas,n,vozniki,gpsVozila}){
     if(iste(d,dn))return "danes ob "+ura;
     if(iste(d,jutri))return "jutri ob "+ura;
     return String(d.getDate()).padStart(2,"0")+"."+String(d.getMonth()+1).padStart(2,"0")+". ob "+ura;};
+  const beriTahograf=async(file)=>{
+    if(!file)return;
+    setTahBere(true);
+    try{
+      const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
+      const tip=file.type&&file.type.startsWith("image/")?file.type:"image/png";
+      const navodilo="Iz slike tahografskega pregleda izlusci podatke o casih voznika. Vrni SAMO JSON brez razlage: {\"voznik\":\"\",\"doOdmoraMin\":0,\"vozilDanesMin\":0,\"preostanekDanesMin\":0,\"zacetekCezMin\":0,\"voznjaPoZacetkuMin\":0}\n- doOdmoraMin: koliko minut voznje ostane do obveznega 45-minutnega odmora (vrstica z oznako C ali 4h30).\n- vozilDanesMin: koliko minut dnevne voznje je ze porabil (vrstica DDP, prva stevilka).\n- preostanekDanesMin: koliko minut dnevne voznje mu se ostane danes (vrstica DDP, druga stevilka).\n- zacetekCezMin: iz napisa \"Zacetek cez\" - cez koliko minut lahko spet zacne voziti.\n- voznjaPoZacetkuMin: iz istega napisa \"voznja: X h\" - koliko ur voznje bo takrat na voljo.\nVse vrednosti v minutah kot stevila. Ce podatka ni, vpisi 0.";
+      const r=await fetch("/api/parse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:400,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:tip,data:b64}},{type:"text",text:navodilo}]}]})});
+      const d=await r.json();
+      const t=(d&&d.content&&d.content[0]&&d.content[0].text)||"";
+      const m=t.match(/\{[\s\S]*\}/);
+      if(!m)throw new Error("Slike ni bilo mogoce prebrati");
+      const o=JSON.parse(m[0]);
+      const nov={...o,ts:Date.now()};
+      setTah(nov);setTahOdpr(false);setEta(null);
+      try{localStorage.setItem(_tahKljuc,JSON.stringify(nov));}catch(e){}
+    }catch(e){ alert("Slike tahografa ni bilo mogoce prebrati. Poskusi z bolj izrezano sliko."); }
+    setTahBere(false);
+  };
   const izracunaj=async()=>{
     if(!_gv)return;
     setRacuna(true);setEta(null);
@@ -3829,22 +3852,29 @@ function ZemljevidGumbi({firma,kraj,naslov,datum,cas,n,vozniki,gpsVozila}){
         km=2*R*Math.asin(Math.sqrt(a))*1.25; zracna=true;
       }
       const voznja=km/hitrost;
-      let ostalo=voznja,odmori=0,pocitki=0,odOdmora=0,danesVozil=0;
-      while(ostalo>0.0001){
-        const korak=Math.min(ostalo,4.5-odOdmora,9-danesVozil);
-        ostalo-=korak;odOdmora+=korak;danesVozil+=korak;
-        if(ostalo<=0.0001)break;
-        if(danesVozil>=9-0.0001){pocitki+=9;danesVozil=0;odOdmora=0;}
-        else if(odOdmora>=4.5-0.0001){odmori+=0.75;odOdmora=0;}
+      let ostalo=voznja,odmori=0,pocitki=0,cakanje=0;
+      let doOdm=4.5,kvota=9;
+      if(tah){
+        const pre=(tah.preostanekDanesMin||0)/60;
+        const zac=(tah.zacetekCezMin||0)/60;
+        if(zac>0&&pre<=0.2){ cakanje=zac; kvota=(tah.voznjaPoZacetkuMin||540)/60; doOdm=4.5; }
+        else { kvota=pre>0?pre:9; doOdm=(tah.doOdmoraMin!=null&&tah.doOdmoraMin>0)?tah.doOdmoraMin/60:4.5; }
       }
-      const skupaj=voznja+odmori+pocitki;
+      while(ostalo>0.0001){
+        const korak=Math.min(ostalo,Math.max(doOdm,0.0001),Math.max(kvota,0.0001));
+        ostalo-=korak;doOdm-=korak;kvota-=korak;
+        if(ostalo<=0.0001)break;
+        if(kvota<=0.0001){pocitki+=9;kvota=9;doOdm=4.5;}
+        else if(doOdm<=0.0001){odmori+=0.75;doOdm=4.5;}
+      }
+      const skupaj=cakanje+voznja+odmori+pocitki;
       const prihod=new Date(Date.now()+skupaj*3600000);
       let zamuda=null;
       if(datum){
         const rok=new Date(datum+"T"+((cas&&cas.length>=4)?cas.slice(0,5):"23:59")+":00");
         zamuda=(prihod.getTime()-rok.getTime())/3600000;
       }
-      setEta({km,voznja,odmori,pocitki,skupaj,prihod,zamuda,zracna});
+      setEta({km,voznja,odmori,pocitki,cakanje,skupaj,prihod,zamuda,zracna,stah:!!tah});
     }catch(e){setEta({napaka:(e&&e.message)||"Izracun ni uspel"});}
     setRacuna(false);
   };
@@ -3854,16 +3884,30 @@ function ZemljevidGumbi({firma,kraj,naslov,datum,cas,n,vozniki,gpsVozila}){
       <a href={_nav} target="_blank" rel="noreferrer" title={_tip} style={{...st,background:"#fff",color:"#2563eb",border:"1.5px solid #bfdbfe"}}>{"🧭 Navigiraj ("+_ozn+")"}</a>
       <button onClick={()=>{try{const t=document.createElement("textarea");t.value=cilj;t.style.position="fixed";t.style.top="-2000px";document.body.appendChild(t);t.select();document.execCommand("copy");document.body.removeChild(t);}catch(e){} try{if(navigator.clipboard)navigator.clipboard.writeText(cilj).catch(()=>{});}catch(e){}}} style={{...st,background:"#fff",color:"#64748b",border:"1.5px solid #e2e8f0",cursor:"pointer"}}>📋 Kopiraj naslov</button>
       {_gv&&<button onClick={izracunaj} disabled={racuna} style={{...st,background:racuna?"#e2e8f0":"#eff6ff",color:"#1d4ed8",border:"1.5px solid #bfdbfe",cursor:racuna?"default":"pointer"}}>{racuna?"Računam...":"⏱️ Kdaj je lahko tam"}</button>}
+      {_gv&&<button onClick={()=>setTahOdpr(x=>!x)} title="Prilepi sliko tahografa, da izracun upostava ure voznika" style={{...st,background:tah?"#f0fdf4":"#fff",color:tah?"#15803d":"#64748b",border:"1.5px solid "+(tah?"#bbf7d0":"#e2e8f0"),cursor:"pointer"}}>{tah?"✓ Tahograf":"📷 Tahograf"}</button>}
       {_gv&&<select value={hitrost} onChange={e=>{setHitrost(parseInt(e.target.value,10));setEta(null);}} title="Povprecna hitrost tovornjaka" style={{fontSize:12,fontWeight:700,borderRadius:8,padding:"7px 8px",border:"1.5px solid #e2e8f0",background:"#fff",color:"#64748b",cursor:"pointer"}}>
         <option value={60}>60 km/h</option><option value={65}>65 km/h</option><option value={70}>70 km/h</option><option value={75}>75 km/h</option><option value={80}>80 km/h</option>
       </select>}
     </div>
+    {tahOdpr&&<div style={{marginTop:8,padding:"10px 12px",background:"#f8fafc",border:"1.5px dashed #cbd5e1",borderRadius:10}}>
+      <div style={{fontSize:12,fontWeight:700,color:"#0f2744",marginBottom:6}}>Prilepi sliko tahografa (Ctrl+V) ali jo naloži</div>
+      <textarea placeholder={tahBere?"Berem sliko...":"Klikni sem in pritisni Ctrl+V"} onPaste={(e)=>{const it=(e.clipboardData&&e.clipboardData.items)||[];for(let i=0;i<it.length;i++){if(it[i].kind==="file"&&String(it[i].type).startsWith("image/")){e.preventDefault();beriTahograf(it[i].getAsFile());return;}}}} style={{width:"100%",boxSizing:"border-box",height:52,padding:"8px 10px",border:"1px solid #cbd5e1",borderRadius:8,fontSize:12,resize:"none",outline:"none"}}/>
+      <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap",alignItems:"center"}}>
+        <input type="file" id={"tahf-"+((n&&n.id)||"x")+"-"+(datum||"")} accept="image/*" style={{display:"none"}} onChange={(e)=>{const f=e.target.files&&e.target.files[0];if(f)beriTahograf(f);e.target.value="";}}/>
+        <label htmlFor={"tahf-"+((n&&n.id)||"x")+"-"+(datum||"")} style={{...st,background:"#fff",color:"#2563eb",border:"1.5px solid #bfdbfe",cursor:"pointer"}}>📂 Naloži sliko</label>
+        {tah&&<button onClick={()=>{setTah(null);setEta(null);try{localStorage.removeItem(_tahKljuc);}catch(e){}}} style={{...st,background:"#fff",color:"#b91c1c",border:"1.5px solid #fecaca",cursor:"pointer"}}>Odstrani</button>}
+      </div>
+    </div>}
+    {tah&&<div style={{marginTop:8,fontSize:12,background:"#f0fdf4",border:"1px solid #bbf7d0",color:"#15803d",borderRadius:8,padding:"7px 10px"}}>
+      {[(tah.voznik||"Tahograf"),(tah.preostanekDanesMin>0?"še "+hm(tah.preostanekDanesMin/60)+" vožnje danes":"dnevna vožnja porabljena"),(tah.doOdmoraMin>0?hm(tah.doOdmoraMin/60)+" do odmora":""),(tah.zacetekCezMin>0?"začetek čez "+hm(tah.zacetekCezMin/60):"")].filter(Boolean).join(" · ")}
+      <span style={{color:"#94a3b8"}}>{" · prebrano "+Math.round((Date.now()-(tah.ts||Date.now()))/60000)+" min nazaj"}</span>
+    </div>}
     {eta&&<div style={{marginTop:8,fontSize:12,borderRadius:8,padding:"8px 10px",background:eta.napaka?"#fef2f2":"#eff6ff",border:"1px solid "+(eta.napaka?"#fecaca":"#bfdbfe"),color:eta.napaka?"#b91c1c":"#1d4ed8"}}>
       {eta.napaka?eta.napaka:<>
         <div style={{fontWeight:800}}>{"Prihod "+dcas(eta.prihod)}</div>
-        <div style={{marginTop:2}}>{Math.round(eta.km)+" km · "+hm(eta.voznja)+" vožnje"+(eta.odmori>0?" + "+hm(eta.odmori)+" odmorov":"")+(eta.pocitki>0?" + "+hm(eta.pocitki)+" počitka":"")+" · pri "+hitrost+" km/h"}</div>
+        <div style={{marginTop:2}}>{Math.round(eta.km)+" km · "+hm(eta.voznja)+" vožnje"+(eta.odmori>0?" + "+hm(eta.odmori)+" odmorov":"")+(eta.pocitki>0?" + "+hm(eta.pocitki)+" počitka":"")+(eta.cakanje>0?" + "+hm(eta.cakanje)+" do konca počitka":"")+" · pri "+hitrost+" km/h"}</div>
         {eta.zracna&&<div style={{marginTop:2,color:"#94a3b8"}}>Cestna razdalja ni bila dosegljiva – ocena iz zračne črte.</div>}
-        <div style={{marginTop:2,color:"#94a3b8"}}>{"Ocena iz lege vozila: 45 min odmora na 4,5 h in 9 h počitka po 9 h vožnje. Brez ur, ki jih je voznik danes že porabil, in brez časa na nakladu."}</div>
+        <div style={{marginTop:2,color:"#94a3b8"}}>{eta.stah?"Upoštevane so ure voznika s tahografa. Brez časa na nakladu in razkladu.":"Ocena iz lege vozila: 45 min odmora na 4,5 h in 9 h počitka po 9 h vožnje. Brez ur, ki jih je voznik danes že porabil, in brez časa na nakladu."}</div>
       </>}
     </div>}
   </div>;
