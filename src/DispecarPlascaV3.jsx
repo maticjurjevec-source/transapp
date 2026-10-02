@@ -3791,10 +3791,30 @@ function ZemljevidGumbi({firma,kraj,naslov,datum,cas,n,vozniki,gpsVozila}){
     if(!_gv)return;
     setRacuna(true);setEta(null);
     try{
-      const gr=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+q,{headers:{"Accept":"application/json"}});
-      const gj=await gr.json();
-      if(!gj||!gj.length)throw new Error("Naslova ni bilo mogoce najti na zemljevidu");
-      const la=parseFloat(gj[0].lat),lo=parseFloat(gj[0].lon);
+      const DRZ={AT:"Austria",DE:"Germany",SI:"Slovenia",IT:"Italy",NL:"Netherlands",BE:"Belgium",FR:"France",PL:"Poland",HU:"Hungary",HR:"Croatia",CZ:"Czechia",SK:"Slovakia",RO:"Romania",ES:"Spain",PT:"Portugal",DK:"Denmark",SE:"Sweden",CH:"Switzerland",LU:"Luxembourg",GB:"United Kingdom",RS:"Serbia",BA:"Bosnia and Herzegovina",BG:"Bulgaria",LT:"Lithuania",LV:"Latvia",EE:"Estonia",FI:"Finland",NO:"Norway",IE:"Ireland",GR:"Greece"};
+      const surovo=(naslov||kraj||"");
+      const koda=(surovo.match(/\b([A-Z]{2})-\s?\d{4,5}\b/)||[])[1]||(surovo.match(/\(([A-Z]{2})\)/)||[])[1]||"";
+      const drz=DRZ[koda]||"";
+      const ocisti=(x)=>String(x||"").replace(/\b([A-Z]{2})-\s?(\d{4,5})\b/g,"$2").replace(/\(([A-Z]{2})\)/g,"").replace(/\s{2,}/g," ").trim().replace(/^,|,$/g,"").trim();
+      const pk=(surovo.match(/\b\d{4,5}\b/)||[])[0]||"";
+      const mesto=(()=>{const m=surovo.replace(/\b([A-Z]{2})-\s?(\d{4,5})\b/g,"$2").match(/\b\d{4,5}\s+([^,0-9]{2,40})/);return m?m[1].trim():(kraj||"");})();
+      const kandidati=[...new Set([
+        ocisti(naslov||"")+(drz?", "+drz:""),
+        ocisti(naslov||""),
+        (pk?pk+" ":"")+mesto+(drz?", "+drz:""),
+        (kraj||"")+(drz?", "+drz:""),
+        ocisti(cilj),
+      ].map(x=>String(x||"").trim()).filter(x=>x.length>3))];
+      let la=null,lo=null;
+      for(const kand of kandidati){
+        try{
+          const gr=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=sl"+(koda?"&countrycodes="+koda.toLowerCase():"")+"&q="+encodeURIComponent(kand),{headers:{"Accept":"application/json"}});
+          const gj=await gr.json();
+          if(gj&&gj.length){la=parseFloat(gj[0].lat);lo=parseFloat(gj[0].lon);break;}
+        }catch(e){}
+        await new Promise(r=>setTimeout(r,1100));
+      }
+      if(la==null)throw new Error("Naslova ni bilo mogoce najti na zemljevidu");
       let km=null;
       try{
         const rr=await fetch("https://router.project-osrm.org/route/v1/driving/"+_gv.lon+","+_gv.lat+";"+lo+","+la+"?overview=false");
