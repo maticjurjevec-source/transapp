@@ -3824,19 +3824,26 @@ function ZemljevidGumbi({firma,kraj,naslov,datum,cas,n,vozniki,gpsVozila}){
     setRacuna(true);setEta(null);
     try{
       const DRZ={AT:"Austria",DE:"Germany",SI:"Slovenia",IT:"Italy",NL:"Netherlands",BE:"Belgium",FR:"France",PL:"Poland",HU:"Hungary",HR:"Croatia",CZ:"Czechia",SK:"Slovakia",RO:"Romania",ES:"Spain",PT:"Portugal",DK:"Denmark",SE:"Sweden",CH:"Switzerland",LU:"Luxembourg",GB:"United Kingdom",RS:"Serbia",BA:"Bosnia and Herzegovina",BG:"Bulgaria",LT:"Lithuania",LV:"Latvia",EE:"Estonia",FI:"Finland",NO:"Norway",IE:"Ireland",GR:"Greece"};
-      const surovo=(naslov||kraj||"");
+      const surovo=[naslov||"",kraj||""].filter(Boolean).join(", ");
       const koda=(surovo.match(/\b([A-Z]{2})-\s?\d{4,5}\b/)||[])[1]||(surovo.match(/\(([A-Z]{2})\)/)||[])[1]||"";
       const drz=DRZ[koda]||"";
-      const ocisti=(x)=>String(x||"").replace(/\b([A-Z]{2})-\s?(\d{4,5})\b/g,"$2").replace(/\(([A-Z]{2})\)/g,"").replace(/\s{2,}/g," ").trim().replace(/^,|,$/g,"").trim();
-      const pk=(surovo.match(/\b\d{4,5}\b/)||[])[0]||"";
-      const mesto=(()=>{const m=surovo.replace(/\b([A-Z]{2})-\s?(\d{4,5})\b/g,"$2").match(/\b\d{4,5}\s+([^,0-9]{2,40})/);return m?m[1].trim():(kraj||"");})();
+      const brezKode=surovo.replace(/\b([A-Z]{2})-\s?(\d{4,5})\b/g,"$2").replace(/\(([A-Z]{2})\)/g,"");
+      const pk=(brezKode.match(/\b\d{4,5}\b/)||[])[0]||"";
+      const deli=(naslov||"").split(",").map(x=>x.trim()).filter(Boolean);
+      const ulica=deli.find(x=>/\d/.test(x)&&/[A-Za-zÀ-ž]{3,}/.test(x)&&!/^\s*([A-Z]{2}-)?\d{4,5}\s*$/.test(x))||"";
+      const mesto=(()=>{const m=brezKode.match(/\b\d{4,5}[ ,]+([^,0-9]{2,40})/);if(m)return m[1].trim();return (kraj||"").trim();})();
+      const mestoKratko=String(mesto).split(/[-\/]/)[0].trim();
+      const dod=(x)=>x&&drz?x+", "+drz:x;
       const kandidati=[...new Set([
-        ocisti(naslov||"")+(drz?", "+drz:""),
-        ocisti(naslov||""),
-        (pk?pk+" ":"")+mesto+(drz?", "+drz:""),
-        (kraj||"")+(drz?", "+drz:""),
-        ocisti(cilj),
-      ].map(x=>String(x||"").trim()).filter(x=>x.length>3))];
+        dod([ulica,(pk?pk+" ":"")+mesto].filter(Boolean).join(", ")),
+        dod([ulica,pk].filter(Boolean).join(", ")),
+        dod([ulica,mesto].filter(Boolean).join(", ")),
+        dod(((pk?pk+" ":"")+mesto).trim()),
+        dod(((pk?pk+" ":"")+mestoKratko).trim()),
+        dod(pk),
+        dod(mesto),
+        dod(mestoKratko),
+      ].map(x=>String(x||"").replace(/\s{2,}/g," ").replace(/^,|,$/g,"").trim()).filter(x=>x.length>2))];
       let la=null,lo=null;
       for(const kand of kandidati){
         try{
