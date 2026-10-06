@@ -3860,7 +3860,7 @@ function PrihodVozila({v,vozniki}){
         else if(doOdm<=0.0001){odmori+=0.75;doOdm=4.5;}
       }
       const skupaj=cakanje+voznja+odmori+pocitki;
-      setEta({km,voznja,odmori,pocitki,cakanje,prihod:new Date(Date.now()+skupaj*3600000),zracna,najden,stah:!!(tah&&tahUpost)});
+      setEta({km,voznja,odmori,pocitki,cakanje,prihod:new Date(Date.now()+skupaj*3600000),zracna,najden,la,lo,stah:!!(tah&&tahUpost)});
     }catch(e){setEta({napaka:(e&&e.message)||"Izracun ni uspel"});}
     setRacuna(false);
   };
@@ -3893,6 +3893,10 @@ function PrihodVozila({v,vozniki}){
           <div style={{fontWeight:800,fontSize:13}}>{"Prihod "+dcas(eta.prihod)}</div>
           <div style={{marginTop:2}}>{Math.round(eta.km)+" km · "+hm(eta.voznja)+" vožnje"+(eta.odmori>0?" + "+hm(eta.odmori)+" odmorov":"")+(eta.pocitki>0?" + "+hm(eta.pocitki)+" počitka":"")+(eta.cakanje>0?" + "+hm(eta.cakanje)+" do konca počitka":"")+" · pri "+hitrost+" km/h"}</div>
           {eta.najden&&<div style={{marginTop:2,color:"#64748b"}}>{"Cilj: "+String(eta.najden).split(",").slice(0,3).join(",")}</div>}
+          {eta.la!=null&&<div style={{marginTop:6,display:"flex",gap:8,flexWrap:"wrap"}}>
+            <a href={"https://www.google.com/maps/dir/?api=1&origin="+v.lat+","+v.lon+"&destination="+eta.la+","+eta.lo+"&travelmode=driving"} target="_blank" rel="noreferrer" style={{...st,background:"#0f2744",color:"#fff"}}>🗺️ Poglej pot</a>
+            <a href={"https://www.google.com/maps/search/?api=1&query="+eta.la+","+eta.lo} target="_blank" rel="noreferrer" style={{...st,background:"#fff",color:"#2563eb",border:"1.5px solid #bfdbfe"}}>📍 Samo cilj</a>
+          </div>}
           {eta.zracna&&<div style={{marginTop:2,color:"#94a3b8"}}>Cestna razdalja ni bila dosegljiva – ocena iz zračne črte.</div>}
           <div style={{marginTop:2,color:"#94a3b8"}}>{eta.stah?"Upoštevane so ure voznika s tahografa.":"Brez ur, ki jih je voznik danes že porabil."}</div>
         </>}
