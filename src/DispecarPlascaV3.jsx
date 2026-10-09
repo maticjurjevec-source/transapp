@@ -3775,7 +3775,7 @@ const Toast=({t})=><div style={{position:"fixed",top:20,right:20,color:"#fff",pa
 
 function PrihodVozila({v,vozniki}){
   const [odpr,setOdpr]=useState(false);
-  const [cilj,setCilj]=useState("");
+  const [tocke,setTocke]=useState([""]);
   const [eta,setEta]=useState(null);
   const [racuna,setRacuna]=useState(false);
   const [hitrost,setHitrost]=useState(()=>{const x=parseInt(localStorage.getItem("eta_hitrost")||"75",10);return isNaN(x)?75:x;});
@@ -3819,56 +3819,71 @@ function PrihodVozila({v,vozniki}){
     }catch(e){ alert("Slike tahografa ni bilo mogoce prebrati. Poskusi z bolj izrezano sliko."); }
     setTahBere(false);
   };
+  const geo=async(q0)=>{
+    const DRZ={AT:"Austria",DE:"Germany",SI:"Slovenia",IT:"Italy",NL:"Netherlands",BE:"Belgium",FR:"France",PL:"Poland",HU:"Hungary",HR:"Croatia",CZ:"Czechia",SK:"Slovakia",RO:"Romania",ES:"Spain",PT:"Portugal",DK:"Denmark",SE:"Sweden",CH:"Switzerland",LU:"Luxembourg",GB:"United Kingdom",RS:"Serbia",BA:"Bosnia and Herzegovina",BG:"Bulgaria"};
+    const koda=(q0.match(/\b([A-Z]{2})-\s?\d{4,5}\b/)||[])[1]||(q0.match(/\(([A-Z]{2})\)/)||[])[1]||"";
+    const drz=DRZ[koda]||"";
+    const ocisc=q0.replace(/\b([A-Z]{2})-\s?(\d{4,5})\b/g,"$2").replace(/\(([A-Z]{2})\)/g,"").replace(/\s{2,}/g," ").trim();
+    const kand=[...new Set([drz?ocisc+", "+drz:ocisc,ocisc,q0].map(x=>String(x||"").trim()).filter(x=>x.length>1))];
+    for(const k of kand){
+      try{
+        const gr=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=sl"+(koda?"&countrycodes="+koda.toLowerCase():"")+"&q="+encodeURIComponent(k),{headers:{"Accept":"application/json"}});
+        const gj=await gr.json();
+        if(gj&&gj.length)return {la:parseFloat(gj[0].lat),lo:parseFloat(gj[0].lon),najden:gj[0].display_name||k};
+      }catch(e){}
+      await new Promise(r=>setTimeout(r,1100));
+    }
+    return null;
+  };
+  const zracnaKm=(a,b)=>{const R=6371,t=(x)=>x*Math.PI/180;const dLa=t(b.la-a.la),dLo=t(b.lo-a.lo);const q=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(t(a.la))*Math.cos(t(b.la))*Math.sin(dLo/2)*Math.sin(dLo/2);return 2*R*Math.asin(Math.sqrt(q))*1.25;};
   const izracunaj=async()=>{
-    const q0=String(cilj||"").trim();
-    if(!q0)return;
+    const q=tocke.map(x=>String(x||"").trim()).filter(Boolean);
+    if(!q.length)return;
     if(!v.lat)return setEta({napaka:"Vozilo nima GPS lege"});
     setRacuna(true);setEta(null);
     try{
-      const DRZ={AT:"Austria",DE:"Germany",SI:"Slovenia",IT:"Italy",NL:"Netherlands",BE:"Belgium",FR:"France",PL:"Poland",HU:"Hungary",HR:"Croatia",CZ:"Czechia",SK:"Slovakia",RO:"Romania",ES:"Spain",PT:"Portugal",DK:"Denmark",SE:"Sweden",CH:"Switzerland",LU:"Luxembourg",GB:"United Kingdom",RS:"Serbia",BA:"Bosnia and Herzegovina",BG:"Bulgaria"};
-      const koda=(q0.match(/\b([A-Z]{2})-\s?\d{4,5}\b/)||[])[1]||(q0.match(/\(([A-Z]{2})\)/)||[])[1]||"";
-      const drz=DRZ[koda]||"";
-      const ocisc=q0.replace(/\b([A-Z]{2})-\s?(\d{4,5})\b/g,"$2").replace(/\(([A-Z]{2})\)/g,"").replace(/\s{2,}/g," ").trim();
-      const kandidati=[...new Set([drz?ocisc+", "+drz:ocisc,ocisc,q0].map(x=>String(x||"").trim()).filter(x=>x.length>1))];
-      let la=null,lo=null,najden="";
-      for(const kand of kandidati){
-        try{
-          const gr=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=sl"+(koda?"&countrycodes="+koda.toLowerCase():"")+"&q="+encodeURIComponent(kand),{headers:{"Accept":"application/json"}});
-          const gj=await gr.json();
-          if(gj&&gj.length){la=parseFloat(gj[0].lat);lo=parseFloat(gj[0].lon);najden=gj[0].display_name||kand;break;}
-        }catch(e){}
-        await new Promise(r=>setTimeout(r,1100));
+      const najdeni=[];
+      for(const x of q){
+        const t=await geo(x);
+        if(!t)throw new Error("Kraja \""+x+"\" ni bilo mogoce najti");
+        najdeni.push(t);
+        await new Promise(r=>setTimeout(r,300));
       }
-      if(la==null)throw new Error("Kraja ni bilo mogoce najti");
-      let km=null;
+      const pot=[{la:v.lat,lo:v.lon},...najdeni];
+      let odseki=null,zracna=false;
       try{
-        const rr=await fetch("https://router.project-osrm.org/route/v1/driving/"+v.lon+","+v.lat+";"+lo+","+la+"?overview=false");
+        const koord=pot.map(p=>p.lo+","+p.la).join(";");
+        const rr=await fetch("https://router.project-osrm.org/route/v1/driving/"+koord+"?overview=false");
         const rj=await rr.json();
-        if(rj&&rj.routes&&rj.routes[0])km=rj.routes[0].distance/1000;
+        if(rj&&rj.routes&&rj.routes[0]&&rj.routes[0].legs&&rj.routes[0].legs.length===najdeni.length)odseki=rj.routes[0].legs.map(l=>l.distance/1000);
       }catch(e){}
-      let zracna=false;
-      if(km==null){
-        const R=6371,t=(x)=>x*Math.PI/180;
-        const dLa=t(la-v.lat),dLo=t(lo-v.lon);
-        const a=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(t(v.lat))*Math.cos(t(la))*Math.sin(dLo/2)*Math.sin(dLo/2);
-        km=2*R*Math.asin(Math.sqrt(a))*1.25; zracna=true;
-      }
-      const voznja=km/hitrost;
-      let ostalo=voznja,odmori=0,pocitki=0,cakanje=0,doOdm=4.5,kvota=9;
+      if(!odseki){ odseki=[]; for(let i2=1;i2<pot.length;i2++)odseki.push(zracnaKm(pot[i2-1],pot[i2])); zracna=true; }
+      let doOdm=4.5,kvota=9,cakanje=0;
       if(tah&&tahUpost){
         const pre=(tah.preostanekDanesMin||0)/60, zac=(tah.zacetekCezMin||0)/60;
         if(zac>0&&pre<=0.2){ cakanje=zac; kvota=(tah.voznjaPoZacetkuMin||540)/60; doOdm=4.5; }
         else { kvota=pre>0?pre:9; doOdm=(tah.doOdmoraMin>0)?tah.doOdmoraMin/60:4.5; }
       }
-      while(ostalo>0.0001){
-        const korak=Math.min(ostalo,Math.max(doOdm,0.0001),Math.max(kvota,0.0001));
-        ostalo-=korak;doOdm-=korak;kvota-=korak;
-        if(ostalo<=0.0001)break;
-        if(kvota<=0.0001){pocitki+=9;kvota=9;doOdm=4.5;}
-        else if(doOdm<=0.0001){odmori+=0.75;doOdm=4.5;}
-      }
-      const skupaj=cakanje+voznja+odmori+pocitki;
-      setEta({km,voznja,odmori,pocitki,cakanje,prihod:new Date(Date.now()+skupaj*3600000),zracna,najden,la,lo,stah:!!(tah&&tahUpost)});
+      const simul=(km)=>{
+        let o=km/hitrost,t=0,odm=0,poc=0;
+        while(o>0.0001){
+          const korak=Math.min(o,Math.max(doOdm,0.0001),Math.max(kvota,0.0001));
+          o-=korak;doOdm-=korak;kvota-=korak;t+=korak;
+          if(o<=0.0001)break;
+          if(kvota<=0.0001){t+=9;poc+=9;kvota=9;doOdm=4.5;}
+          else if(doOdm<=0.0001){t+=0.75;odm+=0.75;doOdm=4.5;}
+        }
+        return {t,odm,poc,voznja:km/hitrost};
+      };
+      const t0=Date.now()+cakanje*3600000;
+      let skupT=0,skupKm=0,skupVoz=0,skupOdm=0,skupPoc=0;
+      const post=[];
+      najdeni.forEach((tc,idx)=>{
+        const r=simul(odseki[idx]);
+        skupT+=r.t;skupKm+=odseki[idx];skupVoz+=r.voznja;skupOdm+=r.odm;skupPoc+=r.poc;
+        post.push({naziv:tc.najden,la:tc.la,lo:tc.lo,km:odseki[idx],kmSkup:skupKm,voznja:r.voznja,odmori:r.odm,pocitki:r.poc,prihod:new Date(t0+skupT*3600000)});
+      });
+      setEta({postanki:post,cakanje,zracna,stah:!!(tah&&tahUpost),skupKm,skupVoz,skupOdm,skupPoc});
     }catch(e){setEta({napaka:(e&&e.message)||"Izracun ni uspel"});}
     setRacuna(false);
   };
@@ -3876,12 +3891,21 @@ function PrihodVozila({v,vozniki}){
     <div onClick={()=>setOdpr(x=>!x)} style={{fontSize:12,fontWeight:700,color:"#0f2744",background:"#f1f5f9",borderRadius:8,padding:"6px 10px",display:"inline-block",cursor:"pointer"}}>{"⏱️ Prihod na naklad "+(odpr?"▲":"▼")}</div>
     {odpr&&<div style={{marginTop:8}}>
       <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-        <input value={cilj} onChange={e=>{setCilj(e.target.value);setEta(null);}} onKeyDown={e=>{if(e.key==="Enter")izracunaj();}} placeholder="Kraj ali poštna št. (npr. 1000 Ljubljana ali DE-47447)" style={{flex:"1 1 230px",minWidth:0,padding:"7px 10px",borderRadius:8,border:"1px solid #cbd5e1",fontSize:12,outline:"none"}}/>
+        <div style={{flex:"1 1 100%",display:"flex",flexDirection:"column",gap:6}}>
+          {tocke.map((t,idx)=>(
+            <div key={idx} style={{display:"flex",gap:6,alignItems:"center"}}>
+              <span style={{fontSize:11,fontWeight:800,color:"#94a3b8",minWidth:16}}>{idx+1}.</span>
+              <input value={t} onChange={e=>{const c=[...tocke];c[idx]=e.target.value;setTocke(c);setEta(null);}} onKeyDown={e=>{if(e.key==="Enter")izracunaj();}} placeholder={idx===0?"Kraj ali poštna št. (npr. 1000 Ljubljana ali DE-47447)":"Naslednji postanek"} style={{flex:1,minWidth:0,padding:"7px 10px",borderRadius:8,border:"1px solid #cbd5e1",fontSize:12,outline:"none"}}/>
+              {tocke.length>1&&<button onClick={()=>{setTocke(tocke.filter((_,i3)=>i3!==idx));setEta(null);}} title="Odstrani postanek" style={{border:"1px solid #e2e8f0",background:"#fff",color:"#b91c1c",borderRadius:8,padding:"5px 9px",fontSize:12,fontWeight:800,cursor:"pointer"}}>✕</button>}
+            </div>
+          ))}
+          <div><button onClick={()=>setTocke([...tocke,""])} style={{border:"1px dashed #cbd5e1",background:"#fff",color:"#2563eb",borderRadius:8,padding:"5px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Dodaj postanek</button></div>
+        </div>
         <select value={hitrost} onChange={e=>{setHitrost(parseInt(e.target.value,10));setEta(null);}} style={{fontSize:12,fontWeight:700,borderRadius:8,padding:"6px 8px",border:"1.5px solid #e2e8f0",background:"#fff",color:"#64748b",cursor:"pointer"}}>
           <option value={60}>60 km/h</option><option value={65}>65 km/h</option><option value={70}>70 km/h</option><option value={75}>75 km/h</option><option value={80}>80 km/h</option>
         </select>
         <button onClick={()=>setTahOdpr(x=>!x)} style={{...st,background:(tah&&tahUpost)?"#f0fdf4":"#fff",color:(tah&&tahUpost)?"#15803d":"#64748b",border:"1.5px solid "+((tah&&tahUpost)?"#bbf7d0":"#e2e8f0"),cursor:"pointer"}}>{tah?(tahUpost?"✓ Tahograf":"Tahograf izklopljen"):"📷 Tahograf"}</button>
-        <button onClick={izracunaj} disabled={racuna||!cilj.trim()} style={{...st,background:(racuna||!cilj.trim())?"#e2e8f0":"#0f2744",color:(racuna||!cilj.trim())?"#94a3b8":"#fff",border:"none",cursor:(racuna||!cilj.trim())?"default":"pointer"}}>{racuna?"Računam...":"Izračunaj"}</button>
+        <button onClick={izracunaj} disabled={racuna||!tocke.some(x=>String(x||"").trim())} style={{...st,background:(racuna||!tocke.some(x=>String(x||"").trim()))?"#e2e8f0":"#0f2744",color:(racuna||!tocke.some(x=>String(x||"").trim()))?"#94a3b8":"#fff",border:"none",cursor:(racuna||!tocke.some(x=>String(x||"").trim()))?"default":"pointer"}}>{racuna?"Računam...":"Izračunaj"}</button>
       </div>
       {tahOdpr&&<div style={{marginTop:8,padding:"10px 12px",background:"#f8fafc",border:"1.5px dashed #cbd5e1",borderRadius:10}}>
         <div style={{fontSize:12,fontWeight:700,color:"#0f2744",marginBottom:6}}>Prilepi sliko tahografa (Ctrl+V) ali jo naloži</div>
@@ -3898,15 +3922,21 @@ function PrihodVozila({v,vozniki}){
       </div>}
       {eta&&<div style={{marginTop:8,fontSize:12,borderRadius:8,padding:"8px 10px",background:eta.napaka?"#fef2f2":"#eff6ff",border:"1px solid "+(eta.napaka?"#fecaca":"#bfdbfe"),color:eta.napaka?"#b91c1c":"#1d4ed8"}}>
         {eta.napaka?eta.napaka:<>
-          <div style={{fontWeight:800,fontSize:13}}>{"Prihod "+dcas(eta.prihod)}</div>
-          <div style={{marginTop:2}}>{Math.round(eta.km)+" km · "+hm(eta.voznja)+" vožnje"+(eta.odmori>0?" + "+hm(eta.odmori)+" odmorov":"")+(eta.pocitki>0?" + "+hm(eta.pocitki)+" počitka":"")+(eta.cakanje>0?" + "+hm(eta.cakanje)+" do konca počitka":"")+" · pri "+hitrost+" km/h"}</div>
-          {eta.najden&&<div style={{marginTop:2,color:"#64748b"}}>{"Cilj: "+String(eta.najden).split(",").slice(0,3).join(",")}</div>}
-          {eta.la!=null&&<div style={{marginTop:6,display:"flex",gap:8,flexWrap:"wrap"}}>
-            <a href={"https://www.google.com/maps/dir/?api=1&origin="+v.lat+","+v.lon+"&destination="+eta.la+","+eta.lo+"&travelmode=driving"} target="_blank" rel="noreferrer" style={{...st,background:"#0f2744",color:"#fff"}}>🗺️ Poglej pot</a>
-            <a href={"https://www.google.com/maps/search/?api=1&query="+eta.la+","+eta.lo} target="_blank" rel="noreferrer" style={{...st,background:"#fff",color:"#2563eb",border:"1.5px solid #bfdbfe"}}>📍 Samo cilj</a>
-          </div>}
-          {eta.zracna&&<div style={{marginTop:2,color:"#94a3b8"}}>Cestna razdalja ni bila dosegljiva – ocena iz zračne črte.</div>}
-          <div style={{marginTop:2,color:"#94a3b8"}}>{eta.stah?"Upoštevane so ure voznika s tahografa.":"Brez ur, ki jih je voznik danes že porabil."}</div>
+          {eta.postanki.map((p,idx)=>(
+            <div key={idx} style={{paddingBottom:6,marginBottom:6,borderBottom:idx<eta.postanki.length-1?"1px dashed #bfdbfe":"none"}}>
+              <div style={{fontWeight:800,fontSize:13}}>{(idx+1)+". "+(idx===eta.postanki.length-1?"cilj":"postanek")+" - prihod "+dcas(p.prihod)}</div>
+              <div style={{marginTop:2}}>{Math.round(p.km)+" km"+(eta.postanki.length>1?" (skupaj "+Math.round(p.kmSkup)+" km)":"")+" · "+hm(p.voznja)+" vožnje"+(p.odmori>0?" + "+hm(p.odmori)+" odmorov":"")+(p.pocitki>0?" + "+hm(p.pocitki)+" počitka":"")}</div>
+              <div style={{marginTop:2,color:"#64748b"}}>{String(p.naziv).split(",").slice(0,3).join(",")}</div>
+            </div>
+          ))}
+          <div style={{marginTop:2,fontWeight:700}}>{"Skupaj "+Math.round(eta.skupKm)+" km · "+hm(eta.skupVoz)+" vožnje"+(eta.skupOdm>0?" + "+hm(eta.skupOdm)+" odmorov":"")+(eta.skupPoc>0?" + "+hm(eta.skupPoc)+" počitka":"")+(eta.cakanje>0?" + "+hm(eta.cakanje)+" do konca počitka":"")+" · pri "+hitrost+" km/h"}</div>
+          <div style={{marginTop:6,display:"flex",gap:8,flexWrap:"wrap"}}>
+            <a href={"https://www.google.com/maps/dir/?api=1&origin="+v.lat+","+v.lon+"&destination="+eta.postanki[eta.postanki.length-1].la+","+eta.postanki[eta.postanki.length-1].lo+(eta.postanki.length>1?"&waypoints="+eta.postanki.slice(0,-1).map(p=>p.la+","+p.lo).join("%7C"):"")+"&travelmode=driving"} target="_blank" rel="noreferrer" style={{...st,background:"#0f2744",color:"#fff"}}>🗺️ Poglej pot na zemljevidu</a>
+            {eta.postanki.map((p,idx)=><a key={idx} href={"https://www.google.com/maps/search/?api=1&query="+p.la+","+p.lo} target="_blank" rel="noreferrer" style={{...st,background:"#fff",color:"#2563eb",border:"1.5px solid #bfdbfe"}}>{"📍 "+(idx+1)}</a>)}
+          </div>
+          {eta.postanki.length>10&&<div style={{marginTop:4,color:"#94a3b8"}}>Google na zemljevid vzame do 10 točk.</div>}
+          {eta.zracna&&<div style={{marginTop:4,color:"#94a3b8"}}>Cestna razdalja ni bila dosegljiva – ocena iz zračne črte.</div>}
+          <div style={{marginTop:2,color:"#94a3b8"}}>{eta.stah?"Upoštevane so ure voznika s tahografa. Brez časa na postankih.":"Brez ur, ki jih je voznik danes že porabil, in brez časa na postankih."}</div>
         </>}
       </div>}
     </div>}
