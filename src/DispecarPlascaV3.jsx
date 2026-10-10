@@ -2650,7 +2650,6 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
         voznik_id: form.voznikId||null,
         original_pdf_url: pdfUrl||form.originalPdfUrl||null,
         postanki: form.postanki||null,
-        postanki: form.postanki||null,
         znesek_original: form.znesek||null,
         je_slovenska_ddv: form.jeSlovenskaDdv!==undefined?form.jeSlovenskaDdv:null,
       }]).select().single();
@@ -3667,6 +3666,38 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
   })();
   const ff=(d)=>String(d.getDate()).padStart(2,"0")+"."+String(d.getMonth()+1).padStart(2,"0");
   const fd=(x)=>{if(!x)return"";const d=new Date(x+"T12:00:00");return DNEVI[d.getDay()].slice(0,3)+" "+String(d.getDate()).padStart(2,"0")+"."+String(d.getMonth()+1).padStart(2,"0");};
+  const [praznaOdpr,setPraznaOdpr]=useState(true);
+  const [rocno,setRocno]=useState(()=>{try{return JSON.parse(localStorage.getItem("prazna_rocno")||"{}");}catch(e){return{};}});
+  useEffect(()=>{try{localStorage.setItem("prazna_rocno",JSON.stringify(rocno));}catch(e){}},[rocno]);
+  const [urejP,setUrejP]=useState(null);
+  const [pD,setPD]=useState("");
+  const [pC,setPC]=useState("");
+  const kop=(txt,msg)=>{
+    try{const t=document.createElement("textarea");t.value=txt;t.setAttribute("readonly","");t.style.position="fixed";t.style.top="-2000px";document.body.appendChild(t);t.focus();t.select();t.setSelectionRange(0,t.value.length);document.execCommand("copy");document.body.removeChild(t);}catch(e){}
+    try{if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(txt).catch(()=>{});}catch(e){}
+    showToast(msg||"Kopirano");
+  };
+  const kratkoKraj=(n)=>{const a=[n.razKraj||"",n.razNaslov||""].filter(Boolean).join(", ");const pk=(a.match(/\b\d{4,5}\b/)||[])[0]||"";const mesto=(n.razKraj||"").replace(/\b\d{4,5}\b/,"").replace(/^[\s,]+|[\s,]+$/g,"");return ((pk?pk+" ":"")+mesto).trim()||n.razKraj||"";};
+  const prazna=(()=>{
+    const _nr2=(x)=>(x||"").toUpperCase().replace(/[\s.-]/g,"");
+    const out=[];
+    skupine.filter(g=>g.kljuc!=="_brez").forEach(g=>{
+      const k=g.koncni;
+      if(!k)return;
+      out.push({vozilo:g.vozilo,voznik:g.voznik,kraj:kratkoKraj(k),datum:k.razDatum||"",cas:k.razCas||"",nalog:k.stevilkaNaloga||"",prostZdaj:false});
+    });
+    (gpsVozila||[]).forEach(v=>{
+      const vo=(vozniki||[]).find(x=>_nr2(x.vozilo)===_nr2(v.reg_tablica));
+      if(vo&&skupine.some(g=>g.kljuc===vo.id))return;
+      out.push({vozilo:v.reg_tablica,voznik:(vo&&vo.ime)||v.voznik||"",kraj:v.lokacija||"",datum:"",cas:"",nalog:"",prostZdaj:true});
+    });
+    out.forEach(p=>{
+      const r=rocno[p.vozilo];
+      if(r&&r.nalog===p.nalog&&r.datum){ p.datum=r.datum; p.cas=r.cas||""; p.prostZdaj=false; p.rocno=true; }
+    });
+    return out.sort((a,b)=>((a.datum||"0")+(a.cas||"")).localeCompare((b.datum||"0")+(b.cas||"")));
+  })();
+  const vrsticaPrazno=(p)=>[p.vozilo,p.voznik,p.prostZdaj?"prost zdaj":("prost "+fd(p.datum)+(p.cas?" ob "+p.cas:"")),p.kraj].filter(Boolean).join(" · ");
   const gmapZaVozilo=(g)=>{
     const vir=(g.vec&&g.izbrani&&g.izbrani.length)?g.izbrani:g.postanki;
     const t=vir.map(naslovZa).filter(Boolean);
@@ -3722,6 +3753,40 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
     showToast(zVozili?"CSV pripravljen (z lokacijami vozil) - uvozi ga v Google My Maps":"CSV pripravljen - uvozi ga v Google My Maps");
   };
   return(<div>
+    <div style={{background:"#fff",borderRadius:14,padding:14,marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}} onClick={()=>setPraznaOdpr(x=>!x)}>
+        <span style={{fontSize:18}}>🚚</span>
+        <div style={{flex:1,fontWeight:800,fontSize:15,color:"#0f2744"}}>{"Prazna vozila ("+prazna.length+")"}</div>
+        <span style={{fontSize:12,color:"#64748b",fontWeight:700}}>{praznaOdpr?"Skrij ▲":"Prikaži ▼"}</span>
+      </div>
+      {praznaOdpr&&<div style={{marginTop:10}}>
+        <div style={{fontSize:11,color:"#94a3b8",marginBottom:8}}>Kje in kdaj se vozilo sprosti. Datum je iz naloga - klikni nanj za ročni popravek, če veš, da bo drugače. 📋 kopira kraj za vpis v Timocom.</div>
+        {prazna.length===0&&<div style={{fontSize:13,color:"#94a3b8"}}>Ni podatkov za ta teden.</div>}
+        {prazna.map((p,i2)=>(
+          <div key={i2} style={{display:"flex",gap:8,alignItems:"center",padding:"8px 10px",background:p.prostZdaj?"#f0fdf4":"#f8fafc",borderRadius:8,marginBottom:6,flexWrap:"wrap"}}>
+            <span style={{fontSize:13,fontWeight:800,color:"#0f2744",minWidth:92}}>{p.vozilo}</span>
+            <span style={{fontSize:12,color:"#64748b",minWidth:130,flex:"1 1 130px"}}>{p.voznik}</span>
+            {urejP===p.vozilo
+              ?<span style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                 <input type="date" value={pD} onChange={e=>setPD(e.target.value)} style={{padding:"4px 6px",borderRadius:6,border:"1px solid #cbd5e1",fontSize:12}}/>
+                 <input type="time" value={pC} onChange={e=>setPC(e.target.value)} style={{padding:"4px 6px",borderRadius:6,border:"1px solid #cbd5e1",fontSize:12,width:92}}/>
+                 <button onClick={()=>{setRocno(x=>({...x,[p.vozilo]:{datum:pD,cas:pC,nalog:p.nalog}}));setUrejP(null);}} style={{fontSize:11,fontWeight:700,border:"none",background:"#16a34a",color:"#fff",borderRadius:6,padding:"5px 9px",cursor:"pointer"}}>Shrani</button>
+                 <button onClick={()=>{setRocno(x=>{const c={...x};delete c[p.vozilo];return c;});setUrejP(null);}} style={{fontSize:11,fontWeight:700,border:"1px solid #e2e8f0",background:"#fff",color:"#64748b",borderRadius:6,padding:"5px 9px",cursor:"pointer"}}>Iz naloga</button>
+               </span>
+              :<span onClick={()=>{setUrejP(p.vozilo);setPD(p.datum||"");setPC(p.cas||"");}} title="Klikni za rocni popravek datuma" style={{fontSize:12,fontWeight:700,color:p.rocno?"#b45309":(p.prostZdaj?"#15803d":"#2563eb"),minWidth:150,cursor:"pointer",textDecoration:"underline dotted"}}>{(p.prostZdaj?"prost zdaj":("prost "+fd(p.datum)+(p.cas?" ob "+p.cas:"")))+(p.rocno?" ✏️":"")}</span>}
+            <span style={{fontSize:13,fontWeight:700,color:"#0f2744",flex:"2 1 170px",minWidth:0}}>{p.kraj||"-"}</span>
+            <span style={{display:"flex",gap:6,flexShrink:0}}>
+              <button onClick={()=>kop(p.kraj,"Kraj kopiran: "+p.kraj)} title="Kopiraj samo kraj za Timocom" style={{fontSize:12,fontWeight:700,border:"1px solid #cbd5e1",background:"#fff",color:"#0f2744",borderRadius:8,padding:"5px 10px",cursor:"pointer"}}>📋 kraj</button>
+              <button onClick={()=>kop(vrsticaPrazno(p),"Vrstica kopirana")} title="Kopiraj celo vrstico" style={{fontSize:12,fontWeight:700,border:"1px solid #cbd5e1",background:"#fff",color:"#64748b",borderRadius:8,padding:"5px 10px",cursor:"pointer"}}>📋 vse</button>
+            </span>
+          </div>
+        ))}
+        {prazna.length>0&&<div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
+          <button onClick={()=>kop(prazna.map(vrsticaPrazno).join("\n"),"Vsa prazna vozila kopirana")} style={{padding:"8px 14px",borderRadius:10,border:"none",background:"#0f2744",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>📋 Kopiraj vsa</button>
+          <button onClick={()=>kop(["Vozilo\tVoznik\tProst\tKraj",...prazna.map(p=>[p.vozilo,p.voznik,p.prostZdaj?"zdaj":(fd(p.datum)+(p.cas?" "+p.cas:"")),p.kraj].join("\t"))].join("\n"),"Tabela kopirana - prilepi v Excel")} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid #cbd5e1",background:"#fff",color:"#0f2744",fontWeight:700,fontSize:13,cursor:"pointer"}}>📋 Za Excel</button>
+        </div>}
+      </div>}
+    </div>
     <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
       {[[0,"Ta teden"],[1,"Naslednji teden"],[2,"Cez dva tedna"]].map(([v,l])=>(
         <button key={v} onClick={()=>setTeden(v)} style={{padding:"7px 14px",borderRadius:8,border:"1.5px solid "+(teden===v?"#0f2744":"#e2e8f0"),background:teden===v?"#0f2744":"#fff",color:teden===v?"#fff":"#64748b",fontSize:13,fontWeight:700,cursor:"pointer"}}>{l}</button>
@@ -3729,7 +3794,7 @@ function RazkladiTab({nalogi,vozniki,gpsVozila,showToast,onSelect}){
       <span style={{fontSize:12,color:"#64748b",marginLeft:4}}>{ff(obseg.od)} - {ff(obseg.do)}</span>
     </div>
     <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
-      {[["vse","Vse smeri"],["izvoz","\U0001F7E2 Izvoz"],["uvoz","\U0001F535 Uvoz"],["domaci","\U0001F3E0 Domaci"]].map(([v,l])=>(
+      {[["vse","Vse smeri"],["izvoz","🟢 Izvoz"],["uvoz","🔵 Uvoz"],["domaci","🏠 Domači"]].map(([v,l])=>(
         <button key={v} onClick={()=>setSmerF(v)} style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid "+(smerF===v?"#0f2744":"#e2e8f0"),background:smerF===v?"#0f2744":"#fff",color:smerF===v?"#fff":"#64748b",fontSize:12,fontWeight:700,cursor:"pointer"}}>{l}</button>
       ))}
       <button onClick={()=>setZVozili(x=>!x)} title="V CSV doda tudi trenutne lokacije vozil" style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid "+(zVozili?"#2563eb":"#e2e8f0"),background:zVozili?"#eff6ff":"#fff",color:zVozili?"#1d4ed8":"#64748b",fontSize:12,fontWeight:700,cursor:"pointer"}}>{zVozili?"✓ Z lokacijami vozil":"Brez lokacij vozil"}</button>
