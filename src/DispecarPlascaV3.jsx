@@ -1077,6 +1077,20 @@ function GpsTab({nalogi,vozniki}){
     const [d,setD]=useState(null); const [nap,setNap]=useState(""); const [load,setLoad]=useState(false); const [q,setQ]=useState(""); const [osv,setOsv]=useState(null); const [odpV,setOdpV]=useState({}); const [izbT,setIzbT]=useState({});
   const naloziGps=async()=>{ setLoad(true); setNap(""); try{ const {data,error}=await supabase.functions.invoke("eurowag-trips",{body:{}}); if(error) throw error; if(data&&data.error) throw new Error(data.error); setD(data); setOsv(new Date()); }catch(e){ setNap(String(e&&e.message?e.message:e)); } setLoad(false); };
   useEffect(()=>{ naloziGps(); const t=setInterval(naloziGps,120000); return ()=>clearInterval(t); },[]);
+  const izbraniKraji=(v)=>{
+    const nr=(x)=>(x||"").toUpperCase().replace(/[\s.-]/g,"");
+    const vo=(vozniki||[]).find(x=>nr(x.vozilo)===nr(v.reg_tablica));
+    if(!vo)return [];
+    const tms=(d,c)=>d?new Date(d+"T"+(c&&c.length>=4?c.slice(0,5):"00:00")+":00").getTime():0;
+    const akt=(nalogi||[]).filter(x=>x.voznikId===vo.id&&x.status!=="zakljucen"&&x.status!=="fakturirano"&&x.status!=="za_fakturo");
+    const out=[];
+    akt.forEach(x=>{
+      if(izbT[v.id+"|"+x.id+"|nak"]&&(x.nakNaslov||x.nakKraj))out.push({kraj:x.nakNaslov||x.nakKraj,t:tms(x.nakDatum,x.nakCas),tip:"Naklad",nalog:x.stevilkaNaloga||""});
+      if(izbT[v.id+"|"+x.id+"|raz"]&&(x.razNaslov||x.razKraj))out.push({kraj:x.razNaslov||x.razKraj,t:tms(x.razDatum,x.razCas),tip:"Razklad",nalog:x.stevilkaNaloga||""});
+    });
+    out.sort((a,b)=>a.t-b.t);
+    return out.slice(0,10);
+  };
   const pred=(iso)=>{ if(!iso) return "-"; const m=Math.round((Date.now()-new Date(iso).getTime())/60000); if(m<1) return "pravkar"; if(m<60) return "pred "+m+" min"; const h=Math.floor(m/60); return "pred "+h+" h "+(m%60)+" min"; };
   const vsa=(d&&d.vozila)||[];
   const nrm=(x)=>(x||"").toUpperCase().replace(/[\s.-]/g,"");
@@ -1134,7 +1148,7 @@ function GpsTab({nalogi,vozniki}){
     {sel.length>0&&<span style={{fontSize:11,color:"#94a3b8"}}>Začne pri vozilu v {v.lokacija||"trenutni legi"}.</span>}
   </div>;
 })()}</div>;})()}
-      <PrihodVozila v={v} vozniki={vozniki}/>
+      <PrihodVozila v={v} vozniki={vozniki} izbrani={izbraniKraji(v)}/>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
         <span style={{fontSize:11,color:"#94a3b8"}}>{pred(v.cas)}{v.kontakt?" | kontakt prizgan":""}</span>
         {v.lat&&<a href={"https://www.google.com/maps?q="+v.lat+","+v.lon} target="_blank" rel="noreferrer" style={{fontSize:12,color:"#2563eb",fontWeight:700,textDecoration:"none"}}>Zemljevid</a>}
@@ -3838,7 +3852,7 @@ const R=({label,val,bold,mono})=><div style={{display:"flex",justifyContent:"spa
 const I=({label,val,set,ph,type="text"})=><div><label style={s.lbl}>{label}</label><input style={s.inp} type={type} value={val||""} onChange={e=>set(e.target.value)} placeholder={ph||""}/></div>;
 const Toast=({t})=><div style={{position:"fixed",top:20,right:20,color:"#fff",padding:"12px 24px",borderRadius:12,fontWeight:700,fontSize:14,zIndex:400,background:t.err?"#dc2626":"#16a34a",boxShadow:"0 4px 20px rgba(0,0,0,0.25)"}}>{t.txt}</div>;
 
-function PrihodVozila({v,vozniki}){
+function PrihodVozila({v,vozniki,izbrani}){
   const [odpr,setOdpr]=useState(false);
   const [tocke,setTocke]=useState([""]);
   const [eta,setEta]=useState(null);
@@ -3852,6 +3866,10 @@ function PrihodVozila({v,vozniki}){
   const [tahOdpr,setTahOdpr]=useState(false);
   const [tahBere,setTahBere]=useState(false);
   useEffect(()=>{try{localStorage.setItem("eta_hitrost",String(hitrost));}catch(e){}},[hitrost]);
+  const _izb=(izbrani||[]);
+  const _izbKey=_izb.map(x=>x.kraj).join("|");
+  const prevzemi=()=>{if(!_izb.length)return;setTocke(_izb.map(x=>x.kraj));setEta(null);};
+  useEffect(()=>{if(!odpr||!_izb.length)return;if(tocke.some(x=>String(x||"").trim()))return;setTocke(_izb.map(x=>x.kraj));setEta(null);},[odpr,_izbKey]);
   const hm=(h)=>{const m=Math.round(h*60);return Math.floor(m/60)+" h "+String(m%60).padStart(2,"0")+" min";};
   const dcas=(d)=>{const dn=new Date();const jutri=new Date(dn);jutri.setDate(dn.getDate()+1);
     const iste=(a,b)=>a.getDate()===b.getDate()&&a.getMonth()===b.getMonth()&&a.getFullYear()===b.getFullYear();
@@ -3954,7 +3972,9 @@ function PrihodVozila({v,vozniki}){
   };
   return <div onClick={(e)=>e.stopPropagation()} style={{marginTop:8}}>
     <div onClick={()=>setOdpr(x=>!x)} style={{fontSize:12,fontWeight:700,color:"#0f2744",background:"#f1f5f9",borderRadius:8,padding:"6px 10px",display:"inline-block",cursor:"pointer"}}>{"⏱️ Prihod na naklad "+(odpr?"▲":"▼")}</div>
+    {_izb.length>0&&<button onClick={()=>{prevzemi();setOdpr(true);}} title="Prenese obkljukane naklade in razklade med postanke" style={{marginLeft:6,fontSize:12,fontWeight:700,color:"#1d4ed8",background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,padding:"6px 10px",cursor:"pointer"}}>{"⤵️ Prevzemi označene ("+_izb.length+")"}</button>}
     {odpr&&<div style={{marginTop:8}}>
+      {_izb.length>0&&<div style={{fontSize:11,color:"#64748b",marginBottom:6}}>{"Obkljukano v nalogih: "+_izb.map(x=>x.tip+" "+x.kraj).join(" → ")}</div>}
       <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
         <div style={{flex:"1 1 100%",display:"flex",flexDirection:"column",gap:6}}>
           {tocke.map((t,idx)=>(
