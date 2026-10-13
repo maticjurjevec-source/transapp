@@ -83,7 +83,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="13.10.2026 a";
+const VERZIJA="13.10.2026 b";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
@@ -3870,6 +3870,8 @@ function PrihodVozila({v,vozniki,izbrani}){
   const _izb=(izbrani||[]);
   const _izbKey=_izb.map(x=>x.kraj).join("|");
   const prevzemi=()=>{if(!_izb.length)return;setTocke(_izb.map(x=>x.kraj));setEta(null);};
+  const premakni=(od,kam)=>{if(kam<0||kam>=tocke.length)return;const c=[...tocke];const t=c[od];c[od]=c[kam];c[kam]=t;setTocke(c);setEta(null);};
+  const gumbPrem={border:"1px solid #e2e8f0",background:"#fff",color:"#475569",borderRadius:6,padding:"2px 6px",fontSize:11,fontWeight:800,lineHeight:1.2,cursor:"pointer"};
   useEffect(()=>{if(!odpr||!_izb.length)return;if(tocke.some(x=>String(x||"").trim()))return;setTocke(_izb.map(x=>x.kraj));setEta(null);},[odpr,_izbKey]);
   const hm=(h)=>{const m=Math.round(h*60);return Math.floor(m/60)+" h "+String(m%60).padStart(2,"0")+" min";};
   const dcas=(d)=>{const dn=new Date();const jutri=new Date(dn);jutri.setDate(dn.getDate()+1);
@@ -3982,7 +3984,7 @@ function PrihodVozila({v,vozniki,izbrani}){
             <div key={idx} style={{display:"flex",gap:6,alignItems:"center"}}>
               <span style={{fontSize:11,fontWeight:800,color:"#94a3b8",minWidth:16}}>{idx+1}.</span>
               <input value={t} onChange={e=>{const c=[...tocke];c[idx]=e.target.value;setTocke(c);setEta(null);}} onKeyDown={e=>{if(e.key==="Enter")izracunaj();}} placeholder={idx===0?"Kraj ali poštna št. (npr. 1000 Ljubljana ali DE-47447)":"Naslednji postanek"} style={{flex:1,minWidth:0,padding:"7px 10px",borderRadius:8,border:"1px solid #cbd5e1",fontSize:12,outline:"none"}}/>
-              {tocke.length>1&&<button onClick={()=>{setTocke(tocke.filter((_,i3)=>i3!==idx));setEta(null);}} title="Odstrani postanek" style={{border:"1px solid #e2e8f0",background:"#fff",color:"#b91c1c",borderRadius:8,padding:"5px 9px",fontSize:12,fontWeight:800,cursor:"pointer"}}>✕</button>}
+              {tocke.length>1&&<div style={{display:"flex",flexDirection:"column",gap:2}}><button onClick={()=>premakni(idx,idx-1)} disabled={idx===0} title="Premakni navzgor" style={{...gumbPrem,opacity:idx===0?0.3:1,cursor:idx===0?"default":"pointer"}}>▲</button><button onClick={()=>premakni(idx,idx+1)} disabled={idx===tocke.length-1} title="Premakni navzdol" style={{...gumbPrem,opacity:idx===tocke.length-1?0.3:1,cursor:idx===tocke.length-1?"default":"pointer"}}>▼</button></div>}{tocke.length>1&&<button onClick={()=>{setTocke(tocke.filter((_,i3)=>i3!==idx));setEta(null);}} title="Odstrani postanek" style={{border:"1px solid #e2e8f0",background:"#fff",color:"#b91c1c",borderRadius:8,padding:"5px 9px",fontSize:12,fontWeight:800,cursor:"pointer"}}>✕</button>}
             </div>
           ))}
           <div><button onClick={()=>setTocke([...tocke,""])} style={{border:"1px dashed #cbd5e1",background:"#fff",color:"#2563eb",borderRadius:8,padding:"5px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Dodaj postanek</button></div>
