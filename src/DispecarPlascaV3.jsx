@@ -83,6 +83,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
+const VERZIJA="13.10.2026 a";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
@@ -1118,7 +1119,7 @@ function GpsTab({nalogi,vozniki}){
     {vsa.length>0&&<div style={{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap"}}>
       <span style={{background:"#dcfce7",color:"#15803d",padding:"4px 12px",borderRadius:20,fontSize:12,fontWeight:800}}>V voznji: {vozi}</span>
       <span style={{background:"#f1f5f9",color:"#0f2744",padding:"4px 12px",borderRadius:20,fontSize:12,fontWeight:800}}>Stoji: {vsa.length-vozi}</span>{vsa.filter(v=>opozorilo(v)).length>0&&<span style={{background:"#fef2f2",color:"#b91c1c",padding:"4px 12px",borderRadius:20,fontSize:12,fontWeight:800}}>Opozorila: {vsa.filter(v=>opozorilo(v)).length}</span>}
-      {osv&&<span style={{color:"#94a3b8",fontSize:12,alignSelf:"center"}}>Osvezeno ob {osv.toLocaleTimeString("sl-SI",{hour:"2-digit",minute:"2-digit"})}</span>}
+      {osv&&<span style={{color:"#94a3b8",fontSize:12,alignSelf:"center"}}>Osvezeno ob {osv.toLocaleTimeString("sl-SI",{hour:"2-digit",minute:"2-digit"})}</span>}<span title="Verzija aplikacije - ce se ne ujema z zadnjo, brskalnik se vedno vrti staro" style={{color:"#cbd5e1",fontSize:11,alignSelf:"center",marginLeft:"auto",fontFamily:"monospace"}}>{"v "+VERZIJA}</span>
     </div>}
     {nap&&<div style={{background:"#fef2f2",color:"#b91c1c",border:"1px solid #fecaca",borderRadius:10,padding:14,marginBottom:12,fontSize:13}}>Napaka: {nap}</div>}
     {load&&!d&&<div style={{textAlign:"center",color:"#94a3b8",padding:40}}>Nalagam pozicije...</div>}
