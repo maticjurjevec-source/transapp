@@ -131,7 +131,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="16.10.2026 b";
+const VERZIJA="16.10.2026 d";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
@@ -1123,17 +1123,18 @@ function PregledTab({stats,nalogi,obracuni,vozniki,onSelNalog,onSelOb}){
   </div>);
 }
 function KalkulatorTab({vozniki,gpsVozila}){
-  const [od,setOd]=useState("");
-  const [doK,setDoK]=useState("");
+  const [kt,setKt]=useState(["",""]);
   const [cena,setCena]=useState("");
   const [vozilo,setVozilo]=useState("");
+  const [prazni,setPrazni]=useState("");
+  const [polni,setPolni]=useState("");
   const [n,setN]=useState(()=>{try{const r=JSON.parse(localStorage.getItem("kalk_nast")||"null");return r?{...KALK_PRIVZETO,...r}:{...KALK_PRIVZETO};}catch(e){return {...KALK_PRIVZETO};}});
   const [nastOdpr,setNastOdpr]=useState(false);
   const [res,setRes]=useState(null);
   const [racuna,setRacuna]=useState(false);
   const [kopirano,setKopirano]=useState(false);
   useEffect(()=>{try{localStorage.setItem("kalk_nast",JSON.stringify(n));}catch(e){}},[n]);
-  const sn=(k,x)=>{setN(p=>({...p,[k]:x}));setRes(r=>r);};
+  const sn=(k,x)=>setN(p=>({...p,[k]:x}));
   const eur=(x)=>(isFinite(x)?x:0).toLocaleString("sl-SI",{minimumFractionDigits:2,maximumFractionDigits:2})+" EUR";
   const eur3=(x)=>(isFinite(x)?x:0).toLocaleString("sl-SI",{minimumFractionDigits:3,maximumFractionDigits:3})+" EUR";
   const odst=(x)=>(isFinite(x)?x:0).toLocaleString("sl-SI",{minimumFractionDigits:1,maximumFractionDigits:1})+" %";
@@ -1144,24 +1145,31 @@ function KalkulatorTab({vozniki,gpsVozila}){
     return {id:v.id,reg:v.reg_tablica,ime:(vo&&vo.ime)||v.voznik||"",lat:v.lat,lon:v.lon,lokacija:v.lokacija||""};
   }).sort((a,b)=>String(a.reg||"").localeCompare(String(b.reg||"")));
   const izracunaj=async()=>{
-    const a=String(od||"").trim(), b=String(doK||"").trim();
-    if(!a||!b)return setRes({napaka:"Vpiši naklad in razklad."});
+    const q=kt.map(x=>String(x||"").trim()).filter(Boolean);
+    if(q.length<2)return setRes({napaka:"Vpiši vsaj dva kraja."});
     setRacuna(true);setRes(null);
     try{
-      const tA=await geoKraj(a); if(!tA)throw new Error("Naklada »"+a+"« ni bilo mogoče najti");
-      const tB=await geoKraj(b); if(!tB)throw new Error("Razklada »"+b+"« ni bilo mogoče najti");
+      const najdeni=[];
+      for(const x of q){
+        const t=await geoKraj(x);
+        if(!t)throw new Error("Kraja »"+x+"« ni bilo mogoče najti");
+        najdeni.push(t);
+      }
       const v=prostaVozila.find(x=>String(x.id)===String(vozilo));
-      const tocke=v?[{la:v.lat,lo:v.lon},tA,tB]:[tA,tB];
-      const r=await cestnaKm(tocke);
+      const pot=v?[{la:v.lat,lo:v.lon},...najdeni]:najdeni;
+      const r=await cestnaKm(pot);
       const prazniKm=v?(r.legs[0]||0):0;
-      const polniKm=v?(r.legs[1]||0):(r.legs[0]||0);
-      setRes({prazniKm,polniKm,zracna:r.zracna,najdenA:tA.najden,najdenB:tB.najden,vozilo:v||null,tA,tB});
+      const polniKm=(v?r.legs.slice(1):r.legs).reduce((a,x)=>a+x,0);
+      setPrazni(String(Math.round(prazniKm)));
+      setPolni(String(Math.round(polniKm)));
+      setRes({zracna:r.zracna,vozilo:v||null,najdeni:najdeni.map(x=>x.najden)});
     }catch(e){setRes({napaka:(e&&e.message)||"Izračun ni uspel"});}
     setRacuna(false);
   };
+  const kmP=stev(prazni), kmN=stev(polni);
   const c=(()=>{
-    if(!res||res.napaka)return null;
-    const km=res.prazniKm+res.polniKm;
+    const km=kmP+kmN;
+    if(km<=0)return null;
     const gorivo=km*stev(n.poraba)/100*stev(n.gorivo);
     const voznik=km*stev(n.voznik);
     const cestnina=km*stev(n.cestnina);
@@ -1173,16 +1181,16 @@ function KalkulatorTab({vozniki,gpsVozila}){
     const ciljM=Math.min(Math.max(stev(n.cilj),0),95);
     return {km,gorivo,voznik,cestnina,ostalo,skupaj,prihodek,dobicek,marza,
       naKm:km>0?skupaj/km:0,dobicekKm:km>0?dobicek/km:0,
-      ponudbaKm:km>0?prihodek/km:0,ponudbaPolni:res.polniKm>0?prihodek/res.polniKm:0,
+      ponudbaKm:km>0?prihodek/km:0,ponudbaPolni:kmN>0?prihodek/kmN:0,
       ciljCena:skupaj/(1-ciljM/100),ciljM};
   })();
   const porocilo=()=>{
     if(!c)return "";
     return ["KALKULACIJA PREVOZA",
-      od+" -> "+doK,
-      (res.vozilo?("Vozilo: "+res.vozilo.reg+(res.vozilo.lokacija?" ("+res.vozilo.lokacija+")":"")):"Brez praznih kilometrov"),
-      "Prazni km: "+Math.round(res.prazniKm),
-      "Nalozeni km: "+Math.round(res.polniKm),
+      (kt.filter(x=>String(x||"").trim()).length>1?kt.filter(x=>String(x||"").trim()).join(" -> "):"Rocno vpisani kilometri"),
+      ((res&&res.vozilo)?("Vozilo: "+res.vozilo.reg+(res.vozilo.lokacija?" ("+res.vozilo.lokacija+")":"")):"Brez praznih kilometrov"),
+      "Prazni km: "+Math.round(kmP),
+      "Nalozeni km: "+Math.round(kmN),
       "Skupaj km: "+Math.round(c.km),
       "",
       "Cena prevoza: "+eur(c.prihodek),
@@ -1203,6 +1211,8 @@ function KalkulatorTab({vozniki,gpsVozila}){
     try{if(navigator.clipboard)navigator.clipboard.writeText(t).catch(()=>{});}catch(x){}
     setKopirano(true);setTimeout(()=>setKopirano(false),1800);
   };
+  const premakni=(od2,kam)=>{if(kam<0||kam>=kt.length)return;const cp=[...kt];const t=cp[od2];cp[od2]=cp[kam];cp[kam]=t;setKt(cp);};
+  const gumbPrem={border:"1px solid #e2e8f0",background:"#fff",color:"#475569",borderRadius:6,padding:"2px 6px",fontSize:11,fontWeight:800,lineHeight:1.2,cursor:"pointer"};
   const inp={width:"100%",padding:"11px 12px",borderRadius:10,border:"1px solid #dbe2ec",fontSize:15,background:"#fafcff",outline:"none",boxSizing:"border-box"};
   const lbl={display:"block",fontWeight:700,fontSize:12,marginBottom:6,color:"#475569"};
   const kartica={background:"#fff",border:"1px solid #e5eaf0",borderRadius:14,padding:16,marginBottom:12};
@@ -1210,14 +1220,29 @@ function KalkulatorTab({vozniki,gpsVozila}){
   const vrstice=c?[["Gorivo",c.gorivo,"#0d9488"],["Voznik",c.voznik,"#4385cb"],["Cestnina",c.cestnina,"#db9235"],["Ostalo",c.ostalo,"#9573c5"]]:[];
   return <div>
     <div style={kartica}>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12}}>
-        <div><label style={lbl}>Naklad (kraj ali poštna št.)</label><input value={od} onChange={e=>{setOd(e.target.value);setRes(null);}} onKeyDown={e=>{if(e.key==="Enter")izracunaj();}} placeholder="npr. DE-47447 Moers" style={inp}/></div>
-        <div><label style={lbl}>Razklad</label><input value={doK} onChange={e=>{setDoK(e.target.value);setRes(null);}} onKeyDown={e=>{if(e.key==="Enter")izracunaj();}} placeholder="npr. 1000 Ljubljana" style={inp}/></div>
-        <div><label style={lbl}>Cena prevoza (EUR)</label><input value={cena} onChange={e=>setCena(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")izracunaj();}} placeholder="npr. 1450" inputMode="decimal" style={inp}/></div>
-        <div><label style={lbl}>Vozilo za prazne km</label><select value={vozilo} onChange={e=>{setVozilo(e.target.value);setRes(null);}} style={{...inp,cursor:"pointer"}}><option value="">– brez praznih km –</option>{prostaVozila.map(v=><option key={v.id} value={v.id}>{v.reg+(v.ime?" – "+v.ime:"")}</option>)}</select></div>
+      <label style={lbl}>Pot – naklad, vmesni postanki, razklad</label>
+      <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}>
+        {kt.map((t,idx)=>(
+          <div key={idx} style={{display:"flex",gap:6,alignItems:"center"}}>
+            <span style={{fontSize:11,fontWeight:800,color:"#94a3b8",minWidth:16}}>{idx+1}.</span>
+            <input value={t} onChange={e=>{const cp=[...kt];cp[idx]=e.target.value;setKt(cp);}} onKeyDown={e=>{if(e.key==="Enter")izracunaj();}} placeholder={idx===0?"Naklad – kraj ali poštna št.":(idx===kt.length-1?"Razklad":"Vmesni postanek")} style={{...inp,flex:1,minWidth:0}}/>
+            {kt.length>2&&<div style={{display:"flex",flexDirection:"column",gap:2}}>
+              <button onClick={()=>premakni(idx,idx-1)} disabled={idx===0} title="Premakni navzgor" style={{...gumbPrem,opacity:idx===0?0.3:1,cursor:idx===0?"default":"pointer"}}>▲</button>
+              <button onClick={()=>premakni(idx,idx+1)} disabled={idx===kt.length-1} title="Premakni navzdol" style={{...gumbPrem,opacity:idx===kt.length-1?0.3:1,cursor:idx===kt.length-1?"default":"pointer"}}>▼</button>
+            </div>}
+            {kt.length>2&&<button onClick={()=>setKt(kt.filter((_,i2)=>i2!==idx))} title="Odstrani" style={{border:"1px solid #e2e8f0",background:"#fff",color:"#b91c1c",borderRadius:8,padding:"7px 10px",fontSize:12,fontWeight:800,cursor:"pointer"}}>✕</button>}
+          </div>
+        ))}
+        <div><button onClick={()=>setKt([...kt,""])} style={{border:"1px dashed #cbd5e1",background:"#fff",color:"#2563eb",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Dodaj postanek</button></div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}}>
+        <div><label style={lbl}>Cena prevoza (EUR)</label><input value={cena} onChange={e=>setCena(e.target.value)} placeholder="npr. 1450" inputMode="decimal" style={inp}/></div>
+        <div><label style={lbl}>Prazni km</label><input value={prazni} onChange={e=>setPrazni(e.target.value)} placeholder="0" inputMode="decimal" style={inp}/></div>
+        <div><label style={lbl}>Naloženi km</label><input value={polni} onChange={e=>setPolni(e.target.value)} placeholder="npr. 1250" inputMode="decimal" style={inp}/></div>
+        <div><label style={lbl}>Vozilo za prazne km</label><select value={vozilo} onChange={e=>setVozilo(e.target.value)} style={{...inp,cursor:"pointer"}}><option value="">– brez praznih km –</option>{prostaVozila.map(v=><option key={v.id} value={v.id}>{v.reg+(v.ime?" – "+v.ime:"")}</option>)}</select></div>
       </div>
       <div style={{display:"flex",gap:8,marginTop:12,flexWrap:"wrap",alignItems:"center"}}>
-        <button onClick={izracunaj} disabled={racuna} style={{background:racuna?"#94a3b8":"#0f2744",color:"#fff",border:"none",borderRadius:10,padding:"11px 20px",fontWeight:700,fontSize:14,cursor:racuna?"default":"pointer"}}>{racuna?"Računam...":"Izračunaj"}</button>
+        <button onClick={izracunaj} disabled={racuna} style={{background:racuna?"#94a3b8":"#0f2744",color:"#fff",border:"none",borderRadius:10,padding:"11px 20px",fontWeight:700,fontSize:14,cursor:racuna?"default":"pointer"}}>{racuna?"Računam...":"📍 Izračunaj km iz relacije"}</button>
         <button onClick={()=>setNastOdpr(x=>!x)} style={{background:"#fff",color:"#334155",border:"1px solid #cbd5e1",borderRadius:10,padding:"11px 16px",fontWeight:700,fontSize:14,cursor:"pointer"}}>{"Stroški "+(nastOdpr?"▲":"▼")}</button>
         {c&&<button onClick={kopiraj} style={{background:"#fff",color:"#334155",border:"1px solid #cbd5e1",borderRadius:10,padding:"11px 16px",fontWeight:700,fontSize:14,cursor:"pointer"}}>{kopirano?"✓ Kopirano":"📋 Kopiraj izračun"}</button>}
         <span style={{fontSize:12,color:"#94a3b8"}}>{n.poraba+" l/100 km · gorivo "+n.gorivo+" €/l · cestnina "+n.cestnina+" €/km"}</span>
@@ -1243,11 +1268,11 @@ function KalkulatorTab({vozniki,gpsVozila}){
       <div style={kartica}>
         <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8,fontSize:13,marginBottom:10}}>
           <span style={{fontWeight:800,color:"#0f2744"}}>{Math.round(c.km)+" km skupaj"}</span>
-          <span style={{color:"#64748b"}}>{(res.prazniKm>0?(Math.round(res.prazniKm)+" km prazno + "):"")+Math.round(res.polniKm)+" km naloženo"}</span>
+          <span style={{color:"#64748b"}}>{(kmP>0?(Math.round(kmP)+" km prazno + "):"")+Math.round(kmN)+" km naloženo"}</span>
         </div>
         <div style={{height:10,background:"#edf1f6",borderRadius:8,overflow:"hidden",display:"flex"}}>
-          <div style={{width:(c.km>0?res.prazniKm/c.km*100:0)+"%",background:"#cbd5e1"}}/>
-          <div style={{width:(c.km>0?res.polniKm/c.km*100:0)+"%",background:"#2563eb"}}/>
+          <div style={{width:(c.km>0?kmP/c.km*100:0)+"%",background:"#cbd5e1"}}/>
+          <div style={{width:(c.km>0?kmN/c.km*100:0)+"%",background:"#2563eb"}}/>
         </div>
         <div style={{marginTop:16}}>
           {vrstice.map(([l,x,col])=>(
@@ -1263,9 +1288,9 @@ function KalkulatorTab({vozniki,gpsVozila}){
           ))}
         </div>
         <div style={{marginTop:14,fontSize:11,color:"#94a3b8",lineHeight:1.6}}>
-          {"Naklad: "+res.najdenA}<br/>{"Razklad: "+res.najdenB}
-          {res.zracna&&<><br/>Cestna razdalja ni bila dosegljiva – ocena iz zračne črte +25 %.</>}
-          <br/>Cestnina je ocena po enotni ceni na km; dejanska se razlikuje po državah.
+          {res&&res.najdeni&&res.najdeni.map((x,i3)=><span key={i3}>{(i3+1)+". "+x}<br/></span>)}
+          {res&&res.zracna&&<>Cestna razdalja ni bila dosegljiva – ocena iz zračne črte +25 %.<br/></>}
+          Cestnina je ocena po enotni ceni na km; dejanska se razlikuje po državah.
         </div>
       </div>
     </>}
