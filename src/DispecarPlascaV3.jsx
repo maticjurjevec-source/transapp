@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { supabase } from './supabase'; import PotiTab from './PotiTab';
-import { loginToOutlook, logoutFromOutlook, getActiveAccount, getRecentEmails, getEmailWithAttachments, markEmailAsRead, ustvariOsnutekZaNarocnika } from './outlookService';
+import { loginToOutlook, logoutFromOutlook, getActiveAccount, getRecentEmails, getEmailWithAttachments, markEmailAsRead, ustvariOsnutekZaNarocnika, ustvariOsnutekSPrilogami, posljiOpomin } from './outlookService';
 
 const pad=(n)=>String(n).padStart(2,"0");
 const GEO_DRZ={AT:"Austria",DE:"Germany",SI:"Slovenia",IT:"Italy",NL:"Netherlands",BE:"Belgium",FR:"France",PL:"Poland",HU:"Hungary",HR:"Croatia",CZ:"Czechia",SK:"Slovakia",RO:"Romania",ES:"Spain",PT:"Portugal",DK:"Denmark",SE:"Sweden",CH:"Switzerland",LU:"Luxembourg",GB:"United Kingdom",RS:"Serbia",BA:"Bosnia and Herzegovina",BG:"Bulgaria"};
@@ -131,7 +131,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="16.10.2026 d";
+const VERZIJA="18.10.2026 g";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
@@ -1035,7 +1035,7 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
         )}
         {/* Tabs */}
         <div style={s.tabs}>
-          {[["nalogi","📋 Nalogi"],["tedenski","📅 Tedenski"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`],["gps",`📍 GPS${gpsOpoz.length>0?` ⚠️${gpsOpoz.length}`:""}`],["razkladi","🗺️ Razkladi"],["kalkulator","💰 Kalkulator"]].map(([id,label])=>(
+          {[["nalogi","📋 Nalogi"],["tedenski","📅 Tedenski"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`],["gps",`📍 GPS${gpsOpoz.length>0?` ⚠️${gpsOpoz.length}`:""}`],["razkladi","🗺️ Razkladi"],["kalkulator","💰 Kalkulator"],["opomini","🔔 Opomini"]].map(([id,label])=>(
             <button key={id} style={{...s.tab,...(tab===id?s.tabOn:{})}} onClick={()=>setTab(id)}>{label}</button>
           ))}
         </div>
@@ -1049,7 +1049,7 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
         {tab==="prosticmr"&&<ProstiCMRTab st={st} upd={upd} showToast={showToast}/>}
         {tab==="email"&&<EmailNalogTab upd={upd} showToast={showToast} naložiPodatke={naložiPodatke} vozniki={vozniki}/>}
         {tab==="komunikacija"&&<KomunikacijaTab showToast={showToast}/>}
-        {tab==="kalkulator"&&<KalkulatorTab vozniki={vozniki} gpsVozila={gpsVozila}/>}{tab==="dopusti"&&<DopustiTab vozniki={vozniki} showToast={showToast}/>}{tab==="razkladi"&&<RazkladiTab nalogi={st.nalogi} vozniki={vozniki} gpsVozila={gpsVozila} showToast={showToast} onSelect={odpriNalog}/>}{tab==="gps"&&<GpsTab nalogi={st.nalogi} vozniki={vozniki}/>}
+        {tab==="kalkulator"&&<KalkulatorTab vozniki={vozniki} gpsVozila={gpsVozila}/>}{tab==="opomini"&&<OpominiTab nalogi={st.nalogi} showToast={showToast}/>}{tab==="dopusti"&&<DopustiTab vozniki={vozniki} showToast={showToast}/>}{tab==="razkladi"&&<RazkladiTab nalogi={st.nalogi} vozniki={vozniki} gpsVozila={gpsVozila} showToast={showToast} onSelect={odpriNalog}/>}{tab==="gps"&&<GpsTab nalogi={st.nalogi} vozniki={vozniki}/>}
       </div>
       {/* Nov nalog modal */}
       {modal==="nalog"&&(
@@ -1121,6 +1121,369 @@ function PregledTab({stats,nalogi,obracuni,vozniki,onSelNalog,onSelOb}){
     {zaFakturo.length>0&&<><div style={{fontWeight:700,fontSize:15,color:"#9333ea",marginBottom:10,marginTop:12}}>💶 Za fakturo</div>{zaFakturo.map(n=><NC key={n.id} n={n} vozniki={vozniki} onClick={()=>onSelNalog(n)}/>)}</>}
     {noviOb.length>0&&<><div style={{fontWeight:700,fontSize:15,color:"#0f2744",marginBottom:10,marginTop:12}}>💶 Obračuni voznikov</div>{noviOb.map(o=><OC key={o.id} o={o} onClick={()=>onSelOb(o)}/>)}</>}
   </div>);
+}
+const OPOMIN_T={
+  sl:{zad:"Opomin – odprte terjatve",zad1:"Odprte terjatve – opomnik",pozdrav:"Spoštovani,",
+    uvod:["pri pregledu odprtih postavk sem opazil, da naslednji računi pri nas še niso zabeleženi kot plačani:",
+          "oglašam se še enkrat glede spodnjih računov, ki pri nas še vedno niso zabeleženi kot plačani:",
+          "žal se moram glede spodnjih računov oglasiti še zadnjič, preden zadevo predam naprej:"],
+    skupaj:"Skupaj odprto",rac:"Račun",izdan:"izdan",zapadel:"zapadel",dni:"dni zamude",
+    zakljucek:["Če je plačilo medtem že izvedeno ali če je pri računih karkoli nejasno, mi prosim javite – z veseljem uredimo. Sicer vas lepo prosim za poravnavo v naslednjih osmih dneh.",
+               "Če je pri plačilu kakšna težava, se prosim oglasite, pa se bomo že dogovorili. Drugače vas prosim, da plačilo uredite v naslednjih dneh ali mi sporočite predviden datum.",
+               "Še vedno se lahko dogovoriva za obročno plačilo ali drug rok – samo javite se. Če v osmih dneh ne bo ne plačila ne odziva, bom terjatev prepustil izterjavi, kar za obe strani pomeni le dodatne stroške."],
+    dok:"Originalni nalog",konec:"Hvala za sodelovanje in lep pozdrav,"},
+  de:{zad:"Zahlungserinnerung – offene Forderungen",zad1:"Offene Rechnungen – freundliche Erinnerung",pozdrav:"Sehr geehrte Damen und Herren,",
+    uvod:["bei der Durchsicht unserer offenen Posten ist mir aufgefallen, dass folgende Rechnungen bei uns noch nicht als bezahlt verbucht sind:",
+          "ich melde mich noch einmal wegen der folgenden Rechnungen, die bei uns weiterhin offen stehen:",
+          "leider muss ich mich wegen der folgenden Rechnungen ein letztes Mal melden, bevor ich die Sache weitergebe:"],
+    skupaj:"Offener Gesamtbetrag",rac:"Rechnung",izdan:"ausgestellt",zapadel:"fällig",dni:"Tage überfällig",
+    zakljucek:["Sollte die Zahlung bereits erfolgt sein oder etwas unklar sein, geben Sie mir bitte kurz Bescheid – wir klären das gerne. Andernfalls bitte ich Sie freundlich um Ausgleich innerhalb der nächsten acht Tage.",
+               "Falls es bei der Zahlung Schwierigkeiten gibt, melden Sie sich bitte, wir finden sicher eine Lösung. Andernfalls bitte ich Sie um Ausgleich in den nächsten Tagen oder um eine kurze Nachricht mit dem geplanten Zahlungstermin.",
+               "Eine Ratenzahlung oder ein anderer Termin ist weiterhin möglich – melden Sie sich einfach. Kommt es innerhalb von acht Tagen weder zur Zahlung noch zu einer Rückmeldung, muss ich die Forderung abgeben, was für beide Seiten nur zusätzliche Kosten bedeutet."],
+    dok:"Ursprünglicher Auftrag",konec:"Vielen Dank und freundliche Grüße,"},
+  en:{zad:"Payment reminder – outstanding invoices",zad1:"Open invoices – friendly reminder",pozdrav:"Dear Sir or Madam,",
+    uvod:["while going through our open items I noticed that the following invoices are not yet recorded as paid on our side:",
+          "I am following up once more on the invoices below, which are still open on our side:",
+          "unfortunately I have to follow up on the invoices below one last time before handing the matter on:"],
+    skupaj:"Total outstanding",rac:"Invoice",izdan:"issued",zapadel:"due",dni:"days overdue",
+    zakljucek:["If payment has already been made, or if anything about these invoices is unclear, just let me know and we will sort it out. Otherwise I would kindly ask you to settle them within the next eight days.",
+               "If there is any difficulty with the payment, please get in touch and we will find a way. Otherwise please settle in the coming days or send me a short note with the expected payment date.",
+               "Instalments or a different deadline are still possible – just get in touch. If there is neither payment nor a reply within eight days, I will have to pass the claim on, which only adds cost for both of us."],
+    dok:"Original order",konec:"Thank you and best regards,"},
+  it:{zad:"Sollecito di pagamento – fatture scadute",zad1:"Fatture aperte – gentile promemoria",pozdrav:"Spettabile ditta,",
+    uvod:["controllando le partite aperte ho notato che le seguenti fatture non risultano ancora saldate:",
+          "torno a scrivervi per le fatture qui sotto, che da noi risultano ancora aperte:",
+          "purtroppo devo scrivervi un'ultima volta per le fatture qui sotto, prima di affidare la pratica a terzi:"],
+    skupaj:"Totale scaduto",rac:"Fattura",izdan:"emessa",zapadel:"scaduta",dni:"giorni di ritardo",
+    zakljucek:["Se il pagamento è già stato effettuato, o se qualcosa non è chiaro, basta un vostro messaggio e sistemiamo. Altrimenti vi chiedo cortesemente di saldare entro i prossimi otto giorni.",
+               "Se ci sono difficoltà con il pagamento, scrivetemi pure: troveremo una soluzione. Altrimenti vi chiedo di saldare nei prossimi giorni o di indicarmi la data prevista.",
+               "Un pagamento rateale o una scadenza diversa restano possibili: basta scrivermi. Se entro otto giorni non arriva né il pagamento né una risposta, dovrò affidare il credito al recupero, con costi aggiuntivi per entrambi."],
+    dok:"Ordine originale",konec:"Grazie e cordiali saluti,"},
+  hr:{zad:"Opomena – dospjela potraživanja",zad1:"Otvoreni računi – podsjetnik",pozdrav:"Poštovani,",
+    uvod:["pregledavajući otvorene stavke primijetio sam da sljedeći računi kod nas još nisu evidentirani kao plaćeni:",
+          "javljam se još jednom zbog računa u nastavku, koji su kod nas i dalje otvoreni:",
+          "nažalost se zbog računa u nastavku moram javiti posljednji put, prije nego predam predmet dalje:"],
+    skupaj:"Ukupno otvoreno",rac:"Račun",izdan:"izdan",zapadel:"dospio",dni:"dana kašnjenja",
+    zakljucek:["Ako je plaćanje u međuvremenu izvršeno ili vam je nešto nejasno, samo javite – rado ćemo riješiti. U protivnom vas lijepo molim za podmirenje u sljedećih osam dana.",
+               "Ako postoji bilo kakva poteškoća s plaćanjem, javite se, sigurno ćemo se dogovoriti. U protivnom vas molim za podmirenje idućih dana ili kratku poruku s predviđenim datumom.",
+               "Obročno plaćanje ili drugi rok i dalje su mogući – samo se javite. Ako u osam dana ne bude ni uplate ni odgovora, morat ću predati potraživanje na naplatu, što za obje strane znači samo dodatne troškove."],
+    dok:"Originalni nalog",konec:"Hvala i srdačan pozdrav,"}
+};
+const OPOMIN_JEZIK={SI:"sl",DE:"de",AT:"de",CH:"de",LU:"de",IT:"it",HR:"hr",BA:"hr",RS:"hr",ME:"hr"};
+const OPOMIN_PODPIS="Matjaž Jurjevec s.p.\nSpodnje Pobrežje 7a, 3332 Rečica ob Savinji\nID za DDV: SI76353362";
+
+async function naloziPdfJs(){
+  if(window.pdfjsLib)return window.pdfjsLib;
+  await new Promise((res,rej)=>{const sc=document.createElement("script");sc.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";sc.onload=res;sc.onerror=rej;document.head.appendChild(sc);});
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  return window.pdfjsLib;
+}
+async function preberiDolznike(ab){
+  const lib=await naloziPdfJs();
+  const doc=await lib.getDocument({data:ab}).promise;
+  const vrstice=[];
+  for(let p=1;p<=doc.numPages;p++){
+    const pg=await doc.getPage(p);
+    const tc=await pg.getTextContent();
+    const skup={};
+    tc.items.forEach(it=>{
+      if(!it.str||!it.str.trim())return;
+      const k=Math.round(it.transform[5]/3)*3;
+      (skup[k]=skup[k]||[]).push({x:it.transform[4],s:it.str});
+    });
+    Object.keys(skup).map(Number).sort((a,b)=>b-a).forEach(k=>{
+      vrstice.push(skup[k].sort((a,b)=>a.x-b.x).map(o=>o.s).join(" ").replace(/\s+/g," ").trim());
+    });
+  }
+  const RE_RAC=/^(\S+)\s+(\d{2}\.\d{2}\.\d{4})\s+(.+?)\s+(\d{2}\.\d{2}\.\d{4})\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+(\S+)$/;
+  const RE_KUP=/^(\d{2,8})\s*-\s*(.+?)\s*$/;
+  const RE_DDV=/^-\s*-\s*-\s*([A-Z]{2}[A-Z0-9]{6,14})\s*$/;
+  const num=(s)=>parseFloat(String(s).replace(/\./g,"").replace(",","."))||0;
+  const dat=(s)=>{const m=String(s).match(/(\d{2})\.(\d{2})\.(\d{4})/);return m?(m[3]+"-"+m[2]+"-"+m[1]):"";};
+  const kupci=[];let tek=null;
+  for(const l of vrstice){
+    if(/^Celoten znesek|^Skupaj plačano/.test(l))continue;
+    const rr=l.match(RE_RAC);
+    if(rr){
+      if(!tek){tek={sifra:"",naziv:rr[3],ddv:"",racuni:[]};kupci.push(tek);}
+      tek.racuni.push({st:rr[1],datum:dat(rr[2]),rok:dat(rr[4]),zDdv:num(rr[5]),brezDdv:num(rr[6]),placano:num(rr[8]),ostanek:num(rr[9]),vrstica:l});
+      continue;
+    }
+    const dv=l.match(RE_DDV);
+    if(dv&&tek&&!tek.ddv){tek.ddv=dv[1];continue;}
+    const kk=l.match(RE_KUP);
+    if(kk&&!/^\d{4}-\d/.test(l)){tek={sifra:kk[1],naziv:kk[2],ddv:"",racuni:[]};kupci.push(tek);}
+  }
+  return kupci.filter(k=>k.racuni.length);
+}
+
+function OpominiTab({nalogi,showToast}){
+  const [kupci,setKupci]=useState([]);
+  const [bere,setBere]=useState(false);
+  const [napaka,setNapaka]=useState("");
+  const [odprt,setOdprt]=useState({});
+  const [maili,setMaili]=useState(()=>{try{return JSON.parse(localStorage.getItem("opomin_maili")||"{}");}catch(e){return{};}});
+  const [poslano,setPoslano]=useState(()=>{try{return JSON.parse(localStorage.getItem("opomin_poslano")||"{}");}catch(e){return{};}});
+  const [stopnje,setStopnje]=useState({});
+  const [razvrsti,setRazvrsti]=useState("znesek");
+  const [dok,setDok]=useState(()=>{try{return localStorage.getItem("opomin_dok")||"povezava";}catch(e){return "povezava";}});
+  useEffect(()=>{try{localStorage.setItem("opomin_dok",dok);}catch(e){}},[dok]);
+  const [posilja,setPosilja]=useState("");
+  const [izbr,setIzbr]=useState({});
+  const [skup,setSkup]=useState(null);
+  useEffect(()=>{try{localStorage.setItem("opomin_maili",JSON.stringify(maili));}catch(e){}},[maili]);
+  useEffect(()=>{try{localStorage.setItem("opomin_poslano",JSON.stringify(poslano));}catch(e){}},[poslano]);
+
+  const eur=(x)=>(isFinite(x)?x:0).toLocaleString("sl-SI",{minimumFractionDigits:2,maximumFractionDigits:2})+" EUR";
+  const dmy=(iso)=>{if(!iso)return "";const p=iso.split("-");return p[2]+"."+p[1]+"."+p[0];};
+  const zamuda=(iso)=>{if(!iso)return 0;return Math.max(0,Math.floor((Date.now()-new Date(iso+"T00:00:00").getTime())/86400000));};
+  const kljuc=(k)=>k.ddv||k.sifra||k.naziv;
+  const ocisti=(x)=>String(x||"").toUpperCase().replace(/[^A-Z0-9]/g,"").replace(/(DOO|DOOEL|JDOO|GMBH|COKG|KG|AG|SPA|SRL|SP|BV|NV|SAS|SARL|LTD|ZOO|SPZOO|DD)$/,"");
+
+  const izMailov=(naziv)=>{
+    const c=ocisti(naziv); if(!c||c.length<4)return "";
+    const n=(nalogi||[]).find(x=>{const s=ocisti(x.stranka);return s&&(s===c||s.indexOf(c)===0||c.indexOf(s)===0);});
+    if(!n)return "";
+    const vir=String(n.emaili||n.kontaktEmail||n.kontakt_email||"");
+    const m=vir.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+    return m?m[0]:"";
+  };
+  const mail=(k)=>{const kl=kljuc(k);if(maili[kl]!==undefined)return maili[kl];return izMailov(k.naziv);};
+  const najdiNalog=(naziv,r)=>{
+    const brezSt=String(r.vrstica||"").replace(String(r.st||""),"");
+    if(brezSt){
+      const poSklicu=(nalogi||[]).find(x=>{
+        const sn=String(x.stevilka_narocnika||x.stevilkaNarocnika||"").trim();
+        return sn.length>=5&&brezSt.indexOf(sn)>=0;
+      });
+      if(poSklicu)return {n:poSklicu,tocno:true,zanesljiv:true,sklic:true};
+    }
+    const c=ocisti(naziv); if(!c||c.length<4)return null;
+    const kand=(nalogi||[]).filter(x=>{const sx=ocisti(x.stranka);return sx&&(sx===c||sx.indexOf(c)===0||c.indexOf(sx)===0);});
+    if(!kand.length)return null;
+    const dR=r.datum?new Date(r.datum+"T00:00:00").getTime():0;
+    const oceni=(x)=>{
+      let t=0;
+      const zx=parseZnesek(x.znesek_original||x.znesekOriginal||0);
+      if(zx>0){
+        const raz=Math.min(Math.abs(zx-(r.brezDdv||0)),Math.abs(zx-(r.zDdv||0)));
+        if(raz<0.5)t+=100; else if(raz/Math.max(zx,1)<0.02)t+=55;
+      }
+      if(dR&&x.razDatum){
+        const dni=(dR-new Date(x.razDatum+"T00:00:00").getTime())/86400000;
+        if(dni>=-5&&dni<=90)t+=40-Math.min(38,Math.abs(dni)/2);
+      }
+      return t;
+    };
+    const z=kand.map(x=>({x,t:oceni(x)})).sort((a,b)=>b.t-a.t);
+    if(!z.length||z[0].t<55)return null;
+    return {n:z[0].x,tocno:z[0].t>=100,zanesljiv:z.length<2||(z[0].t-z[1].t)>12};
+  };
+  const relacija=(n)=>[n.nakKraj||n.nak_kraj||"",n.razKraj||n.raz_kraj||""].filter(Boolean).join(" → ");
+  const nalogiZaMail=(k)=>{
+    const vid={},out=[];
+    k.racuni.forEach(r=>{
+      const nl=najdiNalog(k.naziv,r);
+      if(!nl||!nl.zanesljiv)return;
+      const n=nl.n, id=n.id||n.stevilkaNaloga;
+      if(vid[id])return; vid[id]=1;
+      const url=getStorageUrl(supabase,"originalni-nalogi",n.original_pdf_url||n.originalPdfUrl||"");
+      if(!url)return;
+      const oznaka=(n.stevilka_narocnika||n.stevilkaNarocnika||n.stevilkaNaloga||"").toString();
+      out.push({url,oznaka,rel:relacija(n),rac:r.st,ime:"Nalog-"+(oznaka||r.st)+".pdf"});
+    });
+    return out;
+  };
+  const jezik=(k)=>OPOMIN_JEZIK[String(k.ddv||"").slice(0,2)]||"en";
+  const stop=(k)=>stopnje[kljuc(k)]||1;
+
+  const nalozi=async(file)=>{
+    if(!file)return;
+    setBere(true);setNapaka("");
+    try{
+      const ab=await file.arrayBuffer();
+      const r=await preberiDolznike(ab);
+      if(!r.length)throw new Error("V PDF-ju ni bilo mogoče najti nobenega računa. Je to izpis izdanih računov iz SQ Trans?");
+      setKupci(r);
+      if(showToast)showToast("Prebranih "+r.length+" dolžnikov");
+    }catch(e){setNapaka((e&&e.message)||"PDF ni bilo mogoče prebrati");}
+    setBere(false);
+  };
+
+  const besedilo=(k)=>{
+    const T=OPOMIN_T[jezik(k)]||OPOMIN_T.en;
+    const s=Math.min(Math.max(stop(k),1),3)-1;
+    const vrs=k.racuni.slice().sort((a,b)=>(a.rok||"").localeCompare(b.rok||"")).map(r=>{
+      const nl=najdiNalog(k.naziv,r);
+      const pre=(nl&&nl.zanesljiv&&relacija(nl.n))?(" – "+relacija(nl.n)):"";
+      return "- "+T.rac+" "+r.st+pre+", "+T.izdan+" "+dmy(r.datum)+", "+T.zapadel+" "+dmy(r.rok)+" ("+zamuda(r.rok)+" "+T.dni+"): "+eur(r.ostanek);
+    });
+    const vsota=k.racuni.reduce((a,r)=>a+r.ostanek,0);
+    const d=(dok==="povezava")?nalogiZaMail(k):[];
+    const blokD=d.length?["",T.dok+":"].concat(d.map(x=>"- "+(x.oznaka?x.oznaka+" ":"")+(x.rel?"("+x.rel+") ":"")+x.url)):[];
+    return [T.pozdrav,"",T.uvod[s],"",vrs.join("\n"),"",T.skupaj+": "+eur(vsota)].concat(blokD).concat(["",T.zakljucek[s],"",T.konec,OPOMIN_PODPIS]).join("\n");
+  };
+  const zadeva=(k)=>{
+    const T=OPOMIN_T[jezik(k)]||OPOMIN_T.en;
+    const st2=stop(k);
+    const osn=st2===1?(T.zad1||T.zad):((st2===3?"3. ":"2. ")+T.zad);
+    return osn+" – "+k.racuni.map(r=>r.st).join(", ");
+  };
+  const kopiraj=(k)=>{
+    const t=besedilo(k);
+    try{const e=document.createElement("textarea");e.value=t;e.style.position="fixed";e.style.top="-2000px";document.body.appendChild(e);e.select();document.execCommand("copy");document.body.removeChild(e);}catch(x){}
+    try{if(navigator.clipboard)navigator.clipboard.writeText(t).catch(()=>{});}catch(x){}
+    if(showToast)showToast("Besedilo opomina kopirano");
+  };
+  const posljiEnega=async(k)=>{
+    const na=String(mail(k)||"").trim();
+    if(!na)throw new Error("manjka e-naslov");
+    const pr=(dok==="priloga")?nalogiZaMail(k):[];
+    await posljiOpomin({prejemnik:na,zadeva:zadeva(k),telo:besedilo(k),priloge:pr});
+    setPoslano(p=>({...p,[kljuc(k)]:{datum:new Date().toISOString().slice(0,10),stopnja:stop(k),poslan:true}}));
+  };
+  const posljiKlik=async(k)=>{
+    const na=String(mail(k)||"").trim();
+    if(!na)return showToast&&showToast("Vpiši e-naslov prejemnika",true);
+    if(!window.confirm("Poslati "+stop(k)+". opomin na "+na+"?\n\n"+k.naziv+"\n"+eur(k.racuni.reduce((a,r)=>a+r.ostanek,0))))return;
+    setPosilja(kljuc(k));
+    try{ await posljiEnega(k); if(showToast)showToast("Opomin poslan na "+na); }
+    catch(e){ if(showToast)showToast((e&&e.message)||"Pošiljanje ni uspelo",true); }
+    setPosilja("");
+  };
+  const osnutek=async(k)=>{
+    const na=String(mail(k)||"").trim();
+    if(!na)return showToast&&showToast("Vpiši e-naslov prejemnika",true);
+    setPosilja(kljuc(k));
+    try{
+      const pr=(dok==="priloga")?nalogiZaMail(k):[];
+      if(pr.length)await ustvariOsnutekSPrilogami({prejemnik:na,zadeva:zadeva(k),telo:besedilo(k),priloge:pr});
+      else await ustvariOsnutekZaNarocnika({prejemnik:na,zadeva:zadeva(k),telo:besedilo(k)});
+      setPoslano(p=>({...p,[kljuc(k)]:{datum:new Date().toISOString().slice(0,10),stopnja:stop(k),poslan:false}}));
+      if(showToast)showToast("Osnutek opomina je v Outlooku");
+    }catch(e){if(showToast)showToast("Osnutka ni bilo mogoče ustvariti - prijavi se v Outlook",true);}
+    setPosilja("");
+  };
+
+  const seznam=kupci.map(k=>{
+    const vsota=k.racuni.reduce((a,r)=>a+r.ostanek,0);
+    const najst=k.racuni.reduce((a,r)=>Math.max(a,zamuda(r.rok)),0);
+    return {...k,vsota,najst};
+  }).sort((a,b)=>razvrsti==="znesek"?(b.vsota-a.vsota):razvrsti==="dni"?(b.najst-a.najst):String(a.naziv).localeCompare(String(b.naziv)));
+  const skupnaVsota=seznam.reduce((a,k)=>a+k.vsota,0);
+  const stRacunov=seznam.reduce((a,k)=>a+k.racuni.length,0);
+  const brezMaila=seznam.filter(k=>!String(mail(k)||"").trim()).length;
+  const brezNaloga=seznam.reduce((a,k)=>a+k.racuni.filter(r=>!najdiNalog(k.naziv,r)).length,0);
+
+  const kartica={background:"#fff",border:"1px solid #e5eaf0",borderRadius:14,padding:16,marginBottom:12};
+  const gumb={border:"1px solid #cbd5e1",background:"#fff",color:"#334155",borderRadius:9,padding:"7px 13px",fontSize:12,fontWeight:700,cursor:"pointer"};
+  const polje={padding:"7px 10px",borderRadius:8,border:"1px solid #dbe2ec",fontSize:12,background:"#fafcff",outline:"none",boxSizing:"border-box"};
+  const barvaDni=(d)=>d>90?"#b91c1c":d>45?"#c2410c":"#b45309";
+
+  return <div>
+    <div style={kartica}>
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+        <label style={{background:"#0f2744",color:"#fff",borderRadius:10,padding:"11px 18px",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+          {bere?"Berem PDF...":"📄 Naloži izpis dolžnikov"}
+          <input type="file" accept="application/pdf,.pdf" onChange={e=>{nalozi(e.target.files&&e.target.files[0]);e.target.value="";}} style={{display:"none"}}/>
+        </label>
+        {kupci.length>0&&<button onClick={()=>{setKupci([]);setNapaka("");}} style={gumb}>Počisti</button>}
+        {kupci.length>0&&<select value={razvrsti} onChange={e=>setRazvrsti(e.target.value)} style={{...polje,cursor:"pointer",fontWeight:700}}>
+          <option value="znesek">Po znesku</option><option value="dni">Po dnevih zamude</option><option value="naziv">Po nazivu</option>
+        </select>}
+        {kupci.length>0&&<select value={dok} onChange={e=>setDok(e.target.value)} title="Kaj naj gre v mail poleg besedila" style={{...polje,cursor:"pointer",fontWeight:700}}>
+          <option value="povezava">Povezava do naloga</option><option value="priloga">Nalog kot priloga</option><option value="brez">Brez naloga</option>
+        </select>}
+        {!kupci.length&&<span style={{fontSize:12,color:"#94a3b8"}}>V SQ Trans naredi Izpis izdanih računov s statusom Zapadel in shrani kot PDF.</span>}
+      </div>
+      {napaka&&<div style={{marginTop:10,background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:9,padding:"9px 12px",fontSize:13,fontWeight:700}}>{napaka}</div>}
+    </div>
+
+    {seznam.length>0&&<>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:12}}>
+        {[["Zapadlo skupaj",eur(skupnaVsota),"#b91c1c"],["Dolžnikov",String(seznam.length),"#0f2744"],["Računov",String(stRacunov),"#0f2744"],["Brez e-naslova",String(brezMaila),brezMaila?"#c2410c":"#15803d"],["Brez naloga",String(brezNaloga),brezNaloga?"#c2410c":"#15803d"]].map(([l,v,c])=>(
+          <div key={l} style={{background:"#fff",border:"1px solid #e5eaf0",borderRadius:14,padding:"13px 15px"}}>
+            <div style={{fontSize:12,color:"#64748b",marginBottom:5}}>{l}</div>
+            <div style={{fontSize:19,fontWeight:800,color:c,letterSpacing:"-0.4px"}}>{v}</div>
+          </div>
+        ))}
+      </div>
+
+      {(()=>{const n=seznam.filter(k=>izbr[kljuc(k)]).length;if(!n&&!skup)return null;
+        const vs=seznam.filter(k=>izbr[kljuc(k)]).reduce((a,k)=>a+k.vsota,0);
+        const posljiVse=async()=>{
+          const ciljni=seznam.filter(k=>izbr[kljuc(k)]&&String(mail(k)||"").trim());
+          if(!ciljni.length)return showToast&&showToast("Med izbranimi ni nobenega z e-naslovom",true);
+          if(!window.confirm("Poslati opomine "+ciljni.length+" strankam?\n\nSkupaj zapadlo: "+eur(ciljni.reduce((a,k)=>a+k.vsota,0))+"\n\nVsak dobi svoj mail v svojem jeziku."))return;
+          let ok=0,ne=0;
+          for(let i=0;i<ciljni.length;i++){
+            setSkup({i:i+1,od:ciljni.length,naziv:ciljni[i].naziv});
+            try{ await posljiEnega(ciljni[i]); ok++; }catch(e){ ne++; }
+            await new Promise(r=>setTimeout(r,400));
+          }
+          setSkup(null);setIzbr({});
+          if(showToast)showToast("Poslano "+ok+" opominov"+(ne?", "+ne+" ni uspelo":""),!!ne);
+        };
+        return <div style={{...kartica,padding:"11px 14px",display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",background:"#0f2744",border:"1px solid #0f2744"}}>
+          <span style={{color:"#fff",fontSize:13,fontWeight:700}}>{skup?("Pošiljam "+skup.i+"/"+skup.od+" – "+skup.naziv):("Izbranih "+n+" · "+eur(vs))}</span>
+          {!skup&&<button onClick={posljiVse} style={{marginLeft:"auto",background:"#fff",color:"#0f2744",border:"none",borderRadius:9,padding:"8px 14px",fontSize:12,fontWeight:800,cursor:"pointer"}}>{"📤 Pošlji izbranim ("+n+")"}</button>}
+          {!skup&&<button onClick={()=>setIzbr({})} style={{background:"transparent",color:"#cbd5e1",border:"1px solid #334155",borderRadius:9,padding:"8px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>Počisti izbor</button>}
+        </div>;})()}
+      {seznam.map(k=>{
+        const kl=kljuc(k);const odp=!!odprt[kl];const pos=poslano[kl];
+        return <div key={kl} style={{...kartica,marginBottom:9,padding:"12px 14px",borderLeft:"4px solid "+barvaDni(k.najst)}}>
+          <div onClick={()=>setOdprt(p=>({...p,[kl]:!p[kl]}))} style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",alignItems:"center",cursor:"pointer"}}>
+            <div style={{display:"flex",gap:10,alignItems:"center",minWidth:0}}>
+            <input type="checkbox" checked={!!izbr[kl]} onClick={e=>e.stopPropagation()} onChange={()=>setIzbr(p=>({...p,[kl]:!p[kl]}))} title="Izberi za skupinsko pošiljanje" style={{width:16,height:16,cursor:"pointer",flexShrink:0}}/>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:15,fontWeight:800,color:"#0f2744"}}>{k.naziv}</div>
+              <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{[k.ddv,k.racuni.length+(k.racuni.length===1?" račun":" računi"),"najstarejši "+k.najst+" dni"].filter(Boolean).join(" · ")}</div>
+            </div></div>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              {pos&&<span style={{fontSize:11,fontWeight:700,color:pos.poslan?"#15803d":"#64748b",background:pos.poslan?"#f0fdf4":"#f8fafc",border:"1px solid "+(pos.poslan?"#bbf7d0":"#e2e8f0"),borderRadius:20,padding:"3px 9px"}}>{(pos.poslan?"poslan ":"osnutek ")+pos.stopnja+". opomin "+dmy(pos.datum)}</span>}
+              <span style={{fontSize:16,fontWeight:800,color:barvaDni(k.najst)}}>{eur(k.vsota)}</span>
+              <span style={{fontSize:12,color:"#94a3b8"}}>{odp?"▲":"▼"}</span>
+            </div>
+          </div>
+          {odp&&<div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #f1f5f9"}}>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                <thead><tr style={{color:"#64748b",textAlign:"left"}}>
+                  <th style={{padding:"4px 8px 6px 0",fontWeight:700}}>Račun</th><th style={{padding:"4px 8px 6px 0",fontWeight:700}}>Izdan</th>
+                  <th style={{padding:"4px 8px 6px 0",fontWeight:700}}>Zapadel</th><th style={{padding:"4px 8px 6px 0",fontWeight:700}}>Nalog</th><th style={{padding:"4px 8px 6px 0",fontWeight:700,textAlign:"right"}}>Odprto</th>
+                  <th style={{padding:"4px 0 6px 8px",fontWeight:700,textAlign:"right"}}>Zamuda</th>
+                </tr></thead>
+                <tbody>{k.racuni.slice().sort((a,b)=>(a.rok||"").localeCompare(b.rok||"")).map(r=>{const nl=najdiNalog(k.naziv,r);return (
+                  <tr key={r.st} style={{borderTop:"1px solid #f1f5f9"}}>
+                    <td style={{padding:"6px 8px 6px 0",fontFamily:"monospace",fontWeight:700,color:"#2563eb"}}>{r.st}</td>
+                    <td style={{padding:"6px 8px 6px 0",color:"#64748b"}}>{dmy(r.datum)}</td>
+                    <td style={{padding:"6px 8px 6px 0",color:"#64748b"}}>{dmy(r.rok)}</td>
+                    <td style={{padding:"6px 8px 6px 0"}}>{nl?<span title={(nl.n.stevilkaNaloga||"")+" · "+relacija(nl.n)+(nl.sklic?" · najdeno po številki naročnika":(nl.tocno?" · znesek se ujema":" · znesek se ne ujema natanko"))} style={{color:nl.zanesljiv?"#0f2744":"#c2410c",fontWeight:600}}>{(nl.sklic?"✓ ":"")+(nl.n.stevilkaNaloga||"")+(relacija(nl.n)?" · "+relacija(nl.n):"")+(nl.zanesljiv?"":" ?")}</span>:<span style={{color:"#cbd5e1"}}>–</span>}</td>
+                    <td style={{padding:"6px 8px 6px 0",textAlign:"right",fontWeight:700}}>{eur(r.ostanek)}</td>
+                    <td style={{padding:"6px 0 6px 8px",textAlign:"right",fontWeight:700,color:barvaDni(zamuda(r.rok))}}>{zamuda(r.rok)+" dni"}</td>
+                  </tr>);})}
+                </tbody>
+              </table>
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginTop:12}}>
+              <input value={mail(k)} onChange={e=>setMaili(p=>({...p,[kl]:e.target.value}))} placeholder="e-naslov za opomin" style={{...polje,flex:"1 1 220px",minWidth:0}}/>
+              <select value={stop(k)} onChange={e=>setStopnje(p=>({...p,[kl]:parseInt(e.target.value,10)}))} style={{...polje,cursor:"pointer",fontWeight:700}}>
+                <option value={1}>1. opomin</option><option value={2}>2. opomin</option><option value={3}>Zadnji poziv</option>
+              </select>
+              <span style={{fontSize:11,color:"#94a3b8",fontWeight:700,textTransform:"uppercase"}}>{jezik(k)}</span>
+              <button onClick={()=>osnutek(k)} disabled={posilja===kl} style={{...gumb,background:posilja===kl?"#e2e8f0":"#eff6ff",color:"#1d4ed8",borderColor:"#bfdbfe"}}>{posilja===kl?"Pripravljam...":"✉️ Osnutek v Outlook"}</button>
+              <button onClick={()=>posljiKlik(k)} disabled={posilja===kl} style={{...gumb,background:posilja===kl?"#e2e8f0":"#0f2744",color:"#fff",borderColor:"#0f2744"}}>{posilja===kl?"Pošiljam...":"📤 Pošlji zdaj"}</button>
+              <button onClick={()=>kopiraj(k)} style={gumb}>📋 Kopiraj besedilo</button>
+            </div>
+            <pre style={{marginTop:10,whiteSpace:"pre-wrap",fontFamily:"inherit",fontSize:12,color:"#475569",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:9,padding:"10px 12px",maxHeight:230,overflowY:"auto"}}>{besedilo(k)}</pre>
+          </div>}
+        </div>;
+      })}
+      <div style={{fontSize:11,color:"#94a3b8",lineHeight:1.7,marginTop:4}}>
+        E-naslovi se iščejo med nalogi te stranke; popravek se shrani v ta brskalnik in velja za naslednji izpis. Jezik je izbran po predponi davčne številke.<br/>Nalog se poišče po stranki, znesku in datumu razklada. Oranžna povezava z vprašajem pomeni, da ujemanje ni zanesljivo – tak nalog se v besedilo opomina ne zapiše.
+      </div>
+    </>}
+  </div>;
 }
 function KalkulatorTab({vozniki,gpsVozila}){
   const [kt,setKt]=useState(["",""]);
