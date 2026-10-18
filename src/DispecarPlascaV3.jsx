@@ -131,7 +131,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="18.10.2026 g";
+const VERZIJA="18.10.2026 h";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
@@ -1226,6 +1226,12 @@ function OpominiTab({nalogi,showToast}){
   const [poslano,setPoslano]=useState(()=>{try{return JSON.parse(localStorage.getItem("opomin_poslano")||"{}");}catch(e){return{};}});
   const [stopnje,setStopnje]=useState({});
   const [razvrsti,setRazvrsti]=useState("znesek");
+  const [privzRok,setPrivzRok]=useState(()=>{try{return localStorage.getItem("opomin_rok")||"";}catch(e){return "";}});
+  const [roki,setRoki]=useState(()=>{try{return JSON.parse(localStorage.getItem("opomin_roki")||"{}");}catch(e){return{};}});
+  const [minDni,setMinDni]=useState(()=>{try{const x=parseInt(localStorage.getItem("opomin_mindni")||"1",10);return isNaN(x)?1:x;}catch(e){return 1;}});
+  useEffect(()=>{try{localStorage.setItem("opomin_rok",privzRok);}catch(e){}},[privzRok]);
+  useEffect(()=>{try{localStorage.setItem("opomin_roki",JSON.stringify(roki));}catch(e){}},[roki]);
+  useEffect(()=>{try{localStorage.setItem("opomin_mindni",String(minDni));}catch(e){}},[minDni]);
   const [dok,setDok]=useState(()=>{try{return localStorage.getItem("opomin_dok")||"povezava";}catch(e){return "povezava";}});
   useEffect(()=>{try{localStorage.setItem("opomin_dok",dok);}catch(e){}},[dok]);
   const [posilja,setPosilja]=useState("");
@@ -1237,6 +1243,8 @@ function OpominiTab({nalogi,showToast}){
   const eur=(x)=>(isFinite(x)?x:0).toLocaleString("sl-SI",{minimumFractionDigits:2,maximumFractionDigits:2})+" EUR";
   const dmy=(iso)=>{if(!iso)return "";const p=iso.split("-");return p[2]+"."+p[1]+"."+p[0];};
   const zamuda=(iso)=>{if(!iso)return 0;return Math.max(0,Math.floor((Date.now()-new Date(iso+"T00:00:00").getTime())/86400000));};
+  const stDni=(x)=>{const y=parseInt(String(x||"").replace(/[^0-9]/g,""),10);return isNaN(y)?0:y;};
+  const dniDo=(iso)=>{if(!iso)return 0;return Math.ceil((new Date(iso+"T00:00:00").getTime()-Date.now())/86400000);};
   const kljuc=(k)=>k.ddv||k.sifra||k.naziv;
   const ocisti=(x)=>String(x||"").toUpperCase().replace(/[^A-Z0-9]/g,"").replace(/(DOO|DOOEL|JDOO|GMBH|COKG|KG|AG|SPA|SRL|SP|BV|NV|SAS|SARL|LTD|ZOO|SPZOO|DD)$/,"");
 
@@ -1366,10 +1374,20 @@ function OpominiTab({nalogi,showToast}){
   };
 
   const seznam=kupci.map(k=>{
-    const vsota=k.racuni.reduce((a,r)=>a+r.ostanek,0);
-    const najst=k.racuni.reduce((a,r)=>Math.max(a,zamuda(r.rok)),0);
-    return {...k,vsota,najst};
-  }).sort((a,b)=>razvrsti==="znesek"?(b.vsota-a.vsota):razvrsti==="dni"?(b.najst-a.najst):String(a.naziv).localeCompare(String(b.naziv)));
+    const dni=stDni(roki[kljuc(k)])||stDni(privzRok);
+    const popravi=(r)=>{
+      if(!dni||!r.datum)return r.rok;
+      const t=new Date(r.datum+"T00:00:00"); t.setDate(t.getDate()+dni);
+      const p2=(x)=>String(x).padStart(2,"0");
+      return t.getFullYear()+"-"+p2(t.getMonth()+1)+"-"+p2(t.getDate());
+    };
+    const vsi=k.racuni.map(r=>{const rk=popravi(r);return {...r,rok:rk,zam:zamuda(rk)};});
+    const odprti=vsi.filter(r=>r.zam>=Math.max(minDni,1));
+    const cakajo=vsi.filter(r=>r.zam<Math.max(minDni,1));
+    const vsota=odprti.reduce((a,r)=>a+r.ostanek,0);
+    const najst=odprti.reduce((a,r)=>Math.max(a,r.zam),0);
+    return {...k,racuni:odprti,cakajo,vsota,najst,rokDni:dni};
+  }).filter(k=>k.racuni.length).sort((a,b)=>razvrsti==="znesek"?(b.vsota-a.vsota):razvrsti==="dni"?(b.najst-a.najst):String(a.naziv).localeCompare(String(b.naziv)));
   const skupnaVsota=seznam.reduce((a,k)=>a+k.vsota,0);
   const stRacunov=seznam.reduce((a,k)=>a+k.racuni.length,0);
   const brezMaila=seznam.filter(k=>!String(mail(k)||"").trim()).length;
@@ -1390,6 +1408,14 @@ function OpominiTab({nalogi,showToast}){
         {kupci.length>0&&<button onClick={()=>{setKupci([]);setNapaka("");}} style={gumb}>Počisti</button>}
         {kupci.length>0&&<select value={razvrsti} onChange={e=>setRazvrsti(e.target.value)} style={{...polje,cursor:"pointer",fontWeight:700}}>
           <option value="znesek">Po znesku</option><option value="dni">Po dnevih zamude</option><option value="naziv">Po nazivu</option>
+        </select>}
+        {kupci.length>0&&<span style={{display:"flex",alignItems:"center",gap:6}}>
+          <span style={{fontSize:12,color:"#64748b",fontWeight:700}}>Rok plačila</span>
+          <input value={privzRok} onChange={e=>setPrivzRok(e.target.value)} placeholder="iz izpisa" title="Dogovorjeni rok v dneh od datuma računa. Prazno = rok, ki je na izpisu." inputMode="numeric" style={{...polje,width:84}}/>
+          <span style={{fontSize:12,color:"#64748b"}}>dni</span>
+        </span>}
+        {kupci.length>0&&<select value={minDni} onChange={e=>setMinDni(parseInt(e.target.value,10))} title="Skrij račune, ki so zapadli pred manj kot toliko dnevi" style={{...polje,cursor:"pointer",fontWeight:700}}>
+          <option value={1}>Zamuda 1+ dni</option><option value={8}>8+ dni</option><option value={15}>15+ dni</option><option value={30}>30+ dni</option><option value={60}>60+ dni</option>
         </select>}
         {kupci.length>0&&<select value={dok} onChange={e=>setDok(e.target.value)} title="Kaj naj gre v mail poleg besedila" style={{...polje,cursor:"pointer",fontWeight:700}}>
           <option value="povezava">Povezava do naloga</option><option value="priloga">Nalog kot priloga</option><option value="brez">Brez naloga</option>
@@ -1437,7 +1463,7 @@ function OpominiTab({nalogi,showToast}){
             <input type="checkbox" checked={!!izbr[kl]} onClick={e=>e.stopPropagation()} onChange={()=>setIzbr(p=>({...p,[kl]:!p[kl]}))} title="Izberi za skupinsko pošiljanje" style={{width:16,height:16,cursor:"pointer",flexShrink:0}}/>
             <div style={{minWidth:0}}>
               <div style={{fontSize:15,fontWeight:800,color:"#0f2744"}}>{k.naziv}</div>
-              <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{[k.ddv,k.racuni.length+(k.racuni.length===1?" račun":" računi"),"najstarejši "+k.najst+" dni"].filter(Boolean).join(" · ")}</div>
+              <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{[k.ddv,k.racuni.length+(k.racuni.length===1?" račun":" računi"),"najstarejši "+k.najst+" dni",k.rokDni?("rok "+k.rokDni+" dni"):"",(k.cakajo&&k.cakajo.length)?(k.cakajo.length+" še ni zapadlo"):""].filter(Boolean).join(" · ")}</div>
             </div></div>
             <div style={{display:"flex",gap:8,alignItems:"center"}}>
               {pos&&<span style={{fontSize:11,fontWeight:700,color:pos.poslan?"#15803d":"#64748b",background:pos.poslan?"#f0fdf4":"#f8fafc",border:"1px solid "+(pos.poslan?"#bbf7d0":"#e2e8f0"),borderRadius:20,padding:"3px 9px"}}>{(pos.poslan?"poslan ":"osnutek ")+pos.stopnja+". opomin "+dmy(pos.datum)}</span>}
@@ -1460,13 +1486,14 @@ function OpominiTab({nalogi,showToast}){
                     <td style={{padding:"6px 8px 6px 0",color:"#64748b"}}>{dmy(r.rok)}</td>
                     <td style={{padding:"6px 8px 6px 0"}}>{nl?<span title={(nl.n.stevilkaNaloga||"")+" · "+relacija(nl.n)+(nl.sklic?" · najdeno po številki naročnika":(nl.tocno?" · znesek se ujema":" · znesek se ne ujema natanko"))} style={{color:nl.zanesljiv?"#0f2744":"#c2410c",fontWeight:600}}>{(nl.sklic?"✓ ":"")+(nl.n.stevilkaNaloga||"")+(relacija(nl.n)?" · "+relacija(nl.n):"")+(nl.zanesljiv?"":" ?")}</span>:<span style={{color:"#cbd5e1"}}>–</span>}</td>
                     <td style={{padding:"6px 8px 6px 0",textAlign:"right",fontWeight:700}}>{eur(r.ostanek)}</td>
-                    <td style={{padding:"6px 0 6px 8px",textAlign:"right",fontWeight:700,color:barvaDni(zamuda(r.rok))}}>{zamuda(r.rok)+" dni"}</td>
+                    <td style={{padding:"6px 0 6px 8px",textAlign:"right",fontWeight:700,color:barvaDni(zamuda(r.rok))}}>{(r.zam!=null?r.zam:zamuda(r.rok))+" dni"}</td>
                   </tr>);})}
                 </tbody>
               </table>
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginTop:12}}>
               <input value={mail(k)} onChange={e=>setMaili(p=>({...p,[kl]:e.target.value}))} placeholder="e-naslov za opomin" style={{...polje,flex:"1 1 220px",minWidth:0}}/>
+              <input value={roki[kl]||""} onChange={e=>setRoki(p=>({...p,[kl]:e.target.value}))} placeholder="rok dni" title="Dogovorjeni rok plačila za to stranko v dneh. Prazno = privzeti rok zgoraj." inputMode="numeric" style={{...polje,width:84}}/>
               <select value={stop(k)} onChange={e=>setStopnje(p=>({...p,[kl]:parseInt(e.target.value,10)}))} style={{...polje,cursor:"pointer",fontWeight:700}}>
                 <option value={1}>1. opomin</option><option value={2}>2. opomin</option><option value={3}>Zadnji poziv</option>
               </select>
@@ -1475,6 +1502,7 @@ function OpominiTab({nalogi,showToast}){
               <button onClick={()=>posljiKlik(k)} disabled={posilja===kl} style={{...gumb,background:posilja===kl?"#e2e8f0":"#0f2744",color:"#fff",borderColor:"#0f2744"}}>{posilja===kl?"Pošiljam...":"📤 Pošlji zdaj"}</button>
               <button onClick={()=>kopiraj(k)} style={gumb}>📋 Kopiraj besedilo</button>
             </div>
+            {k.cakajo&&k.cakajo.length>0&&<div style={{marginTop:10,fontSize:11,color:"#64748b",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:"8px 10px"}}>{"Še ni zapadlo in ne gre v opomin: "+k.cakajo.map(r=>r.st+" ("+(dniDo(r.rok)>0?("čez "+dniDo(r.rok)+" dni"):"danes")+")").join(", ")}</div>}
             <pre style={{marginTop:10,whiteSpace:"pre-wrap",fontFamily:"inherit",fontSize:12,color:"#475569",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:9,padding:"10px 12px",maxHeight:230,overflowY:"auto"}}>{besedilo(k)}</pre>
           </div>}
         </div>;
