@@ -158,7 +158,94 @@ export async function ustvariOsnutekZaNarocnika({ prejemnik, zadeva, telo, pdfUr
   return { webLink: msg.webLink, id: msg.id, priponka: attachments.length > 0 };
 }
 
-// Označi email kot prebran (po uvozu naloga)
+// Ustvari osnutek maila z vec prilogami (licence, zavarovanja, potrdila ...)
+export async function ustvariOsnutekSPrilogami({ prejemnik, zadeva, telo, priloge }) {
+  const token = await getAccessToken();
+  const attachments = [];
+  const spodletelo = [];
+  for (const p of (priloge || [])) {
+    if (!p || !p.url) continue;
+    try {
+      const r = await fetch(p.url);
+      if (!r.ok) { spodletelo.push(p.ime || p.url); continue; }
+      const buf = await r.arrayBuffer();
+      let bin = "";
+      const bytes = new Uint8Array(buf);
+      const chunk = 8192;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+      }
+      attachments.push({
+        "@odata.type": "#microsoft.graph.fileAttachment",
+        name: p.ime || "dokument.pdf",
+        contentType: r.headers.get("content-type") || "application/octet-stream",
+        contentBytes: btoa(bin),
+      });
+    } catch (e) {
+      spodletelo.push(p.ime || p.url);
+    }
+  }
+  const res = await fetch(graphConfig.graphMailEndpoint, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      subject: zadeva,
+      body: { contentType: "Text", content: telo },
+      toRecipients: prejemnik ? [{ emailAddress: { address: prejemnik } }] : [],
+      attachments,
+    }),
+  });
+  if (!res.ok) throw new Error("Graph napaka " + res.status + ": " + (await res.text()).slice(0, 200));
+  const msg = await res.json();
+  return { webLink: msg.webLink, id: msg.id, priloge: attachments.length, spodletelo };
+}
+
+// Posije opomin: najprej ustvari osnutek, nato ga poslje.
+// Ce poslanje ne uspe, osnutek ostane v Outlooku in ga lahko poslejes rocno.
+export async function posljiOpomin({ prejemnik, zadeva, telo, priloge }) {
+  const token = await getAccessToken();
+  const attachments = [];
+  for (const pr of (priloge || [])) {
+    if (!pr || !pr.url) continue;
+    try {
+      const r = await fetch(pr.url);
+      if (!r.ok) continue;
+      const buf = await r.arrayBuffer();
+      let bin = "";
+      const bytes = new Uint8Array(buf);
+      for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+      attachments.push({
+        "@odata.type": "#microsoft.graph.fileAttachment",
+        name: pr.ime || "nalog.pdf",
+        contentType: r.headers.get("content-type") || "application/pdf",
+        contentBytes: btoa(bin),
+      });
+    } catch (e) { /* priloge, ki jih ni mogoce prenesti, preskocimo */ }
+  }
+  const res = await fetch(graphConfig.graphMailEndpoint, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      subject: zadeva,
+      body: { contentType: "Text", content: telo },
+      toRecipients: prejemnik ? [{ emailAddress: { address: prejemnik } }] : [],
+      attachments,
+    }),
+  });
+  if (!res.ok) throw new Error("Osnutka ni bilo mogoce ustvariti (" + res.status + ")");
+  const msg = await res.json();
+  const snd = await fetch(`${graphConfig.graphMailEndpoint}/${msg.id}/send`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+  });
+  if (!snd.ok) {
+    if (snd.status === 403) throw new Error("Outlook ni dovolil poslanja (manjka pravica Mail.Send). Osnutek ostaja v Outlooku.");
+    throw new Error("Posiljanje ni uspelo (" + snd.status + "). Osnutek ostaja v Outlooku.");
+  }
+  return { id: msg.id };
+}
+
+// Oznaci email kot prebran (po uvozu naloga)
 export async function markEmailAsRead(messageId) {
   const token = await getAccessToken();
   
