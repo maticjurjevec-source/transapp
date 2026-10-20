@@ -131,7 +131,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="19.10.2026 b";
+const VERZIJA="20.10.2026 a";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
@@ -1218,7 +1218,9 @@ async function preberiDolznike(ab){
 }
 
 function OpominiTab({nalogi,showToast}){
-  const [kupci,setKupci]=useState([]);
+  const [kupci,setKupci]=useState(()=>{try{const r=JSON.parse(localStorage.getItem("opomin_izpis")||"null");return (r&&Array.isArray(r.kupci))?r.kupci:[];}catch(e){return [];}});
+  const [izpisDan,setIzpisDan]=useState(()=>{try{const r=JSON.parse(localStorage.getItem("opomin_izpis")||"null");return (r&&r.dan)||"";}catch(e){return "";}});
+  useEffect(()=>{try{localStorage.setItem("opomin_izpis",JSON.stringify({dan:izpisDan,kupci}));}catch(e){}},[kupci,izpisDan]);
   const [bere,setBere]=useState(false);
   const [napaka,setNapaka]=useState("");
   const [odprt,setOdprt]=useState({});
@@ -1317,8 +1319,13 @@ function OpominiTab({nalogi,showToast}){
       const ab=await file.arrayBuffer();
       const r=await preberiDolznike(ab);
       if(!r.length)throw new Error("V PDF-ju ni bilo mogoče najti nobenega računa. Je to izpis izdanih računov iz SQ Trans?");
+      const stare={};(kupci||[]).forEach(k=>k.racuni.forEach(x=>{stare[x.st]=1;}));
+      const nove={};r.forEach(k=>k.racuni.forEach(x=>{nove[x.st]=1;}));
+      const placani=Object.keys(stare).filter(x=>!nove[x]).length;
+      const dodani=Object.keys(nove).filter(x=>!stare[x]).length;
       setKupci(r);
-      if(showToast)showToast("Prebranih "+r.length+" dolžnikov");
+      setIzpisDan(new Date().toISOString().slice(0,10));
+      if(showToast)showToast("Prebranih "+r.length+" dolžnikov"+(Object.keys(stare).length?(" · plačanih "+placani+", novih "+dodani):""));
     }catch(e){setNapaka((e&&e.message)||"PDF ni bilo mogoče prebrati");}
     setBere(false);
   };
@@ -1352,6 +1359,15 @@ function OpominiTab({nalogi,showToast}){
     }
     setPoslano(p=>({...p,[kljuc(k)]:{datum:new Date().toISOString().slice(0,10),stopnja:stop(k),poslan:false}}));
     window.location.href=url;
+  };
+  const oznaciPoslano=(k)=>{
+    const kl=kljuc(k);
+    setPoslano(p=>{
+      const c={...p};
+      if(c[kl]&&c[kl].poslan)delete c[kl];
+      else c[kl]={datum:new Date().toISOString().slice(0,10),stopnja:stop(k),poslan:true};
+      return c;
+    });
   };
   const kopiraj=(k)=>{
     const t=besedilo(k);
@@ -1421,7 +1437,8 @@ function OpominiTab({nalogi,showToast}){
           {bere?"Berem PDF...":"📄 Naloži izpis dolžnikov"}
           <input type="file" accept="application/pdf,.pdf" onChange={e=>{nalozi(e.target.files&&e.target.files[0]);e.target.value="";}} style={{display:"none"}}/>
         </label>
-        {kupci.length>0&&<button onClick={()=>{setKupci([]);setNapaka("");}} style={gumb}>Počisti</button>}
+        {kupci.length>0&&<button onClick={()=>{if(!window.confirm("Odstranim shranjeni izpis? Nastavitve rokov, e-naslovov in poslanih opominov ostanejo."))return;setKupci([]);setIzpisDan("");setNapaka("");}} style={gumb}>Počisti izpis</button>}
+        {izpisDan&&<span style={{fontSize:12,color:"#64748b",fontWeight:700}}>{"Izpis z dne "+dmy(izpisDan)}</span>}
         {kupci.length>0&&<select value={razvrsti} onChange={e=>setRazvrsti(e.target.value)} style={{...polje,cursor:"pointer",fontWeight:700}}>
           <option value="znesek">Po znesku</option><option value="dni">Po dnevih zamude</option><option value="naziv">Po nazivu</option>
         </select>}
@@ -1523,6 +1540,7 @@ function OpominiTab({nalogi,showToast}){
               <button onClick={()=>posljiKlik(k)} disabled={posilja===kl} style={{...gumb,background:posilja===kl?"#e2e8f0":"#0f2744",color:"#fff",borderColor:"#0f2744"}}>{posilja===kl?"Pošiljam...":"📤 Pošlji zdaj"}</button>
               <button onClick={()=>odpriVMailu(k)} style={{...gumb,background:"#eff6ff",color:"#1d4ed8",borderColor:"#bfdbfe"}}>📧 Odpri v mailu</button>
               <button onClick={()=>kopiraj(k)} style={gumb}>📋 Kopiraj besedilo</button>
+              <button onClick={()=>oznaciPoslano(k)} title="Ročno označi, da si opomin poslal" style={{...gumb,background:(pos&&pos.poslan)?"#f0fdf4":"#fff",color:(pos&&pos.poslan)?"#15803d":"#334155",borderColor:(pos&&pos.poslan)?"#86efac":"#cbd5e1"}}>{(pos&&pos.poslan)?"☑ Poslano":"☐ Označi kot poslano"}</button>
             </div>
             {k.cakajo&&k.cakajo.length>0&&<div style={{marginTop:10,fontSize:11,color:"#64748b",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:"8px 10px"}}>{"Še ni zapadlo in ne gre v opomin: "+k.cakajo.map(r=>r.st+" ("+(dniDo(r.rok)>0?("čez "+dniDo(r.rok)+" dni"):"danes")+")").join(", ")}</div>}
             <pre style={{marginTop:10,whiteSpace:"pre-wrap",fontFamily:"inherit",fontSize:12,color:"#475569",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:9,padding:"10px 12px",maxHeight:230,overflowY:"auto"}}>{besedilo(k)}</pre>
