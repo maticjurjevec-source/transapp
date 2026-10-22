@@ -131,7 +131,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="22.10.2026 a";
+const VERZIJA="22.10.2026 d";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
@@ -1239,6 +1239,8 @@ function OpominiTab({nalogi,showToast}){
   const [posilja,setPosilja]=useState("");
   const [izbr,setIzbr]=useState({});
   const [skup,setSkup]=useState(null);
+  const [jeziki,setJeziki]=useState(()=>{try{return JSON.parse(localStorage.getItem("opomin_jeziki")||"{}");}catch(e){return{};}});
+  useEffect(()=>{try{localStorage.setItem("opomin_jeziki",JSON.stringify(jeziki));}catch(e){}},[jeziki]);
   const [msAcc,setMsAcc]=useState(()=>{try{return getActiveAccount();}catch(e){return null;}});
   const prijavaMs=async()=>{
     try{ const a=await loginToOutlook(); setMsAcc(a); if(showToast)showToast("Povezan z Outlookom: "+((a&&a.username)||"")); }
@@ -1309,7 +1311,8 @@ function OpominiTab({nalogi,showToast}){
     });
     return out;
   };
-  const jezik=(k)=>OPOMIN_JEZIK[String(k.ddv||"").slice(0,2)]||"en";
+  const jezikSam=(k)=>OPOMIN_JEZIK[String(k.ddv||"").slice(0,2)]||"en";
+  const jezik=(k)=>jeziki[kljuc(k)]||jezikSam(k);
   const stop=(k)=>stopnje[kljuc(k)]||1;
 
   const nalozi=async(file)=>{
@@ -1535,7 +1538,9 @@ function OpominiTab({nalogi,showToast}){
               <select value={stop(k)} onChange={e=>setStopnje(p=>({...p,[kl]:parseInt(e.target.value,10)}))} style={{...polje,cursor:"pointer",fontWeight:700}}>
                 <option value={1}>1. opomin</option><option value={2}>2. opomin</option><option value={3}>Zadnji poziv</option>
               </select>
-              <span style={{fontSize:11,color:"#94a3b8",fontWeight:700,textTransform:"uppercase"}}>{jezik(k)}</span>
+              <select value={jezik(k)} onChange={e=>setJeziki(p=>({...p,[kl]:e.target.value}))} title="Jezik opomina" style={{...polje,cursor:"pointer",fontWeight:700,width:108}}>
+                <option value="sl">slovensko</option><option value="de">nemško</option><option value="en">angleško</option><option value="it">italijansko</option><option value="hr">hrvaško</option>
+              </select>
               <button onClick={()=>osnutek(k)} disabled={posilja===kl} style={{...gumb,background:posilja===kl?"#e2e8f0":"#eff6ff",color:"#1d4ed8",borderColor:"#bfdbfe"}}>{posilja===kl?"Pripravljam...":"✉️ Osnutek v Outlook"}</button>
               <button onClick={()=>posljiKlik(k)} disabled={posilja===kl} style={{...gumb,background:posilja===kl?"#e2e8f0":"#0f2744",color:"#fff",borderColor:"#0f2744"}}>{posilja===kl?"Pošiljam...":"📤 Pošlji zdaj"}</button>
               <button onClick={()=>odpriVMailu(k)} style={{...gumb,background:"#eff6ff",color:"#1d4ed8",borderColor:"#bfdbfe"}}>📧 Odpri v mailu</button>
@@ -4507,9 +4512,71 @@ const R=({label,val,bold,mono})=><div style={{display:"flex",justifyContent:"spa
 const I=({label,val,set,ph,type="text"})=><div><label style={s.lbl}>{label}</label><input style={s.inp} type={type} value={val||""} onChange={e=>set(e.target.value)} placeholder={ph||""}/></div>;
 const Toast=({t})=><div style={{position:"fixed",top:20,right:20,color:"#fff",padding:"12px 24px",borderRadius:12,fontWeight:700,fontSize:14,zIndex:400,background:t.err?"#dc2626":"#16a34a",boxShadow:"0 4px 20px rgba(0,0,0,0.25)"}}>{t.txt}</div>;
 
+function krajOznaka(r){
+  const a=r.address||{};
+  const kraj=a.city||a.town||a.village||a.municipality||a.hamlet||a.county||"";
+  const drz=(a.country_code||"").toUpperCase();
+  const ps=a.postcode||"";
+  const osn=[ps,kraj].filter(Boolean).join(" ").trim();
+  const zac=osn||String(r.display_name||"").split(",")[0].trim();
+  return zac+(drz?(", "+drz):"");
+}
+function KrajPolje({value,onChange,onPick,placeholder,onEnter,style}){
+  const [pred,setPred]=useState([]);
+  const [odprt,setOdprt]=useState(false);
+  const [isce,setIsce]=useState(false);
+  const [oznacen,setOznacen]=useState(-1);
+  const zadnji=useRef("");
+  useEffect(()=>{
+    const q=String(value||"").trim();
+    if(q.length<3||q===zadnji.current){setPred([]);return;}
+    let zivo=true;
+    const t=setTimeout(async()=>{
+      setIsce(true);
+      try{
+        const r=await fetch("https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&accept-language=sl&q="+encodeURIComponent(q),{headers:{"Accept":"application/json"}});
+        const j=await r.json();
+        if(zivo&&Array.isArray(j)){setPred(j);setOdprt(j.length>0);setOznacen(-1);}
+      }catch(e){}
+      if(zivo)setIsce(false);
+    },500);
+    return ()=>{zivo=false;clearTimeout(t);};
+  },[value]);
+  const izberi=(r)=>{
+    const lbl=krajOznaka(r);
+    zadnji.current=lbl;
+    setPred([]);setOdprt(false);
+    onPick&&onPick({la:parseFloat(r.lat),lo:parseFloat(r.lon),najden:r.display_name||lbl,lbl});
+  };
+  const tipka=(e)=>{
+    if(odprt&&pred.length){
+      if(e.key==="ArrowDown"){e.preventDefault();setOznacen(x=>Math.min(x+1,pred.length-1));return;}
+      if(e.key==="ArrowUp"){e.preventDefault();setOznacen(x=>Math.max(x-1,0));return;}
+      if(e.key==="Enter"&&oznacen>=0){e.preventDefault();izberi(pred[oznacen]);return;}
+      if(e.key==="Escape"){setOdprt(false);return;}
+    }
+    if(e.key==="Enter"&&onEnter)onEnter();
+  };
+  return <div style={{position:"relative",flex:1,minWidth:0}}>
+    <input value={value} onChange={e=>{zadnji.current="";onChange(e.target.value);}} onKeyDown={tipka}
+      onFocus={()=>{if(pred.length)setOdprt(true);}} onBlur={()=>setTimeout(()=>setOdprt(false),120)}
+      placeholder={placeholder} style={{...style,width:"100%",boxSizing:"border-box"}}/>
+    {isce&&<span style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontSize:10,color:"#94a3b8"}}>iščem…</span>}
+    {odprt&&pred.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:50,marginTop:3,background:"#fff",border:"1px solid #cbd5e1",borderRadius:9,boxShadow:"0 8px 22px rgba(15,39,68,0.14)",maxHeight:230,overflowY:"auto"}}>
+      {pred.map((r,i)=>(
+        <div key={r.place_id||i} onMouseDown={(e)=>{e.preventDefault();izberi(r);}} onMouseEnter={()=>setOznacen(i)}
+          style={{padding:"7px 10px",cursor:"pointer",background:i===oznacen?"#eff6ff":"#fff",borderTop:i?"1px solid #f1f5f9":"none"}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#0f2744"}}>{krajOznaka(r)}</div>
+          <div style={{fontSize:10,color:"#94a3b8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.display_name}</div>
+        </div>
+      ))}
+    </div>}
+  </div>;
+}
 function PrihodVozila({v,vozniki,izbrani}){
   const [odpr,setOdpr]=useState(false);
   const [tocke,setTocke]=useState([""]);
+  const [znani,setZnani]=useState({});
   const [odVozila,setOdVozila]=useState(true);
   const [start,setStart]=useState("");
   const [eta,setEta]=useState(null);
@@ -4587,6 +4654,8 @@ function PrihodVozila({v,vozniki,izbrani}){
     try{
       const najdeni=[];
       for(const x of q){
+        const z=znani[x];
+        if(z){najdeni.push(z);continue;}
         const t=await geo(x);
         if(!t)throw new Error("Kraja \""+x+"\" ni bilo mogoce najti");
         najdeni.push(t);
@@ -4594,6 +4663,7 @@ function PrihodVozila({v,vozniki,izbrani}){
       }
       const pot=odVozila?[{la:v.lat,lo:v.lon},...najdeni]:najdeni;
       const ciljne=odVozila?najdeni:najdeni.slice(1);
+      const izh=odVozila?{la:v.lat,lo:v.lon,naziv:v.lokacija||"lega vozila"}:{la:najdeni[0].la,lo:najdeni[0].lo,naziv:najdeni[0].najden};
       let odseki=null,zracna=false;
       try{
         const koord=pot.map(p=>p.lo+","+p.la).join(";");
@@ -4628,7 +4698,7 @@ function PrihodVozila({v,vozniki,izbrani}){
         skupT+=r.t;skupKm+=odseki[idx];skupVoz+=r.voznja;skupOdm+=r.odm;skupPoc+=r.poc;
         post.push({naziv:tc.najden,la:tc.la,lo:tc.lo,km:odseki[idx],kmSkup:skupKm,voznja:r.voznja,odmori:r.odm,pocitki:r.poc,prihod:new Date(t0+skupT*3600000)});
       });
-      setEta({postanki:post,cakanje,zracna,stah:!!(tah&&tahUpost),skupKm,skupVoz,skupOdm,skupPoc,odKdaj:start?new Date(t0-cakanje*3600000):null,odVozila});
+      setEta({postanki:post,cakanje,zracna,stah:!!(tah&&tahUpost),skupKm,skupVoz,skupOdm,skupPoc,odKdaj:start?new Date(t0-cakanje*3600000):null,odVozila,izhod:izh});
     }catch(e){setEta({napaka:(e&&e.message)||"Izracun ni uspel"});}
     setRacuna(false);
   };
@@ -4654,7 +4724,7 @@ function PrihodVozila({v,vozniki,izbrani}){
           {tocke.map((t,idx)=>(
             <div key={idx} style={{display:"flex",gap:6,alignItems:"center"}}>
               <span style={{fontSize:11,fontWeight:800,color:"#94a3b8",minWidth:16}}>{idx+1}.</span>
-              <input value={t} onChange={e=>{const c=[...tocke];c[idx]=e.target.value;setTocke(c);setEta(null);}} onKeyDown={e=>{if(e.key==="Enter")izracunaj();}} placeholder={idx===0?(odVozila?"Kraj ali poštna št. (npr. 1000 Ljubljana ali DE-47447)":"Začetni kraj"):(idx===tocke.length-1?"Cilj":"Vmesni postanek")} style={{flex:1,minWidth:0,padding:"7px 10px",borderRadius:8,border:"1px solid #cbd5e1",fontSize:12,outline:"none"}}/>
+              <KrajPolje value={t} onChange={(x)=>{const c=[...tocke];c[idx]=x;setTocke(c);setEta(null);}} onPick={(r)=>{const c=[...tocke];c[idx]=r.lbl;setTocke(c);setZnani(p=>({...p,[r.lbl]:{la:r.la,lo:r.lo,najden:r.najden}}));setEta(null);}} onEnter={izracunaj} placeholder={idx===0?(odVozila?"Kraj ali poštna št. – začni tipkati":"Začetni kraj"):(idx===tocke.length-1?"Cilj":"Vmesni postanek")} style={{padding:"7px 10px",borderRadius:8,border:"1px solid #cbd5e1",fontSize:12,outline:"none",fontFamily:"inherit",color:"#0f2744"}}/>
               {tocke.length>1&&<div style={{display:"flex",flexDirection:"column",gap:2}}><button onClick={()=>premakni(idx,idx-1)} disabled={idx===0} title="Premakni navzgor" style={{...gumbPrem,opacity:idx===0?0.3:1,cursor:idx===0?"default":"pointer"}}>▲</button><button onClick={()=>premakni(idx,idx+1)} disabled={idx===tocke.length-1} title="Premakni navzdol" style={{...gumbPrem,opacity:idx===tocke.length-1?0.3:1,cursor:idx===tocke.length-1?"default":"pointer"}}>▼</button></div>}{tocke.length>1&&<button onClick={()=>{setTocke(tocke.filter((_,i3)=>i3!==idx));setEta(null);}} title="Odstrani postanek" style={{border:"1px solid #e2e8f0",background:"#fff",color:"#b91c1c",borderRadius:8,padding:"5px 9px",fontSize:12,fontWeight:800,cursor:"pointer"}}>✕</button>}
             </div>
           ))}
@@ -4681,7 +4751,7 @@ function PrihodVozila({v,vozniki,izbrani}){
       </div>}
       {eta&&<div style={{marginTop:8,fontSize:12,borderRadius:8,padding:"8px 10px",background:eta.napaka?"#fef2f2":"#eff6ff",border:"1px solid "+(eta.napaka?"#fecaca":"#bfdbfe"),color:eta.napaka?"#b91c1c":"#1d4ed8"}}>
         {eta.napaka?eta.napaka:<>
-          <div style={{fontSize:11,color:"#64748b",marginBottom:6}}>{"Štart: "+(eta.odKdaj?dcas(eta.odKdaj):"zdaj")+" · "+(eta.odVozila?("od vozila"+(v.lokacija?" ("+v.lokacija+")":"")):"od 1. vpisanega kraja")}</div>
+          <div style={{fontSize:11,color:"#64748b",marginBottom:6}}>{"Štart: "+(eta.odKdaj?dcas(eta.odKdaj):"zdaj")+" · od "+((eta.izhod&&eta.izhod.naziv)||(eta.odVozila?"vozila":"1. kraja"))}</div>
           {eta.postanki.map((p,idx)=>(
             <div key={idx} style={{paddingBottom:6,marginBottom:6,borderBottom:idx<eta.postanki.length-1?"1px dashed #bfdbfe":"none"}}>
               <div style={{fontWeight:800,fontSize:13}}>{(idx+1)+". "+(idx===eta.postanki.length-1?"cilj":"postanek")+" - prihod "+dcas(p.prihod)}</div>
@@ -4691,7 +4761,7 @@ function PrihodVozila({v,vozniki,izbrani}){
           ))}
           <div style={{marginTop:2,fontWeight:700}}>{"Skupaj "+Math.round(eta.skupKm)+" km · "+hm(eta.skupVoz)+" vožnje"+(eta.skupOdm>0?" + "+hm(eta.skupOdm)+" odmorov":"")+(eta.skupPoc>0?" + "+hm(eta.skupPoc)+" počitka":"")+(eta.cakanje>0?" + "+hm(eta.cakanje)+" do konca počitka":"")+" · pri "+hitrost+" km/h"}</div>
           <div style={{marginTop:6,display:"flex",gap:8,flexWrap:"wrap"}}>
-            <a href={"https://www.google.com/maps/dir/?api=1&origin="+v.lat+","+v.lon+"&destination="+eta.postanki[eta.postanki.length-1].la+","+eta.postanki[eta.postanki.length-1].lo+(eta.postanki.length>1?"&waypoints="+eta.postanki.slice(0,-1).map(p=>p.la+","+p.lo).join("%7C"):"")+"&travelmode=driving"} target="_blank" rel="noreferrer" style={{...st,background:"#0f2744",color:"#fff"}}>🗺️ Poglej pot na zemljevidu</a>
+            <a href={"https://www.google.com/maps/dir/?api=1&origin="+((eta.izhod?eta.izhod.la:v.lat)+","+(eta.izhod?eta.izhod.lo:v.lon))+"&destination="+eta.postanki[eta.postanki.length-1].la+","+eta.postanki[eta.postanki.length-1].lo+(eta.postanki.length>1?"&waypoints="+eta.postanki.slice(0,-1).map(p=>p.la+","+p.lo).join("%7C"):"")+"&travelmode=driving"} target="_blank" rel="noreferrer" style={{...st,background:"#0f2744",color:"#fff"}}>🗺️ Poglej pot na zemljevidu</a>
             {eta.postanki.map((p,idx)=><a key={idx} href={"https://www.google.com/maps/search/?api=1&query="+p.la+","+p.lo} target="_blank" rel="noreferrer" style={{...st,background:"#fff",color:"#2563eb",border:"1.5px solid #bfdbfe"}}>{"📍 "+(idx+1)}</a>)}
           </div>
           {eta.postanki.length>10&&<div style={{marginTop:4,color:"#94a3b8"}}>Google na zemljevid vzame do 10 točk.</div>}
