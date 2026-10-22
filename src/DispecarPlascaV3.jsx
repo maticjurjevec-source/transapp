@@ -131,7 +131,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="20.10.2026 a";
+const VERZIJA="22.10.2026 a";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
@@ -4510,6 +4510,8 @@ const Toast=({t})=><div style={{position:"fixed",top:20,right:20,color:"#fff",pa
 function PrihodVozila({v,vozniki,izbrani}){
   const [odpr,setOdpr]=useState(false);
   const [tocke,setTocke]=useState([""]);
+  const [odVozila,setOdVozila]=useState(true);
+  const [start,setStart]=useState("");
   const [eta,setEta]=useState(null);
   const [racuna,setRacuna]=useState(false);
   const [hitrost,setHitrost]=useState(()=>{const x=parseInt(localStorage.getItem("eta_hitrost")||"75",10);return isNaN(x)?75:x;});
@@ -4579,7 +4581,8 @@ function PrihodVozila({v,vozniki,izbrani}){
   const izracunaj=async()=>{
     const q=tocke.map(x=>String(x||"").trim()).filter(Boolean);
     if(!q.length)return;
-    if(!v.lat)return setEta({napaka:"Vozilo nima GPS lege"});
+    if(odVozila&&!v.lat)return setEta({napaka:"Vozilo nima GPS lege – odkljukaj »od vozila« in vpiši začetni kraj"});
+    if(!odVozila&&q.length<2)return setEta({napaka:"Brez vozila vpiši vsaj dva kraja: začetek in cilj"});
     setRacuna(true);setEta(null);
     try{
       const najdeni=[];
@@ -4589,13 +4592,14 @@ function PrihodVozila({v,vozniki,izbrani}){
         najdeni.push(t);
         await new Promise(r=>setTimeout(r,300));
       }
-      const pot=[{la:v.lat,lo:v.lon},...najdeni];
+      const pot=odVozila?[{la:v.lat,lo:v.lon},...najdeni]:najdeni;
+      const ciljne=odVozila?najdeni:najdeni.slice(1);
       let odseki=null,zracna=false;
       try{
         const koord=pot.map(p=>p.lo+","+p.la).join(";");
         const rr=await fetch("https://router.project-osrm.org/route/v1/driving/"+koord+"?overview=false");
         const rj=await rr.json();
-        if(rj&&rj.routes&&rj.routes[0]&&rj.routes[0].legs&&rj.routes[0].legs.length===najdeni.length)odseki=rj.routes[0].legs.map(l=>l.distance/1000);
+        if(rj&&rj.routes&&rj.routes[0]&&rj.routes[0].legs&&rj.routes[0].legs.length===pot.length-1)odseki=rj.routes[0].legs.map(l=>l.distance/1000);
       }catch(e){}
       if(!odseki){ odseki=[]; for(let i2=1;i2<pot.length;i2++)odseki.push(zracnaKm(pot[i2-1],pot[i2])); zracna=true; }
       let doOdm=4.5,kvota=9,cakanje=0;
@@ -4615,15 +4619,16 @@ function PrihodVozila({v,vozniki,izbrani}){
         }
         return {t,odm,poc,voznja:km/hitrost};
       };
-      const t0=Date.now()+cakanje*3600000;
+      const zac=start?new Date(start).getTime():Date.now();
+      const t0=(isNaN(zac)?Date.now():zac)+cakanje*3600000;
       let skupT=0,skupKm=0,skupVoz=0,skupOdm=0,skupPoc=0;
       const post=[];
-      najdeni.forEach((tc,idx)=>{
+      ciljne.forEach((tc,idx)=>{
         const r=simul(odseki[idx]);
         skupT+=r.t;skupKm+=odseki[idx];skupVoz+=r.voznja;skupOdm+=r.odm;skupPoc+=r.poc;
         post.push({naziv:tc.najden,la:tc.la,lo:tc.lo,km:odseki[idx],kmSkup:skupKm,voznja:r.voznja,odmori:r.odm,pocitki:r.poc,prihod:new Date(t0+skupT*3600000)});
       });
-      setEta({postanki:post,cakanje,zracna,stah:!!(tah&&tahUpost),skupKm,skupVoz,skupOdm,skupPoc});
+      setEta({postanki:post,cakanje,zracna,stah:!!(tah&&tahUpost),skupKm,skupVoz,skupOdm,skupPoc,odKdaj:start?new Date(t0-cakanje*3600000):null,odVozila});
     }catch(e){setEta({napaka:(e&&e.message)||"Izracun ni uspel"});}
     setRacuna(false);
   };
@@ -4632,12 +4637,24 @@ function PrihodVozila({v,vozniki,izbrani}){
     {_izb.length>0&&<button onClick={()=>{prevzemi();setOdpr(true);}} title="Prenese obkljukane naklade in razklade med postanke" style={{marginLeft:6,fontSize:12,fontWeight:700,color:"#1d4ed8",background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,padding:"6px 10px",cursor:"pointer"}}>{"⤵️ Prevzemi označene ("+_izb.length+")"}</button>}
     {odpr&&<div style={{marginTop:8}}>
       {_izb.length>0&&<div style={{fontSize:11,color:"#64748b",marginBottom:6}}>{"Obkljukano v nalogih: "+_izb.map(x=>x.tip+" "+x.kraj).join(" → ")}</div>}
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",marginBottom:8}}>
+        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700,color:"#334155",cursor:"pointer"}}>
+          <input type="checkbox" checked={odVozila} onChange={()=>{setOdVozila(x=>!x);setEta(null);}} style={{width:15,height:15,cursor:"pointer"}}/>
+          {"Začni pri vozilu"+(v.lokacija?" ("+v.lokacija+")":"")}
+        </label>
+        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700,color:"#334155"}}>
+          Štart
+          <input type="datetime-local" value={start} onChange={e=>{setStart(e.target.value);setEta(null);}} style={{padding:"6px 8px",borderRadius:8,border:"1px solid #cbd5e1",fontSize:12,outline:"none",fontFamily:"inherit",color:"#0f2744"}}/>
+        </label>
+        {start&&<button onClick={()=>{setStart("");setEta(null);}} style={{fontSize:11,fontWeight:700,color:"#64748b",background:"#fff",border:"1px solid #e2e8f0",borderRadius:8,padding:"6px 10px",cursor:"pointer"}}>zdaj</button>}
+        {!start&&<span style={{fontSize:11,color:"#94a3b8"}}>prazno = zdaj</span>}
+      </div>
       <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
         <div style={{flex:"1 1 100%",display:"flex",flexDirection:"column",gap:6}}>
           {tocke.map((t,idx)=>(
             <div key={idx} style={{display:"flex",gap:6,alignItems:"center"}}>
               <span style={{fontSize:11,fontWeight:800,color:"#94a3b8",minWidth:16}}>{idx+1}.</span>
-              <input value={t} onChange={e=>{const c=[...tocke];c[idx]=e.target.value;setTocke(c);setEta(null);}} onKeyDown={e=>{if(e.key==="Enter")izracunaj();}} placeholder={idx===0?"Kraj ali poštna št. (npr. 1000 Ljubljana ali DE-47447)":"Naslednji postanek"} style={{flex:1,minWidth:0,padding:"7px 10px",borderRadius:8,border:"1px solid #cbd5e1",fontSize:12,outline:"none"}}/>
+              <input value={t} onChange={e=>{const c=[...tocke];c[idx]=e.target.value;setTocke(c);setEta(null);}} onKeyDown={e=>{if(e.key==="Enter")izracunaj();}} placeholder={idx===0?(odVozila?"Kraj ali poštna št. (npr. 1000 Ljubljana ali DE-47447)":"Začetni kraj"):(idx===tocke.length-1?"Cilj":"Vmesni postanek")} style={{flex:1,minWidth:0,padding:"7px 10px",borderRadius:8,border:"1px solid #cbd5e1",fontSize:12,outline:"none"}}/>
               {tocke.length>1&&<div style={{display:"flex",flexDirection:"column",gap:2}}><button onClick={()=>premakni(idx,idx-1)} disabled={idx===0} title="Premakni navzgor" style={{...gumbPrem,opacity:idx===0?0.3:1,cursor:idx===0?"default":"pointer"}}>▲</button><button onClick={()=>premakni(idx,idx+1)} disabled={idx===tocke.length-1} title="Premakni navzdol" style={{...gumbPrem,opacity:idx===tocke.length-1?0.3:1,cursor:idx===tocke.length-1?"default":"pointer"}}>▼</button></div>}{tocke.length>1&&<button onClick={()=>{setTocke(tocke.filter((_,i3)=>i3!==idx));setEta(null);}} title="Odstrani postanek" style={{border:"1px solid #e2e8f0",background:"#fff",color:"#b91c1c",borderRadius:8,padding:"5px 9px",fontSize:12,fontWeight:800,cursor:"pointer"}}>✕</button>}
             </div>
           ))}
@@ -4664,6 +4681,7 @@ function PrihodVozila({v,vozniki,izbrani}){
       </div>}
       {eta&&<div style={{marginTop:8,fontSize:12,borderRadius:8,padding:"8px 10px",background:eta.napaka?"#fef2f2":"#eff6ff",border:"1px solid "+(eta.napaka?"#fecaca":"#bfdbfe"),color:eta.napaka?"#b91c1c":"#1d4ed8"}}>
         {eta.napaka?eta.napaka:<>
+          <div style={{fontSize:11,color:"#64748b",marginBottom:6}}>{"Štart: "+(eta.odKdaj?dcas(eta.odKdaj):"zdaj")+" · "+(eta.odVozila?("od vozila"+(v.lokacija?" ("+v.lokacija+")":"")):"od 1. vpisanega kraja")}</div>
           {eta.postanki.map((p,idx)=>(
             <div key={idx} style={{paddingBottom:6,marginBottom:6,borderBottom:idx<eta.postanki.length-1?"1px dashed #bfdbfe":"none"}}>
               <div style={{fontWeight:800,fontSize:13}}>{(idx+1)+". "+(idx===eta.postanki.length-1?"cilj":"postanek")+" - prihod "+dcas(p.prihod)}</div>
