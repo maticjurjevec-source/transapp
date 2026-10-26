@@ -131,7 +131,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="26.10.2026 a";
+const VERZIJA="26.10.2026 b";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
@@ -1825,6 +1825,7 @@ function CiscenjeProstora({nalogi}){
   const [mes,setMes]=useState(12);
   const [tudiZak,setTudiZak]=useState(false);
   const [tudiCmr,setTudiCmr]=useState(false);
+  const [vsiCmr,setVsiCmr]=useState(false);
   const [scan,setScan]=useState(null);
   const [tece,setTece]=useState(false);
   const [stanje,setStanje]=useState("");
@@ -1845,7 +1846,16 @@ function CiscenjeProstora({nalogi}){
       const kand=kandidati();
       const orig=kand.map(n=>({id:n.id,st:n.stevilkaNaloga||"",pot:origPotIzUrl(n.original_pdf_url||n.originalPdfUrl||"")})).filter(x=>x.pot);
       let cmr=[];
-      if(tudiCmr&&kand.length){
+      if(tudiCmr&&vsiCmr){
+        for(let od=0;;od+=1000){
+          setStanje("Berem CMR "+(od+1)+"…");
+          const {data,error}=await supabase.from("cmr_dokumenti").select("id,nalog_id,storage_pot").range(od,od+999);
+          if(error)throw error;
+          if(!data||!data.length)break;
+          cmr=cmr.concat(data.filter(x=>x.storage_pot));
+          if(data.length<1000)break;
+        }
+      }else if(tudiCmr&&kand.length){
         const ids=kand.map(n=>n.id);
         for(let i=0;i<ids.length;i+=150){
           const {data}=await supabase.from("cmr_dokumenti").select("id,nalog_id,storage_pot").in("nalog_id",ids.slice(i,i+150));
@@ -1903,14 +1913,17 @@ function CiscenjeProstora({nalogi}){
         <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700,color:"#b45309",cursor:"pointer"}}>
           <input type="checkbox" checked={tudiCmr} onChange={()=>{setTudiCmr(x=>!x);setScan(null);}} style={{width:15,height:15,cursor:"pointer"}}/>tudi CMR slike
         </label>
+        {tudiCmr&&<label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700,color:"#b91c1c",cursor:"pointer"}}>
+          <input type="checkbox" checked={vsiCmr} onChange={()=>{setVsiCmr(x=>!x);setScan(null);}} style={{width:15,height:15,cursor:"pointer"}}/>vsi CMR, ne glede na starost
+        </label>}
         <button onClick={preveri} disabled={tece} style={{...gumb,background:tece?"#e2e8f0":"#fff"}}>Preveri</button>
       </div>
       {tudiCmr&&<div style={{marginTop:8,fontSize:12,color:"#b45309",background:"#fffbeb",border:"1px solid #fde68a",borderRadius:9,padding:"8px 10px",fontWeight:700}}>
-        CMR je dokazilo o dostavi in knjigovodska listina. Preden jih izbrišeš, se prepričaj, da jih imaš shranjene drugje.
+        CMR je dokazilo o dostavi in knjigovodska listina – hraniti jih je treba več let. Preden jih izbrišeš, se prepričaj, da jih imaš shranjene drugje.{vsiCmr?" Z izbrano možnostjo »vsi CMR« se izbrišejo prav vsi, tudi od tekočih prevozov.":""}
       </div>}
       {scan&&<div style={{marginTop:10,fontSize:13,color:"#0f2744",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:9,padding:"10px 12px"}}>
         <div style={{fontWeight:700}}>{"Ustreza "+scan.kand+" nalogov"}</div>
-        <div style={{marginTop:4,color:"#475569"}}>{scan.orig.length+" originalnih datotek"+(tudiCmr?(" · "+scan.cmr.length+" CMR datotek"):"")}</div>
+        <div style={{marginTop:4,color:"#475569"}}>{scan.orig.length+" originalnih datotek"+(tudiCmr?(" · "+scan.cmr.length+" CMR datotek"+(vsiCmr?" (vsi)":"")):"")}</div>
         <div style={{marginTop:4,fontSize:11,color:"#94a3b8"}}>{"Ocena prihranka: "+Math.round(scan.orig.length*0.25+scan.cmr.length*3)+" MB (PDF ~0,25 MB, CMR ~3 MB)"}</div>
         {(scan.orig.length>0||scan.cmr.length>0)&&<button onClick={pobrisi} disabled={tece} style={{marginTop:10,background:tece?"#e2e8f0":"#b91c1c",color:tece?"#94a3b8":"#fff",border:"none",borderRadius:9,padding:"9px 16px",fontSize:12,fontWeight:800,cursor:tece?"default":"pointer"}}>🗑️ Izbriši datoteke</button>}
       </div>}
