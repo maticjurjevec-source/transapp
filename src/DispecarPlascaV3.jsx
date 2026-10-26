@@ -131,10 +131,11 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="22.10.2026 d";
+const VERZIJA="26.10.2026 a";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
+let ZADNJA_UPLOAD_NAPAKA="";
 async function uploadOriginalPdf(file){
   try{
     const uuid=crypto.randomUUID();
@@ -144,6 +145,7 @@ async function uploadOriginalPdf(file){
     const{data:urlData}=supabase.storage.from("originalni-nalogi").getPublicUrl(fileName);
     return urlData?.publicUrl||null;
   }catch(err){
+    ZADNJA_UPLOAD_NAPAKA=(err&&err.message)||"neznana napaka";
     console.error("Upload PDF napaka:",err);
     return null;
   }
@@ -714,6 +716,7 @@ const handleDrop=async(e,editId)=>{
     let pdfUrl=null;
     if(file.type==="application/pdf"){
       pdfUrl=await uploadOriginalPdf(file);
+      if(!pdfUrl)showToast("Originala ni bilo mogoče shraniti: "+ZADNJA_UPLOAD_NAPAKA,true);
     }
     try{
       let txt="";
@@ -1817,6 +1820,104 @@ function GpsTab({nalogi,vozniki}){
     {d&&list.length===0&&!load&&<div style={{textAlign:"center",color:"#94a3b8",padding:40}}>Ni zadetkov.</div>}
   </div>);
 }
+function CiscenjeProstora({nalogi}){
+  const [odpr,setOdpr]=useState(false);
+  const [mes,setMes]=useState(12);
+  const [tudiZak,setTudiZak]=useState(false);
+  const [tudiCmr,setTudiCmr]=useState(false);
+  const [scan,setScan]=useState(null);
+  const [tece,setTece]=useState(false);
+  const [stanje,setStanje]=useState("");
+  const kandidati=()=>{
+    const meja=new Date(); meja.setMonth(meja.getMonth()-mes);
+    return (nalogi||[]).filter(n=>{
+      const st=n.status;
+      if(st!=="fakturirano"&&!(tudiZak&&(st==="zakljucen"||st==="za_fakturo")))return false;
+      const d=n.razDatum||n.raz_datum||n.nakDatum||n.nak_datum;
+      if(!d)return false;
+      const t=new Date(String(d).slice(0,10)+"T00:00:00").getTime();
+      return !isNaN(t)&&t<meja.getTime();
+    });
+  };
+  const preveri=async()=>{
+    setTece(true);setStanje("Pregledujem...");setScan(null);
+    try{
+      const kand=kandidati();
+      const orig=kand.map(n=>({id:n.id,st:n.stevilkaNaloga||"",pot:origPotIzUrl(n.original_pdf_url||n.originalPdfUrl||"")})).filter(x=>x.pot);
+      let cmr=[];
+      if(tudiCmr&&kand.length){
+        const ids=kand.map(n=>n.id);
+        for(let i=0;i<ids.length;i+=150){
+          const {data}=await supabase.from("cmr_dokumenti").select("id,nalog_id,storage_pot").in("nalog_id",ids.slice(i,i+150));
+          if(data)cmr=cmr.concat(data.filter(x=>x.storage_pot));
+        }
+      }
+      setScan({orig,cmr,kand:kand.length});
+      setStanje("");
+    }catch(e){setStanje("Pregled ni uspel: "+((e&&e.message)||""));}
+    setTece(false);
+  };
+  const pobrisi=async()=>{
+    if(!scan||(!scan.orig.length&&!scan.cmr.length))return;
+    const opis=[scan.orig.length?(scan.orig.length+" originalnih nalogov"):"",scan.cmr.length?(scan.cmr.length+" CMR dokumentov"):""].filter(Boolean).join(" in ");
+    if(!window.confirm("Nepovratno izbrisem "+opis+"?\n\nDatotek ne bo mogoce obnoviti."))return;
+    setTece(true);
+    let a=0,b=0;
+    try{
+      for(let i=0;i<scan.orig.length;i+=40){
+        const del=scan.orig.slice(i,i+40);
+        setStanje("Brišem originale "+(i+del.length)+"/"+scan.orig.length);
+        const {error}=await supabase.storage.from("originalni-nalogi").remove(del.map(x=>x.pot));
+        if(error)throw error;
+        await supabase.from("nalogi").update({original_pdf_url:null}).in("id",del.map(x=>x.id));
+        a+=del.length;
+      }
+      for(let i=0;i<scan.cmr.length;i+=40){
+        const del=scan.cmr.slice(i,i+40);
+        setStanje("Brišem CMR "+(i+del.length)+"/"+scan.cmr.length);
+        const {error}=await supabase.storage.from(CMR_BUCKET).remove(del.map(x=>x.storage_pot));
+        if(error)throw error;
+        await supabase.from("cmr_dokumenti").delete().in("id",del.map(x=>x.id));
+        b+=del.length;
+      }
+      setStanje("Izbrisano: "+a+" originalov"+(b?(", "+b+" CMR"):"")+". Osveži stran, da se seznam uskladi.");
+      setScan(null);
+    }catch(e){setStanje("Brisanje se je ustavilo po "+a+" originalih: "+((e&&e.message)||""));}
+    setTece(false);
+  };
+  const gumb={border:"1px solid #cbd5e1",background:"#fff",color:"#334155",borderRadius:9,padding:"7px 13px",fontSize:12,fontWeight:700,cursor:"pointer"};
+  return <div style={{marginTop:16,background:"#fff",border:"1px solid #e5eaf0",borderRadius:12,padding:"12px 14px"}}>
+    <div onClick={()=>setOdpr(x=>!x)} style={{fontSize:13,fontWeight:700,color:"#64748b",cursor:"pointer"}}>{"🧹 Čiščenje prostora "+(odpr?"▲":"▼")}</div>
+    {odpr&&<div style={{marginTop:10}}>
+      <div style={{fontSize:12,color:"#64748b",lineHeight:1.6,marginBottom:10}}>
+        Izbriše originalne naloge (in po želji CMR) pri starih, že fakturiranih nalogih. Podatki naloga ostanejo – izbrišejo se samo pripete datoteke.
+      </div>
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+        <span style={{fontSize:12,fontWeight:700,color:"#334155"}}>Starejše od</span>
+        <select value={mes} onChange={e=>{setMes(parseInt(e.target.value,10));setScan(null);}} style={{...gumb,cursor:"pointer"}}>
+          <option value={6}>6 mesecev</option><option value={12}>12 mesecev</option><option value={18}>18 mesecev</option><option value={24}>24 mesecev</option>
+        </select>
+        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700,color:"#334155",cursor:"pointer"}}>
+          <input type="checkbox" checked={tudiZak} onChange={()=>{setTudiZak(x=>!x);setScan(null);}} style={{width:15,height:15,cursor:"pointer"}}/>tudi zaključeni in za fakturo
+        </label>
+        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700,color:"#b45309",cursor:"pointer"}}>
+          <input type="checkbox" checked={tudiCmr} onChange={()=>{setTudiCmr(x=>!x);setScan(null);}} style={{width:15,height:15,cursor:"pointer"}}/>tudi CMR slike
+        </label>
+        <button onClick={preveri} disabled={tece} style={{...gumb,background:tece?"#e2e8f0":"#fff"}}>Preveri</button>
+      </div>
+      {tudiCmr&&<div style={{marginTop:8,fontSize:12,color:"#b45309",background:"#fffbeb",border:"1px solid #fde68a",borderRadius:9,padding:"8px 10px",fontWeight:700}}>
+        CMR je dokazilo o dostavi in knjigovodska listina. Preden jih izbrišeš, se prepričaj, da jih imaš shranjene drugje.
+      </div>}
+      {scan&&<div style={{marginTop:10,fontSize:13,color:"#0f2744",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:9,padding:"10px 12px"}}>
+        <div style={{fontWeight:700}}>{"Ustreza "+scan.kand+" nalogov"}</div>
+        <div style={{marginTop:4,color:"#475569"}}>{scan.orig.length+" originalnih datotek"+(tudiCmr?(" · "+scan.cmr.length+" CMR datotek"):"")}</div>
+        <div style={{marginTop:4,fontSize:11,color:"#94a3b8"}}>{"Ocena prihranka: "+Math.round(scan.orig.length*0.25+scan.cmr.length*3)+" MB (PDF ~0,25 MB, CMR ~3 MB)"}</div>
+        {(scan.orig.length>0||scan.cmr.length>0)&&<button onClick={pobrisi} disabled={tece} style={{marginTop:10,background:tece?"#e2e8f0":"#b91c1c",color:tece?"#94a3b8":"#fff",border:"none",borderRadius:9,padding:"9px 16px",fontSize:12,fontWeight:800,cursor:tece?"default":"pointer"}}>🗑️ Izbriši datoteke</button>}
+      </div>}
+      {stanje&&<div style={{marginTop:8,fontSize:12,color:"#475569",fontWeight:700}}>{stanje}</div>}
+    </div>}
+  </div>;
+}
 let _nalogiQ=""; let _nalogiUI=null; function NalogiTab({nalogi,vozniki,onSelect,openNovNalog,onEdit,onDelete,onAssign,onZaFakturo,onFakturirano,onVrni,onKopiraj}){
   const [f,setF]=useState("vsi");
   const [smerF,setSmerF]=useState("vse");
@@ -1929,6 +2030,7 @@ let _nalogiQ=""; let _nalogiUI=null; function NalogiTab({nalogi,vozniki,onSelect
         </div>}
       </div>);
     })}
+    <CiscenjeProstora nalogi={nalogi}/>
   </div>);
 }
 
@@ -3064,6 +3166,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
       const { data: urlData } = supabase.storage.from("originalni-nalogi").getPublicUrl(fileName);
       return urlData?.publicUrl || null;
     } catch (err) {
+      ZADNJA_UPLOAD_NAPAKA = (err && err.message) || "neznana napaka";
       console.error("Upload napaka:", err);
       return null;
     }
@@ -3297,6 +3400,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
       if(priponkaFile){
         showToast("⏳ Nalagam original...");
         pdfUrl=await uploadOriginalDatoteke(priponkaFile);
+        if(!pdfUrl)showToast("Priponke ni bilo mogoče shraniti: "+ZADNJA_UPLOAD_NAPAKA,true);
       }
       const statusNaloga = form.voznikId ? 'poslan' : 'nov';
       const { data, error } = await supabase.from('nalogi').insert([{
@@ -3361,6 +3465,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
       if(priponkaFile){
         showToast("⏳ Nalagam original...");
         pdfUrl=await uploadOriginalDatoteke(priponkaFile);
+        if(!pdfUrl)showToast("Priponke ni bilo mogoče shraniti: "+ZADNJA_UPLOAD_NAPAKA,true);
       }
       const updateData = {
         stranka: form.stranka,
