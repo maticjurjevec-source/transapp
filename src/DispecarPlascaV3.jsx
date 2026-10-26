@@ -131,16 +131,51 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="26.10.2026 b";
+const VERZIJA="26.10.2026 d";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
+const ORIG_MAX_PX=1800;
+const ORIG_KAKOVOST=0.75;
+function stisniSliko(file,maxPx,kak){
+  return new Promise((res)=>{
+    try{
+      const fr=new FileReader();
+      fr.onload=()=>{
+        const img=new Image();
+        img.onload=()=>{
+          try{
+            const dolga=Math.max(img.width,img.height);
+            const f=dolga>maxPx?(maxPx/dolga):1;
+            const c=document.createElement("canvas");
+            c.width=Math.round(img.width*f); c.height=Math.round(img.height*f);
+            const x=c.getContext("2d");
+            x.imageSmoothingEnabled=true; x.imageSmoothingQuality="high";
+            x.drawImage(img,0,0,c.width,c.height);
+            c.toBlob(b=>res(b||null),"image/jpeg",kak);
+          }catch(e){res(null);}
+        };
+        img.onerror=()=>res(null);
+        img.src=fr.result;
+      };
+      fr.onerror=()=>res(null);
+      fr.readAsDataURL(file);
+    }catch(e){res(null);}
+  });
+}
+async function pripraviOriginal(file){
+  if(!file||!/^image\//.test(file.type||""))return {blob:file,ime:file.name||"original"};
+  const b=await stisniSliko(file,ORIG_MAX_PX,ORIG_KAKOVOST);
+  if(!b||b.size>=file.size)return {blob:file,ime:file.name||"original"};
+  return {blob:b,ime:String(file.name||"original").replace(/\.[^.]+$/,"")+".jpg"};
+}
 let ZADNJA_UPLOAD_NAPAKA="";
 async function uploadOriginalPdf(file){
   try{
     const uuid=crypto.randomUUID();
-    const fileName=`${uuid}/${Date.now()}-${file.name}`;
-    const{data,error}=await supabase.storage.from("originalni-nalogi").upload(fileName,file,{cacheControl:"3600",upsert:false});
+    const {blob,ime}=await pripraviOriginal(file);
+    const fileName=`${uuid}/${Date.now()}-${ime}`;
+    const{data,error}=await supabase.storage.from("originalni-nalogi").upload(fileName,blob,{cacheControl:"3600",upsert:false,contentType:(blob&&blob.type)||"application/octet-stream"});
     if(error)throw error;
     const{data:urlData}=supabase.storage.from("originalni-nalogi").getPublicUrl(fileName);
     return urlData?.publicUrl||null;
@@ -1905,7 +1940,7 @@ function CiscenjeProstora({nalogi}){
       <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
         <span style={{fontSize:12,fontWeight:700,color:"#334155"}}>Starejše od</span>
         <select value={mes} onChange={e=>{setMes(parseInt(e.target.value,10));setScan(null);}} style={{...gumb,cursor:"pointer"}}>
-          <option value={6}>6 mesecev</option><option value={12}>12 mesecev</option><option value={18}>18 mesecev</option><option value={24}>24 mesecev</option>
+          <option value={1}>1 mesec</option><option value={2}>2 meseca</option><option value={3}>3 mesece</option><option value={6}>6 mesecev</option><option value={12}>12 mesecev</option><option value={24}>24 mesecev</option>
         </select>
         <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700,color:"#334155",cursor:"pointer"}}>
           <input type="checkbox" checked={tudiZak} onChange={()=>{setTudiZak(x=>!x);setScan(null);}} style={{width:15,height:15,cursor:"pointer"}}/>tudi zaključeni in za fakturo
@@ -3173,8 +3208,9 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
   const uploadOriginalDatoteke = async (file) => {
     try {
       const uuid = crypto.randomUUID();
-      const fileName = `${uuid}/${Date.now()}-${file.name}`;
-      const { data, error } = await supabase.storage.from("originalni-nalogi").upload(fileName, file, { cacheControl: "3600", upsert: false });
+      const { blob, ime } = await pripraviOriginal(file);
+      const fileName = `${uuid}/${Date.now()}-${ime}`;
+      const { data, error } = await supabase.storage.from("originalni-nalogi").upload(fileName, blob, { cacheControl: "3600", upsert: false, contentType: (blob && blob.type) || "application/octet-stream" });
       if (error) throw error;
       const { data: urlData } = supabase.storage.from("originalni-nalogi").getPublicUrl(fileName);
       return urlData?.publicUrl || null;
