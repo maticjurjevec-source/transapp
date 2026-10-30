@@ -131,7 +131,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="29.10.2026 a";
+const VERZIJA="30.10.2026 a";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
@@ -5151,6 +5151,7 @@ function KontaktSec({n,vozniki,showToast}){
   const [isce,setIsce]=useState(false);
   const em=(rocni.trim()||izbran||"").trim();
   const vz=(vozniki||[]).find(x=>x.id===n.voznikId);
+  const [najVoz,setNajVoz]=useState("");
   const ref=(n.stevilka_narocnika||n.stevilkaNarocnika||n.nakReferenca||n.stevilkaNaloga||"");
   const rel=(n.nakKraj||"?")+" - "+(n.razKraj||"?");
   const pdf=n.original_pdf_url||n.originalPdfUrl||"";
@@ -5165,17 +5166,19 @@ function KontaktSec({n,vozniki,showToast}){
   const [jezRocno,setJezRocno]=useState("");
   const jezik=jezRocno||jezikIz(em);
   const T={
-    sl:{ime:"SLO",poz:"Pozdravljeni,",pri:"V prilogi je originalni nalog.",kon:"Lep pozdrav,",nal:"Nalog",vase:"Vasa st. naloga",rel:"Relacija",nak:"Naklad",raz:"Razklad",voz:"Vozilo",vzn:"Voznik",
+    sl:{ime:"SLO",poz:"Pozdravljeni,",pri:"V prilogi je originalni nalog.",kon:"Lep pozdrav,",nal:"Nalog",vase:"Vasa st. naloga",rel:"Relacija",nak:"Naklad",raz:"Razklad",voz:"Vozilo",vzn:"Voznik",prik:"Prikolica",tel:"Telefon",naj:[" - najava vozila","za zgornji nalog najavljamo naslednje vozilo:"],
       s:[["Potrditev"," - potrditev","potrjujemo prevzem naloga in dodelitev vozila."],["Nalozeno"," - nalozeno","obvescamo vas, da je vozilo nalozeno in na poti na razklad."],["Razlozeno"," - razlozeno","obvescamo vas, da je bilo blago razlozeno. CMR sledi."],["Zamuda"," - zamuda","obvescamo vas o zamudi pri izvedbi naloga. Nov predviden cas prihoda sporocimo v najkrajsem casu."],["Prazno","",""]]},
-    de:{ime:"DE",poz:"Guten Tag,",pri:"Den Originalauftrag finden Sie im Anhang.",kon:"Mit freundlichen Gruessen,",nal:"Auftrag",vase:"Ihre Auftragsnummer",rel:"Relation",nak:"Beladung",raz:"Entladung",voz:"Fahrzeug",vzn:"Fahrer",
+    de:{ime:"DE",poz:"Guten Tag,",pri:"Den Originalauftrag finden Sie im Anhang.",kon:"Mit freundlichen Gruessen,",nal:"Auftrag",vase:"Ihre Auftragsnummer",rel:"Relation",nak:"Beladung",raz:"Entladung",voz:"Fahrzeug",vzn:"Fahrer",prik:"Auflieger",tel:"Telefon",naj:[" - Fahrzeugavis","fuer den obigen Auftrag melden wir folgendes Fahrzeug an:"],
       s:[["Potrditev"," - Bestaetigung","hiermit bestaetigen wir die Uebernahme des Auftrags und die Disposition des Fahrzeugs."],["Nalozeno"," - beladen","wir teilen Ihnen mit, dass das Fahrzeug beladen ist und sich auf dem Weg zur Entladestelle befindet."],["Razlozeno"," - entladen","wir teilen Ihnen mit, dass die Ware entladen wurde. Der CMR folgt."],["Zamuda"," - Verspaetung","wir muessen Ihnen leider eine Verspaetung bei der Durchfuehrung des Auftrags mitteilen. Die neue voraussichtliche Ankunftszeit melden wir Ihnen umgehend."],["Prazno","",""]]},
-    en:{ime:"EN",poz:"Dear Sir or Madam,",pri:"Please find the original order attached.",kon:"Kind regards,",nal:"Order",vase:"Your order no.",rel:"Route",nak:"Loading",raz:"Unloading",voz:"Vehicle",vzn:"Driver",
+    en:{ime:"EN",poz:"Dear Sir or Madam,",pri:"Please find the original order attached.",kon:"Kind regards,",nal:"Order",vase:"Your order no.",rel:"Route",nak:"Loading",raz:"Unloading",voz:"Vehicle",vzn:"Driver",prik:"Trailer",tel:"Phone",naj:[" - vehicle details","for the above order we announce the following vehicle:"],
       s:[["Potrditev"," - confirmation","we confirm acceptance of the order and that a vehicle has been assigned."],["Nalozeno"," - loaded","please be informed that the vehicle has been loaded and is on its way to the unloading point."],["Razlozeno"," - unloaded","please be informed that the goods have been unloaded. The CMR will follow."],["Zamuda"," - delay","we must inform you of a delay in carrying out the order. We will confirm the new estimated time of arrival as soon as possible."],["Prazno","",""]]},
-    it:{ime:"IT",poz:"Buongiorno,",pri:"In allegato trovate l ordine originale.",kon:"Cordiali saluti,",nal:"Ordine",vase:"Vostro n. ordine",rel:"Tratta",nak:"Carico",raz:"Scarico",voz:"Veicolo",vzn:"Autista",
+    it:{ime:"IT",poz:"Buongiorno,",pri:"In allegato trovate l ordine originale.",kon:"Cordiali saluti,",nal:"Ordine",vase:"Vostro n. ordine",rel:"Tratta",nak:"Carico",raz:"Scarico",voz:"Veicolo",vzn:"Autista",prik:"Rimorchio",tel:"Telefono",naj:[" - avviso veicolo","per l ordine indicato comunichiamo il seguente veicolo:"],
       s:[["Potrditev"," - conferma","confermiamo la presa in carico dell ordine e l assegnazione del veicolo."],["Nalozeno"," - caricato","vi informiamo che il veicolo e stato caricato ed e in viaggio verso il luogo di scarico."],["Razlozeno"," - scaricato","vi informiamo che la merce e stata scaricata. Il CMR seguira."],["Zamuda"," - ritardo","vi informiamo di un ritardo nell esecuzione dell ordine. Comunicheremo al piu presto il nuovo orario previsto di arrivo."],["Prazno","",""]]},
   };
   const L=T[jezik]||T.sl;
-  const info=(stNar?L.vase+": "+stNar+"\n":"")+L.nal+": "+(n.stevilkaNaloga||ref)+"\n"+L.rel+": "+rel+"\n"+L.nak+": "+(n.nakDatum||"-")+" "+(n.nakCas||"")+"\n"+L.raz+": "+(n.razDatum||"-")+" "+(n.razCas||"")+"\n"+L.voz+": "+((vz&&vz.vozilo)||"-")+"\n"+L.vzn+": "+((vz&&vz.ime)||"-");
+  const vzA=najVoz?((vozniki||[]).find(x=>x.id===najVoz)||vz):vz;
+  const vrstVoz=[L.voz+": "+((vzA&&vzA.vozilo)||"-"),(vzA&&vzA.prikolica)?(L.prik+": "+vzA.prikolica):"",L.vzn+": "+((vzA&&vzA.ime)||"-"),(vzA&&vzA.tel)?(L.tel+": "+vzA.tel):""].filter(Boolean).join("\n");
+  const info=(stNar?L.vase+": "+stNar+"\n":"")+L.nal+": "+(n.stevilkaNaloga||ref)+"\n"+L.rel+": "+rel+"\n"+L.nak+": "+(n.nakDatum||"-")+" "+(n.nakCas||"")+"\n"+L.raz+": "+(n.razDatum||"-")+" "+(n.razCas||"")+"\n"+vrstVoz;
   const zad=L.nal+" "+(stNar||ref)+" | "+rel;
   const sablone=L.s;
   const telo=(t)=>L.poz+"\n\n"+(t?t+"\n\n":"")+info+"\n\n"+L.pri+"\n\n"+L.kon+"\nMatjaz Jurjevec s.p.";
@@ -5269,6 +5272,15 @@ function KontaktSec({n,vozniki,showToast}){
     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
       {sablone.map(([l,z,t])=><button key={l} disabled={!em||!!posilja} onClick={()=>osnutek(zad+z,t)} style={{...bs,opacity:(!em||posilja)?0.5:1}}>{posilja===zad+z?"Pripravljam...":l}</button>)}
       <button onClick={()=>{navigator.clipboard.writeText(em).then(()=>showToast("Email kopiran"));}} disabled={!em} style={{...bs,opacity:em?1:0.5}}>Kopiraj naslov</button>
+    </div>
+    <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginTop:8,paddingTop:8,borderTop:"1px dashed #e2e8f0"}}>
+      <span style={{fontSize:12,fontWeight:700,color:"#475569"}}>Najava vozila:</span>
+      <select value={najVoz} onChange={ev=>setNajVoz(ev.target.value)} style={{fontSize:12,fontWeight:700,padding:"7px 8px",borderRadius:8,border:"1px solid #e2e8f0",background:"#fff",color:"#0f2744",cursor:"pointer",maxWidth:220}}>
+        <option value="">{vz?("dodeljeno: "+(vz.vozilo||vz.ime||"")):"- izberi vozilo -"}</option>
+        {(vozniki||[]).slice().sort((a,b)=>String(a.vozilo||"").localeCompare(String(b.vozilo||""))).map(x=><option key={x.id} value={x.id}>{(x.vozilo||"?")+" - "+(x.ime||"")}</option>)}
+      </select>
+      <button disabled={!em||!!posilja||!vzA} onClick={()=>osnutek(zad+L.naj[0],L.naj[1])} style={{...bs,background:"#0f2744",color:"#fff",borderColor:"#0f2744",opacity:(!em||posilja||!vzA)?0.5:1}}>{posilja===(zad+L.naj[0])?"Pripravljam...":"🚛 Najava"}</button>
+      {vzA&&<span style={{fontSize:11,color:"#94a3b8"}}>{[vzA.vozilo,vzA.prikolica,vzA.tel].filter(Boolean).join(" · ")}</span>}
     </div>
   </Sec>);
 }
