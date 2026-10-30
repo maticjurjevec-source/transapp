@@ -131,7 +131,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="30.10.2026 a";
+const VERZIJA="30.10.2026 b";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
@@ -5185,7 +5185,7 @@ function KontaktSec({n,vozniki,showToast}){
   const mailto=(z,t)=>"mailto:"+em+"?subject="+encodeURIComponent(z)+"&body="+encodeURIComponent(telo(t).replace(L.pri,pdf?pdf:""));
   const osnutek=async(z,t,naslov)=>{
     const na=(naslov||em||"").trim();
-    if(!na) return showToast("Najprej vpisi e-naslov",true);
+    if(!na){ showToast("Brez prejemnika - izberi ga v poštnem programu"); window.location.href=mailto(z,t); return; }
     setPosilja(z);
     try{
       const r=await ustvariOsnutekZaNarocnika({prejemnik:na,zadeva:z,telo:telo(t),pdfUrl:pdf,pdfIme:"Nalog-"+(ref||n.stevilkaNaloga||"")+".pdf"});
@@ -5270,7 +5270,7 @@ function KontaktSec({n,vozniki,showToast}){
     <input value={rocni} onChange={ev=>setRocni(ev.target.value)} placeholder={vsiE.length?"ali vpisi drug e-naslov...":"vpisi e-naslov narocnika..."} style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",border:"1px solid #e2e8f0",borderRadius:8,fontSize:13,marginBottom:8,outline:"none"}}/>
     <div style={{fontSize:11,color:pdf?"#15803d":"#b45309",marginBottom:8}}>{pdf?"Originalni nalog bo prilozen mailu":"Original ni nalozen - mail bo brez priloge"}</div>
     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-      {sablone.map(([l,z,t])=><button key={l} disabled={!em||!!posilja} onClick={()=>osnutek(zad+z,t)} style={{...bs,opacity:(!em||posilja)?0.5:1}}>{posilja===zad+z?"Pripravljam...":l}</button>)}
+      {sablone.map(([l,z,t])=><button key={l} disabled={!!posilja} onClick={()=>osnutek(zad+z,t)} style={{...bs,opacity:posilja?0.5:1}}>{posilja===zad+z?"Pripravljam...":l}</button>)}
       <button onClick={()=>{navigator.clipboard.writeText(em).then(()=>showToast("Email kopiran"));}} disabled={!em} style={{...bs,opacity:em?1:0.5}}>Kopiraj naslov</button>
     </div>
     <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginTop:8,paddingTop:8,borderTop:"1px dashed #e2e8f0"}}>
@@ -5279,7 +5279,7 @@ function KontaktSec({n,vozniki,showToast}){
         <option value="">{vz?("dodeljeno: "+(vz.vozilo||vz.ime||"")):"- izberi vozilo -"}</option>
         {(vozniki||[]).slice().sort((a,b)=>String(a.vozilo||"").localeCompare(String(b.vozilo||""))).map(x=><option key={x.id} value={x.id}>{(x.vozilo||"?")+" - "+(x.ime||"")}</option>)}
       </select>
-      <button disabled={!em||!!posilja||!vzA} onClick={()=>osnutek(zad+L.naj[0],L.naj[1])} style={{...bs,background:"#0f2744",color:"#fff",borderColor:"#0f2744",opacity:(!em||posilja||!vzA)?0.5:1}}>{posilja===(zad+L.naj[0])?"Pripravljam...":"🚛 Najava"}</button>
+      <button disabled={!!posilja||!vzA} onClick={()=>osnutek(zad+L.naj[0],L.naj[1])} style={{...bs,background:"#0f2744",color:"#fff",borderColor:"#0f2744",opacity:(posilja||!vzA)?0.5:1}}>{posilja===(zad+L.naj[0])?"Pripravljam...":"🚛 Najava"}</button>
       {vzA&&<span style={{fontSize:11,color:"#94a3b8"}}>{[vzA.vozilo,vzA.prikolica,vzA.tel].filter(Boolean).join(" · ")}</span>}
     </div>
   </Sec>);
