@@ -131,7 +131,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="29.10.2026 a";
+const VERZIJA="02.11.2026 a";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
@@ -163,11 +163,23 @@ function stisniSliko(file,maxPx,kak){
     }catch(e){res(null);}
   });
 }
+function varnoIme(ime){
+  let s=String(ime||"original");
+  try{ s=s.normalize("NFKD").replace(/[\u0300-\u036f]/g,""); }catch(e){}
+  s=s.replace(/\u0111/g,"d").replace(/\u0110/g,"D").replace(/\u00df/g,"ss").replace(/\u0142/g,"l").replace(/\u0141/g,"L").replace(/\u00e6/g,"ae").replace(/\u00f8/g,"o").replace(/\u00c6/g,"AE").replace(/\u00d8/g,"O");
+  s=s.replace(/[^A-Za-z0-9._-]+/g,"-").replace(/-{2,}/g,"-").replace(/^-+/,"");
+  if(/^\./.test(s))s="nalog"+s;
+  const t=s.match(/\.[A-Za-z0-9]{1,8}$/);
+  const kon=t?t[0]:"";
+  const pod=t?s.slice(0,s.length-kon.length):s;
+  return (pod.slice(0,80)||"original")+kon;
+}
 async function pripraviOriginal(file){
-  if(!file||!/^image\//.test(file.type||""))return {blob:file,ime:file.name||"original"};
+  const izv=varnoIme((file&&file.name)||"original");
+  if(!file||!/^image\//.test(file.type||""))return {blob:file,ime:izv};
   const b=await stisniSliko(file,ORIG_MAX_PX,ORIG_KAKOVOST);
-  if(!b||b.size>=file.size)return {blob:file,ime:file.name||"original"};
-  return {blob:b,ime:String(file.name||"original").replace(/\.[^.]+$/,"")+".jpg"};
+  if(!b||b.size>=file.size)return {blob:file,ime:izv};
+  return {blob:b,ime:izv.replace(/\.[^.]+$/,"")+".jpg"};
 }
 let ZADNJA_UPLOAD_NAPAKA="";
 async function naslednjaStevilka(){
