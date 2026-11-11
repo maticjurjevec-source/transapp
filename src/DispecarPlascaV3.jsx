@@ -131,7 +131,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="11.11.2026 b";
+const VERZIJA="11.11.2026 d";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
@@ -3105,6 +3105,9 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
   const [priponkaFile, setPriponkaFile] = useState(null);
   const [dokVir, setDokVir] = useState(null);
   const [mailSlika, setMailSlika] = useState(null);
+  const [mailPripravljen, setMailPripravljen] = useState(false);
+  const [dopLoading, setDopLoading] = useState(false);
+  const [dopZadnje, setDopZadnje] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [form, setForm] = useState({});
   const [duplikatOpozorilo, setDuplikatOpozorilo] = useState(null);
@@ -3197,7 +3200,7 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
   // Globalni paste listener za slike iz clipboarda (Ctrl+V z PrintScreena)
   useEffect(() => {
     const handlePaste = async (e) => {
-      if (korak !== "vnos") return; // samo na vnosni strani
+      if (korak !== "vnos" && korak !== "forma") return;
       const items = e.clipboardData?.items;
       if (!items) return;
       for (const item of items) {
@@ -3208,9 +3211,15 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
             // Pretvori v File z imenom
             const ext = item.type.split("/")[1] || "png";
             const file = new File([blob], `screenshot-${Date.now()}.${ext}`, { type: item.type });
-            if (dokVirRef.current) {
+            if (korak === "forma") {
+              const b64f = await fileToBase64(file);
+              await dopolniIzMaila({ b64: b64f, mt: item.type || "image/png" });
+              return;
+            }
+            if (mailPripRef.current || dokVirRef.current) {
               const b64 = await fileToBase64(file);
               setMailSlika({ b64, mt: item.type || "image/png", ime: file.name });
+              setMailPripravljen(false);
               showToast("\u2705 Posnetek emaila dodan. Klikni Razčleni z AI.");
             } else {
               await obdelajDatoteko(file);
@@ -3228,6 +3237,8 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
   // Zadnje stanje dokumenta za paste listener (ki se ne naroca na dokVir)
   const dokVirRef = useRef(null);
   useEffect(() => { dokVirRef.current = dokVir; }, [dokVir]);
+  const mailPripRef = useRef(false);
+  useEffect(() => { mailPripRef.current = mailPripravljen; }, [mailPripravljen]);
  
   const outlookPrijava = async () => {
     try {
@@ -3503,6 +3514,48 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
     setAiLoading(false);
   };
  
+  // Dopolni ze razclenjen obrazec s podatki iz emaila (slika ali besedilo)
+  const dopolniIzMaila = async ({ b64, mt, tekst }) => {
+    setDopLoading(true);
+    setDopZadnje("");
+    showToast("\u23F3 AI bere email...");
+    try {
+      const telo = dokVir ? { ...dokVir } : { tip: "tekst", tekst: "" };
+      if (b64) { telo.mailSlikaBase64 = b64; telo.mailMediaType = mt || "image/png"; }
+      if (tekst && tekst.trim()) telo.mailTekst = tekst.trim();
+      const { data, error } = await supabase.functions.invoke("ai-razcleni", { body: telo });
+      if (error) throw error;
+      const txt = data.content?.map(i => i.text || "").join("").replace(/```json|```/g, "").trim();
+      const parsed = uskladiPostanke(JSON.parse(txt));
+      const prazno = (v) => v === undefined || v === null || String(v).trim() === "";
+      const dodani = [];
+      setForm((f) => {
+        const nf = { ...f };
+        Object.keys(parsed).forEach((k) => {
+          if (k === "postanki") return;
+          const nov = parsed[k];
+          if (!prazno(nov) && prazno(nf[k])) { nf[k] = nov; dodani.push(k); }
+        });
+        if (Array.isArray(parsed.postanki) && parsed.postanki.length > 1 &&
+            (!Array.isArray(nf.postanki) || nf.postanki.length < 2)) {
+          nf.postanki = parsed.postanki;
+          dodani.push("postanki");
+        }
+        return nf;
+      });
+      setTimeout(() => {
+        const imena = { kontaktEmail: "email za račun", kontaktIme: "kontaktna oseba", znesek: "cena", navodila: "navodila", postanki: "postanki", blago: "blago", kolicina: "količina", teza: "teža", stranka: "stranka" };
+        const opis = dodani.map((k) => imena[k] || k);
+        setDopZadnje(opis.length ? ("Dopolnjeno: " + opis.join(", ")) : "Nič novega — vsa polja so že izpolnjena.");
+        showToast(opis.length ? ("\u2705 Dopolnjeno " + opis.length + " polj iz emaila.") : "\u2139\uFE0F V emailu ni bilo ničesar novega.");
+      }, 0);
+    } catch (err) {
+      console.error(err);
+      showToast("\u274C AI ni mogel prebrati emaila.", true);
+    }
+    setDopLoading(false);
+  };
+
   // Drag & drop ali izbira datoteke - kliče glavno funkcijo
   const naložiPriponko = async (e) => {
     const file = e.target?.files?.[0];
@@ -3776,7 +3829,14 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
                 <div style={{flex:1,minWidth:0,fontSize:12,color:"#15803d",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{"\uD83D\uDCF7 Posnetek emaila: "+(mailSlika.ime||"slika")}</div>
                 <button onClick={()=>setMailSlika(null)} style={{background:"#fff",color:"#b91c1c",border:"1px solid #fecaca",borderRadius:8,padding:"5px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>Odstrani</button>
               </div>
-            : <label htmlFor="mailslika" style={{display:"inline-block",background:"#fff",color:"#2563eb",border:"1.5px dashed #bfdbfe",borderRadius:10,padding:"8px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>\uD83D\uDCF7 Dodaj posnetek emaila (ali Ctrl+V)</label>}
+            : <div onClick={()=>setMailPripravljen(true)} style={{background:mailPripravljen?"#eff6ff":"#fff",color:"#2563eb",border:"1.5px dashed "+(mailPripravljen?"#60a5fa":"#bfdbfe"),borderRadius:10,padding:"12px 14px",fontSize:12,fontWeight:700,cursor:"pointer",textAlign:"center"}}>
+                {mailPripravljen
+                  ? <span>⌨️ Pripravljeno — zdaj pritisni <b>Ctrl+V</b></span>
+                  : <span>📷 Klikni sem za posnetek emaila</span>}
+                <div style={{marginTop:6}}>
+                  <label htmlFor="mailslika" onClick={(e)=>e.stopPropagation()} style={{fontSize:11,color:"#64748b",fontWeight:600,textDecoration:"underline",cursor:"pointer"}}>ali izberi datoteko</label>
+                </div>
+              </div>}
         </div>
       </div>
       <button style={{width:"100%",background:"linear-gradient(135deg,#0f2744,#1d4ed8)",color:"#fff",border:"none",borderRadius:12,padding:14,fontSize:15,fontWeight:700,cursor:"pointer",opacity:aiLoading?0.6:1}} onClick={razcleni} disabled={aiLoading}>
@@ -3860,6 +3920,15 @@ function EmailNalogTab({ upd, showToast, naložiPodatke, vozniki }) {
           </table>
         </div>
         <div style={{fontSize:11,color:"#0369a1",marginTop:8}}>💡 Klikni gumb → v Google tabeli pritisni <b>Ctrl+V</b>, podatki se razporedijo v 6 stolpcev.</div>
+      </div>
+      <div style={{background:"#fff",borderRadius:12,padding:14,marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:"1.5px dashed #bfdbfe"}}>
+        <div style={{fontWeight:700,fontSize:14,color:"#0f2744",marginBottom:4}}>📷 Dopolni iz emaila</div>
+        <div style={{fontSize:12,color:"#64748b",marginBottom:10}}>Pritisni <b>Ctrl+V</b> s posnetkom emaila ali izberi datoteko. AI izpolni samo polja, ki so zdaj prazna — ročnih popravkov ne povozi.</div>
+        <input type="file" id="dopslika" accept="image/*" style={{display:"none"}} onChange={async(e)=>{const f=e.target.files&&e.target.files[0];if(f){const b=await fileToBase64(f);await dopolniIzMaila({b64:b,mt:f.type||"image/png"});}if(e.target)e.target.value="";}}/>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <label htmlFor="dopslika" style={{background:"#fff",color:"#2563eb",border:"1.5px solid #bfdbfe",borderRadius:9,padding:"8px 14px",fontSize:12,fontWeight:700,cursor:dopLoading?"wait":"pointer",opacity:dopLoading?0.6:1}}>{dopLoading?"\u23F3 AI bere...":"\uD83D\uDCC2 Izberi posnetek emaila"}</label>
+          {dopZadnje&&<span style={{fontSize:12,color:"#15803d",fontWeight:700}}>{dopZadnje}</span>}
+        </div>
       </div>
       <button style={{width:"100%",background:"linear-gradient(135deg,#065f46,#16a34a)",color:"#fff",border:"none",borderRadius:12,padding:14,fontSize:15,fontWeight:700,cursor:"pointer"}} onClick={ustvariNalog}>
         📋 Ustvari nalog v sistemu →
