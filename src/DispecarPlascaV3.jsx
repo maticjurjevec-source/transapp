@@ -58,6 +58,91 @@ const isoDan=(d)=>{const x=new Date(d);return`${x.getFullYear()}-${String(x.getM
 const obdobjeRange=(r)=>{const t=new Date();t.setHours(0,0,0,0);if(r==="danes")return[isoDan(t),isoDan(t)];if(r==="teden"){const p=new Date(t);const day=(p.getDay()+6)%7;p.setDate(p.getDate()-day);const n=new Date(p);n.setDate(p.getDate()+6);return[isoDan(p),isoDan(n)];}if(r==="mesec"){const p=new Date(t.getFullYear(),t.getMonth(),1);const n=new Date(t.getFullYear(),t.getMonth()+1,0);return[isoDan(p),isoDan(n)];}return["",""];};
 
 // Natisni original nalog + CMR z interno NAL številko na vrhu vsake strani
+// ===== OZEK PAS Z NAVODILI ZA FAKTURIRANJE (na vrhu originala) =====
+function pasFakturaHtml(n){
+  const p=(a,b)=>String((n&&n[a])||(n&&n[b])||"").trim();
+  const esc=(t)=>String(t==null?"":t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const najdi=(t)=>String(t||"").match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)||[];
+  const maili=[...new Set([
+    ...(p("kontaktEmail","kontakt_email")?[p("kontaktEmail","kontakt_email")]:[]),
+    ...najdi(n&&n.emaili), ...najdi(n&&n.navodila), ...najdi(n&&n.opombe),
+  ])].slice(0,3);
+  const znesek=p("znesek","znesek_original");
+  const reverse=(n&&n.je_slovenska_ddv)===false;
+  const stNar=p("stevilkaNarocnika","stevilka_narocnika");
+  const ref=p("nakReferenca","nak_referenca");
+  let nav=p("navodila","navodila").replace(/\s+/g," ").trim();
+  if(nav.length>210)nav=nav.slice(0,210)+"…";
+  return `<div class="pas">
+    <div class="pas-g">
+      <div class="pas-c pas-z">
+        <div class="pas-l">ZNESEK</div>
+        <div class="pas-v">${znesek?esc(znesek)+" EUR":"—"}</div>
+        <div class="pas-s">${reverse?"tuj naročnik — obrnjena dav. obv.":"slovenski naročnik — DDV"}</div>
+      </div>
+      <div class="pas-c pas-m">
+        <div class="pas-l">RAČUN POŠLJI NA</div>
+        ${maili.length?`<div class="pas-e">${maili.map(m=>esc(m)).join("<br/>")}</div>`
+          :`<div class="pas-x">ni zapisan — poglej v nalogu</div>`}
+      </div>
+      <div class="pas-c pas-r">
+        <div class="pas-l">SKLIC</div>
+        <div class="pas-k">${stNar?("Št. naročnika: "+esc(stNar)):""}${stNar&&ref?"<br/>":""}${ref?("Ref. naklada: "+esc(ref)):""}${(!stNar&&!ref)?"—":""}</div>
+      </div>
+    </div>
+    ${nav?`<div class="pas-n"><b>Navodila naročnika:</b> ${esc(nav)}</div>`:""}
+  </div>`;
+}
+
+// ===== NASLOVNICA ZA RACUNOVODSTVO (celostranska, trenutno ni v uporabi) =====
+function naslovnicaHtml(n){
+  const p=(a,b)=>String((n&&n[a])||(n&&n[b])||"").trim();
+  const esc=(t)=>String(t==null?"":t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const najdi=(t)=>String(t||"").match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)||[];
+  const maili=[...new Set([
+    ...(p("kontaktEmail","kontakt_email")?[p("kontaktEmail","kontakt_email")]:[]),
+    ...najdi(n&&n.emaili), ...najdi(n&&n.navodila), ...najdi(n&&n.opombe),
+  ])];
+  const dat=(x)=>{const v=String(x||"").trim(); if(!v)return "—";
+    const m=v.match(/^(\d{4})-(\d{2})-(\d{2})/); return m?(m[3]+"."+m[2]+"."+m[1]):v;};
+  const stNal=p("stevilkaNaloga","stevilka_naloga")||"—";
+  const stNar=p("stevilkaNarocnika","stevilka_narocnika");
+  const znesek=p("znesek","znesek_original");
+  const reverse=(n&&n.je_slovenska_ddv)===false;
+  const nakKraj=[p("nakFirma","nak_firma"),p("nakKraj","nak_kraj")].filter(Boolean).join(", ")||"—";
+  const razKraj=[p("razFirma","raz_firma"),p("razKraj","raz_kraj")].filter(Boolean).join(", ")||"—";
+  const navodila=p("navodila","navodila");
+  const vrstica=(k,v)=>`<tr><td class="k">${esc(k)}</td><td class="v">${esc(v||"—")}</td></tr>`;
+  return `<div class="page nasl">
+    <div class="nhdr"><div class="nt">NAVODILA ZA FAKTURIRANJE</div><div class="nn">${esc(stNal)}</div></div>
+    <table class="nt2">
+      ${vrstica("Naročnik (stranka)",p("stranka","stranka"))}
+      ${stNar?vrstica("Številka naročnika",stNar):""}
+      ${vrstica("Referenca naklada",p("nakReferenca","nak_referenca"))}
+      ${vrstica("Referenca razklada",p("razReferenca","raz_referenca"))}
+    </table>
+    <div class="zn">
+      <div class="zn-l">ZNESEK ZA FAKTURIRANJE</div>
+      <div class="zn-v">${znesek?esc(znesek)+" EUR":"— ni zneska v nalogu —"}</div>
+      <div class="zn-d">${reverse?"Tuj naročnik — preveri obrnjeno davčno obveznost":"Slovenski naročnik — običajen DDV"}</div>
+    </div>
+    <div class="mb">
+      <div class="mb-l">E-NASLOV ZA POŠILJANJE RAČUNA</div>
+      ${maili.length?`<div class="mb-v">${maili.map(m=>esc(m)).join("<br/>")}</div>`
+        :`<div class="mb-x">Ni zapisan — poglej v originalni nalog na naslednji strani.</div>`}
+    </div>
+    <table class="nt2">
+      ${vrstica("Naklad",nakKraj)}
+      ${vrstica("Datum naklada",dat(p("nakDatum","nak_datum")))}
+      ${vrstica("Razklad",razKraj)}
+      ${vrstica("Datum razklada",dat(p("razDatum","raz_datum")))}
+      ${vrstica("Blago",p("blago","blago"))}
+      ${vrstica("Količina / teža",[p("kolicina","kolicina"),p("teza","teza")].filter(Boolean).join(" / "))}
+    </table>
+    ${navodila?`<div class="nav"><div class="nav-l">NAVODILA NAROČNIKA</div><div class="nav-v">${esc(navodila)}</div></div>`:""}
+    <div class="opo">Računu priloži CMR in originalni nalog (naslednje strani).</div>
+  </div>`;
+}
 const natisniVse=(n,cmrSlike=[])=>{
   const nalUrl=n.original_pdf_url||n.originalPdfUrl;
   const nalStevilka=n.stevilkaNaloga||n.stevilka_naloga||"";
@@ -68,9 +153,10 @@ const natisniVse=(n,cmrSlike=[])=>{
   const header=(naslov)=>`<div class="hdr"><div><div class="hdr-l">${naslov}</div><div class="hdr-num">${nalStevilka}</div></div><div class="hdr-r"><div><b>MATJAŽ JURJEVEC s.p.</b></div><div>${datum}</div></div></div>`;
   let body="";
   if(nalUrl){
+    const pas=pasFakturaHtml(n);
     body+=jePdf
-      ?`<div class="page">${header("Original nalog naročnika")}<embed src="${nalUrl}" type="application/pdf" class="pdf"/></div>`
-      :`<div class="page">${header("Original nalog naročnika")}<img src="${nalUrl}" class="doc"/></div>`;
+      ?`<div class="page">${pas}<embed src="${nalUrl}" type="application/pdf" class="pdf s"/></div>`
+      :`<div class="page">${pas}<img src="${nalUrl}" class="doc s"/></div>`;
   }
   (cmrSlike||[]).forEach((sl,i)=>{
     const url=sl.url||sl.img;
@@ -78,7 +164,7 @@ const natisniVse=(n,cmrSlike=[])=>{
     body+=`<div class="page">${header(`CMR dokument ${i+1}/${cmrSlike.length}`)}<img src="${url}" class="doc"/></div>`;
   });
   if(!body){w.document.write("<p style='font-family:sans-serif;padding:20px'>Ni dokumentov za tiskanje.</p>");w.document.close();return;}
-  w.document.write(`<!DOCTYPE html><html><head><title>${nalStevilka} - nalog + CMR</title><style>@page{size:A4;margin:8mm;}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;}.page{page-break-after:always;}.page:last-child{page-break-after:auto;}.hdr{background:#0f2744;color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}.hdr-l{font-size:10px;opacity:0.7;text-transform:uppercase;letter-spacing:1px;}.hdr-num{font-size:22px;font-weight:800;font-family:monospace;letter-spacing:1px;}.hdr-r{text-align:right;font-size:11px;opacity:0.85;}.doc{display:block;width:100%;max-height:255mm;object-fit:contain;}.pdf{display:block;width:100%;height:255mm;border:none;}</style></head><body>${body}</body></html>`);
+  w.document.write(`<!DOCTYPE html><html><head><title>${nalStevilka} - nalog + CMR</title><style>@page{size:A4;margin:8mm;}.nasl{padding:0 4mm;font-size:12pt;color:#0f2744;}.nhdr{border-bottom:3px solid #0f2744;padding-bottom:8px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:baseline;}.nt{font-size:20pt;font-weight:800;letter-spacing:.5px;}.nn{font-size:14pt;font-weight:700;color:#334155;}.nt2{width:100%;border-collapse:collapse;margin-bottom:14px;}.nt2 td{border-bottom:1px solid #e2e8f0;padding:6px 4px;vertical-align:top;}.nt2 .k{width:38%;color:#64748b;font-size:10.5pt;}.nt2 .v{font-weight:700;}.zn{border:2px solid #0f2744;border-radius:6px;padding:10px 14px;margin-bottom:14px;}.zn-l{font-size:9.5pt;color:#64748b;letter-spacing:.5px;}.zn-v{font-size:24pt;font-weight:800;line-height:1.1;}.zn-d{font-size:10pt;color:#334155;margin-top:4px;}.mb{background:#f1f5f9;border-left:5px solid #0f2744;padding:10px 14px;margin-bottom:14px;}.mb-l{font-size:9.5pt;color:#64748b;letter-spacing:.5px;margin-bottom:4px;}.mb-v{font-size:14pt;font-weight:800;word-break:break-all;}.mb-x{font-size:11pt;color:#b91c1c;font-weight:700;}.nav{border:1px solid #cbd5e1;border-radius:6px;padding:10px 14px;margin-bottom:14px;}.nav-l{font-size:9.5pt;color:#64748b;letter-spacing:.5px;margin-bottom:4px;}.nav-v{font-size:11pt;white-space:pre-wrap;}.opo{font-size:10.5pt;color:#334155;border-top:1px dashed #cbd5e1;padding-top:8px;}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;}.page{page-break-after:always;}.page:last-child{page-break-after:auto;}.hdr{background:#0f2744;color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}.hdr-l{font-size:10px;opacity:0.7;text-transform:uppercase;letter-spacing:1px;}.hdr-num{font-size:22px;font-weight:800;font-family:monospace;letter-spacing:1px;}.hdr-r{text-align:right;font-size:11px;opacity:0.85;}.doc{display:block;width:100%;max-height:255mm;object-fit:contain;}.pdf{display:block;width:100%;height:255mm;border:none;}.pdf.s{height:240mm;}.doc.s{max-height:240mm;}.pas{border:2px solid #0f2744;border-radius:5px;margin-bottom:8px;overflow:hidden;}.pas-g{display:flex;}.pas-c{padding:6px 10px;flex:1;border-right:1px solid #cbd5e1;}.pas-c:last-child{border-right:none;}.pas-z{flex:0 0 32%;background:#f1f5f9;}.pas-m{flex:0 0 38%;}.pas-l{font-size:7.5pt;color:#64748b;letter-spacing:.6px;font-weight:700;}.pas-v{font-size:17pt;font-weight:800;color:#0f2744;line-height:1.15;}.pas-s{font-size:8pt;color:#334155;}.pas-e{font-size:10.5pt;font-weight:800;color:#0f2744;word-break:break-all;line-height:1.3;}.pas-x{font-size:9.5pt;font-weight:700;color:#b91c1c;}.pas-k{font-size:9.5pt;font-weight:700;color:#0f2744;line-height:1.35;}.pas-n{border-top:1px solid #cbd5e1;padding:5px 10px;font-size:8.5pt;color:#0f2744;background:#fafbfc;}</style></head><body>${body}</body></html>`);
   w.document.close();
   const doPrint=()=>{try{w.focus();w.print();}catch(e){}};
   const imgs=w.document.images;
@@ -131,7 +217,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="11.11.2026 d";
+const VERZIJA="12.11.2026 d";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
