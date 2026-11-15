@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { supabase } from './supabase'; import PotiTab from './PotiTab';
 import { loginToOutlook, logoutFromOutlook, getActiveAccount, getRecentEmails, getEmailWithAttachments, markEmailAsRead, ustvariOsnutekZaNarocnika, ustvariOsnutekSPrilogami, posljiOpomin } from './outlookService';
 
@@ -217,7 +217,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="12.11.2026 d";
+const VERZIJA="15.11.2026 b";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
@@ -1224,7 +1224,7 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
         )}
         {/* Tabs */}
         <div style={s.tabs}>
-          {[["nalogi","📋 Nalogi"],["tedenski","📅 Tedenski"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`],["gps",`📍 GPS${gpsOpoz.length>0?` ⚠️${gpsOpoz.length}`:""}`],["razkladi","🗺️ Razkladi"],["kalkulator","💰 Kalkulator"],["opomini","🔔 Opomini"]].map(([id,label])=>(
+          {[["nalogi","📋 Nalogi"],["tedenski","📅 Tedenski"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`],["gps",`📍 GPS${gpsOpoz.length>0?` ⚠️${gpsOpoz.length}`:""}`],["razkladi","🗺️ Razkladi"],["kalkulator","💰 Kalkulator"],["opomini","🔔 Opomini"],["povprasevanja","📣 Povpraševanja"],["potencialne","🎯 Potencialne"]].map(([id,label])=>(
             <button key={id} style={{...s.tab,...(tab===id?s.tabOn:{})}} onClick={()=>setTab(id)}>{label}</button>
           ))}
         </div>
@@ -1238,7 +1238,7 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
         {tab==="prosticmr"&&<ProstiCMRTab st={st} upd={upd} showToast={showToast}/>}
         {tab==="email"&&<EmailNalogTab upd={upd} showToast={showToast} naložiPodatke={naložiPodatke} vozniki={vozniki}/>}
         {tab==="komunikacija"&&<KomunikacijaTab showToast={showToast}/>}
-        {tab==="kalkulator"&&<KalkulatorTab vozniki={vozniki} gpsVozila={gpsVozila}/>}{tab==="opomini"&&<OpominiTab nalogi={st.nalogi} showToast={showToast}/>}{tab==="dopusti"&&<DopustiTab vozniki={vozniki} showToast={showToast}/>}{tab==="razkladi"&&<RazkladiTab nalogi={st.nalogi} vozniki={vozniki} gpsVozila={gpsVozila} showToast={showToast} onSelect={odpriNalog}/>}{tab==="gps"&&<GpsTab nalogi={st.nalogi} vozniki={vozniki}/>}
+        {tab==="kalkulator"&&<KalkulatorTab vozniki={vozniki} gpsVozila={gpsVozila}/>}{tab==="opomini"&&<OpominiTab nalogi={st.nalogi} showToast={showToast}/>}{tab==="povprasevanja"&&<PovprasevanjaTab nalogi={st.nalogi} showToast={showToast}/>}{tab==="potencialne"&&<PotencialneTab showToast={showToast}/>}{tab==="dopusti"&&<DopustiTab vozniki={vozniki} showToast={showToast}/>}{tab==="razkladi"&&<RazkladiTab nalogi={st.nalogi} vozniki={vozniki} gpsVozila={gpsVozila} showToast={showToast} onSelect={odpriNalog}/>}{tab==="gps"&&<GpsTab nalogi={st.nalogi} vozniki={vozniki}/>}
       </div>
       {/* Nov nalog modal */}
       {modal==="nalog"&&(
@@ -1404,6 +1404,418 @@ async function preberiDolznike(ab){
     if(kk&&!/^\d{4}-\d/.test(l)){tek={sifra:kk[1],naziv:kk[2],ddv:"",racuni:[]};kupci.push(tek);}
   }
   return kupci.filter(k=>k.racuni.length);
+}
+
+// ===== POVPRASEVANJA ZA TOVOR =====
+const POVP_T={
+  sl:{zadeva:"Prosta kapaciteta",pozdrav:"Pozdravljeni,",
+      uvod:(n,d,r)=>"za vas smo opravili že "+n+" "+(n===1?"prevoz":(n===2?"prevoza":(n<5?"prevoze":"prevozov")))+", nazadnje "+d+" ("+r+").",
+      kap:"Imamo prosto kapaciteto:",
+      vpr:"Imate kaj tovora na tej ali podobni relaciji?",
+      konec:"Lep pozdrav,"},
+  de:{zadeva:"Freie Kapazität",pozdrav:"Guten Tag,",
+      uvod:(n,d,r)=>"wir haben für Sie bereits "+n+" Transport"+(n===1?"":"e")+" durchgeführt, zuletzt am "+d+" ("+r+").",
+      kap:"Wir haben freie Kapazität:",
+      vpr:"Haben Sie aktuell Ladungen auf dieser oder einer ähnlichen Relation?",
+      konec:"Mit freundlichen Grüßen,"},
+  en:{zadeva:"Available capacity",pozdrav:"Hello,",
+      uvod:(n,d,r)=>"we have already carried out "+n+" transport"+(n===1?"":"s")+" for you, most recently on "+d+" ("+r+").",
+      kap:"We have free capacity:",
+      vpr:"Do you have any loads on this or a similar route?",
+      konec:"Kind regards,"},
+  it:{zadeva:"Capacità disponibile",pozdrav:"Buongiorno,",
+      uvod:(n,d,r)=>"abbiamo già effettuato "+n+" trasport"+(n===1?"o":"i")+" per voi, l'ultimo il "+d+" ("+r+").",
+      kap:"Abbiamo capacità libera:",
+      vpr:"Avete carichi su questa o su tratte simili?",
+      konec:"Cordiali saluti,"},
+};
+const POVP_PRIVZETA_KAP="13,6 m plato / 24 t / 33 EUR palet";
+function povpJezik(email,relacija){
+  const e=String(email||"").toLowerCase(), r=String(relacija||"").toUpperCase();
+  if(/\.(de|at|ch)(\b|$)/.test(e)||/\bDE |\bAT |\bCH /.test(r))return "de";
+  if(/\.it(\b|$)/.test(e)||/\bIT /.test(r))return "it";
+  if(/\.si(\b|$)/.test(e))return "sl";
+  if(/\.(com|net|eu|nl|be|fr|pl|cz|sk|hu|hr|rs|ro|dk|se|es|uk)(\b|$)/.test(e))return "en";
+  return "sl";
+}
+function povpDatum(x){
+  const v=String(x||"").trim(); if(!v)return "";
+  const m=v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m?(m[3]+"."+m[2]+"."+m[1]):v;
+}
+function PovprasevanjaTab({nalogi,showToast}){
+  const [kap,setKap]=useState(()=>{try{return localStorage.getItem("povp_kap")||POVP_PRIVZETA_KAP;}catch(e){return POVP_PRIVZETA_KAP;}});
+  const [poslano,setPoslano]=useState(()=>{try{return JSON.parse(localStorage.getItem("povp_poslano")||"{}");}catch(e){return {};}});
+  const [jeziki,setJeziki]=useState(()=>{try{return JSON.parse(localStorage.getItem("povp_jeziki")||"{}");}catch(e){return {};}});
+  const [odprt,setOdprt]=useState("");
+  const [isci,setIsci]=useState("");
+  const [sort,setSort]=useState("zanemarjeni");
+  const [skrijNedavne,setSkrijNedavne]=useState(true);
+  useEffect(()=>{try{localStorage.setItem("povp_kap",kap);}catch(e){}},[kap]);
+  useEffect(()=>{try{localStorage.setItem("povp_poslano",JSON.stringify(poslano));}catch(e){}},[poslano]);
+  useEffect(()=>{try{localStorage.setItem("povp_jeziki",JSON.stringify(jeziki));}catch(e){}},[jeziki]);
+
+  const danes=new Date();
+  const stranke=useMemo(()=>{
+    const m=new Map();
+    (nalogi||[]).forEach(n=>{
+      const s=String(n.stranka||"").trim();
+      if(!s)return;
+      if(!m.has(s))m.set(s,{stranka:s,st:0,zadnji:"",maili:new Set(),rel:new Map(),zneski:[]});
+      const o=m.get(s);
+      o.st++;
+      const d=String(n.nakDatum||n.nak_datum||"").slice(0,10);
+      if(d&&d>o.zadnji)o.zadnji=d;
+      const najdi=(t)=>String(t||"").match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)||[];
+      [n.kontaktEmail,n.kontakt_email].forEach(x=>{if(x&&String(x).includes("@"))o.maili.add(String(x).trim());});
+      najdi(n.emaili).forEach(x=>o.maili.add(x));
+      const a=String(n.nakKraj||n.nak_kraj||"").trim(), b=String(n.razKraj||n.raz_kraj||"").trim();
+      if(a&&b){const k=a+" → "+b; o.rel.set(k,(o.rel.get(k)||0)+1);}
+      const z=String(n.znesek||n.znesek_original||"").replace(",",".");
+      if(/^[0-9]+(\.[0-9]+)?$/.test(z))o.zneski.push(parseFloat(z));
+    });
+    return [...m.values()].map(o=>{
+      const dni=o.zadnji?Math.floor((danes-new Date(o.zadnji+"T00:00:00"))/86400000):null;
+      const rel=[...o.rel.entries()].sort((a,b)=>b[1]-a[1]);
+      const povp=o.zneski.length?Math.round(o.zneski.reduce((a,b)=>a+b,0)/o.zneski.length):null;
+      return {...o,maili:[...o.maili],rel,dni,povp};
+    });
+  },[nalogi]);
+
+  const vidne=useMemo(()=>{
+    const q=isci.trim().toLowerCase();
+    let v=stranke.filter(s=>!q||s.stranka.toLowerCase().includes(q));
+    if(skrijNedavne)v=v.filter(s=>{
+      const p=poslano[s.stranka];
+      if(!p)return true;
+      return (danes-new Date(p))/86400000>30;
+    });
+    if(sort==="zanemarjeni")v.sort((a,b)=>(b.dni==null?-1:b.dni)-(a.dni==null?-1:a.dni));
+    else if(sort==="najvec")v.sort((a,b)=>b.st-a.st);
+    else v.sort((a,b)=>(b.povp||0)-(a.povp||0));
+    return v;
+  },[stranke,isci,sort,skrijNedavne,poslano]);
+
+  const sestavi=(s)=>{
+    const mail=s.maili[0]||"";
+    const relTop=s.rel.length?s.rel[0][0]:"";
+    const jz=jeziki[s.stranka]||povpJezik(mail,relTop);
+    const T=POVP_T[jz]||POVP_T.sl;
+    const vrstice=[T.pozdrav,"",T.uvod(s.st,povpDatum(s.zadnji),relTop||"—"),""];
+    vrstice.push(T.kap+" "+kap,"",T.vpr,"",T.konec,OPOMIN_PODPIS);
+    return {jz,mail,zadeva:T.zadeva+" — "+(relTop||s.stranka),telo:vrstice.join("\n")};
+  };
+  const odpriMail=(s)=>{
+    const {mail,zadeva,telo}=sestavi(s);
+    const url="mailto:"+encodeURIComponent(mail)+"?subject="+encodeURIComponent(zadeva)+"&body="+encodeURIComponent(telo);
+    window.location.href=url;
+    setPoslano(p=>({...p,[s.stranka]:new Date().toISOString()}));
+  };
+  const kopiraj=async(s)=>{
+    const {zadeva,telo}=sestavi(s);
+    try{await navigator.clipboard.writeText(zadeva+"\n\n"+telo);showToast&&showToast("✅ Besedilo kopirano.");}
+    catch(e){showToast&&showToast("❌ Kopiranje ni uspelo.",true);}
+  };
+
+  const bt=(aktiven)=>({padding:"6px 12px",borderRadius:8,border:"1.5px solid "+(aktiven?"#0f2744":"#e2e8f0"),background:aktiven?"#0f2744":"#fff",color:aktiven?"#fff":"#334155",fontSize:12,fontWeight:700,cursor:"pointer"});
+
+  return <div>
+    <div style={{background:"linear-gradient(135deg,#0f2744,#1e40af)",color:"#fff",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
+      <div style={{fontSize:18,fontWeight:800}}>📣 Povpraševanja za tovor</div>
+      <div style={{fontSize:13,opacity:.9,marginTop:4}}>Naročniki, ki so ti že zaupali tovor. Mail navede njihove dejanske relacije, zato ni videti kot okrožnica.</div>
+    </div>
+
+    <div style={{background:"#fff",borderRadius:12,padding:14,marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+      <div style={{fontSize:12,fontWeight:700,color:"#64748b",marginBottom:6}}>KAJ PONUJAM (gre v vsak mail)</div>
+      <input value={kap} onChange={e=>setKap(e.target.value)} placeholder="npr. 13,6 m plato / 24 t / 33 EUR palet"
+        style={{width:"100%",boxSizing:"border-box",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13}}/>
+    </div>
+
+    <div style={{background:"#fff",borderRadius:12,padding:14,marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+      <input value={isci} onChange={e=>setIsci(e.target.value)} placeholder="🔍 Išči naročnika..."
+        style={{flex:1,minWidth:180,padding:"8px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13}}/>
+      <button onClick={()=>setSort("zanemarjeni")} style={bt(sort==="zanemarjeni")}>Najdlje brez tovora</button>
+      <button onClick={()=>setSort("najvec")} style={bt(sort==="najvec")}>Največ prevozov</button>
+      <button onClick={()=>setSort("cena")} style={bt(sort==="cena")}>Najvišja cena</button>
+      <label style={{fontSize:12,color:"#334155",fontWeight:600,display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}>
+        <input type="checkbox" checked={skrijNedavne} onChange={e=>setSkrijNedavne(e.target.checked)}/>
+        skrij nagovorjene (30 dni)
+      </label>
+    </div>
+
+    {vidne.length===0&&<div style={{background:"#fff",borderRadius:12,padding:28,textAlign:"center",color:"#94a3b8",fontSize:13}}>Ni naročnikov za prikaz.</div>}
+
+    {vidne.map(s=>{
+      const {jz,mail}=sestavi(s);
+      const p=poslano[s.stranka];
+      const odpr=odprt===s.stranka;
+      return <div key={s.stranka} style={{background:"#fff",borderRadius:12,padding:14,marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",borderLeft:"5px solid "+(p?"#16a34a":(s.dni!=null&&s.dni>60?"#f59e0b":"#0f2744"))}}>
+        <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",alignItems:"baseline"}}>
+          <div style={{fontSize:15,fontWeight:800,color:"#0f2744"}}>{s.stranka}</div>
+          <div style={{fontSize:12,color:"#64748b"}}>
+            {s.st} {s.st===1?"prevoz":(s.st===2?"prevoza":(s.st<5?"prevozi":"prevozov"))}
+            {s.zadnji?" · zadnji "+povpDatum(s.zadnji):""}
+            {s.dni!=null?" · pred "+s.dni+" dnevi":""}
+            {s.povp?" · povpr. "+s.povp+" €":""}
+          </div>
+        </div>
+
+        <div style={{fontSize:12,color:"#334155",marginTop:6}}>
+          {s.rel.slice(0,2).map(([r,c])=>r+" ("+c+"×)").join("  ·  ")||"—"}
+          {s.rel.length>2&&<span style={{color:"#94a3b8"}}>{"  +"+(s.rel.length-2)+" drugih"}</span>}
+        </div>
+
+        <div style={{fontSize:12,marginTop:6,color:mail?"#15803d":"#b91c1c",fontWeight:600}}>
+          {mail?("✉️ "+mail):"✉️ ni e-naslova — dopolni ga pri enem od nalogov"}
+        </div>
+
+        {p&&<div style={{fontSize:11,color:"#15803d",fontWeight:700,marginTop:4}}>✅ Nagovorjen {povpDatum(String(p).slice(0,10))}</div>}
+
+        <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap",alignItems:"center"}}>
+          {["sl","de","en","it"].map(k=>(
+            <button key={k} onClick={()=>setJeziki(j=>({...j,[s.stranka]:k}))}
+              style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid "+(jz===k?"#2563eb":"#e2e8f0"),background:jz===k?"#eff6ff":"#fff",color:jz===k?"#2563eb":"#64748b",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+              {k.toUpperCase()}
+            </button>
+          ))}
+          <div style={{flex:1}}></div>
+          <button onClick={()=>setOdprt(odpr?"":s.stranka)} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",background:"#fff",color:"#334155",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+            {odpr?"Skrij":"👁️ Predogled"}
+          </button>
+          <button onClick={()=>kopiraj(s)} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #bfdbfe",background:"#fff",color:"#2563eb",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+            📋 Kopiraj
+          </button>
+          <button onClick={()=>odpriMail(s)} style={{padding:"7px 14px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#065f46,#16a34a)",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+            ✉️ Odpri v mailu
+          </button>
+          {p&&<button onClick={()=>setPoslano(x=>{const y={...x};delete y[s.stranka];return y;})}
+            style={{padding:"7px 10px",borderRadius:8,border:"1.5px solid #fecaca",background:"#fff",color:"#b91c1c",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+            Počisti
+          </button>}
+        </div>
+
+        {odpr&&<pre style={{marginTop:10,background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:9,padding:12,fontSize:12,whiteSpace:"pre-wrap",fontFamily:"inherit",color:"#0f2744"}}>{sestavi(s).telo}</pre>}
+      </div>;
+    })}
+  </div>;
+}
+
+// ===== POTENCIALNE STRANKE (iz borze tovora) =====
+const LEAD_T={
+  sl:{zadeva:"Prosta kapaciteta",pozdrav:"Pozdravljeni,",
+      uvod:(r,d)=>"videli smo vašo objavo"+(r?" ("+r+")":"")+(d?", "+d:"")+".",
+      kap:"Imamo prosto kapaciteto:",
+      vpr:"Če imate podobne tovore, nas kontaktirajte.",
+      konec:"Lep pozdrav,"},
+  de:{zadeva:"Freie Kapazität",pozdrav:"Guten Tag,",
+      uvod:(r,d)=>"wir haben Ihre Ausschreibung"+(r?" ("+r+")":"")+(d?" vom "+d:"")+" gesehen.",
+      kap:"Wir haben freie Kapazität:",
+      vpr:"Bei ähnlichen Ladungen melden Sie sich gerne.",
+      konec:"Mit freundlichen Grüßen,"},
+  en:{zadeva:"Available capacity",pozdrav:"Hello,",
+      uvod:(r,d)=>"we saw your posting"+(r?" ("+r+")":"")+(d?" of "+d:"")+".",
+      kap:"We have free capacity:",
+      vpr:"If you have similar loads, feel free to contact us.",
+      konec:"Kind regards,"},
+  it:{zadeva:"Capacità disponibile",pozdrav:"Buongiorno,",
+      uvod:(r,d)=>"abbiamo visto il vostro annuncio"+(r?" ("+r+")":"")+(d?" del "+d:"")+".",
+      kap:"Abbiamo capacità libera:",
+      vpr:"Per carichi simili, contattateci pure.",
+      konec:"Cordiali saluti,"},
+};
+function PotencialneTab({showToast}){
+  const [seznam,setSeznam]=useState([]);
+  const [nalagam,setNalagam]=useState(false);
+  const [bere,setBere]=useState(false);
+  const [osnutek,setOsnutek]=useState(null);
+  const [isci,setIsci]=useState("");
+  const [samoNeNagovorjeni,setSamoNeNagovorjeni]=useState(false);
+  const [kap,setKap]=useState(()=>{try{return localStorage.getItem("povp_kap")||POVP_PRIVZETA_KAP;}catch(e){return POVP_PRIVZETA_KAP;}});
+  const [jeziki,setJeziki]=useState(()=>{try{return JSON.parse(localStorage.getItem("lead_jeziki")||"{}");}catch(e){return {};}});
+  useEffect(()=>{try{localStorage.setItem("povp_kap",kap);}catch(e){}},[kap]);
+  useEffect(()=>{try{localStorage.setItem("lead_jeziki",JSON.stringify(jeziki));}catch(e){}},[jeziki]);
+
+  const naloziSeznam=async()=>{
+    setNalagam(true);
+    try{
+      const {data,error}=await supabase.from("potencialne_stranke").select("*").order("created_at",{ascending:false}).limit(500);
+      if(error)throw error;
+      setSeznam(data||[]);
+    }catch(e){ showToast&&showToast("❌ Tabele potencialne_stranke še ni — poglej navodila.",true); console.error(e); }
+    setNalagam(false);
+  };
+  useEffect(()=>{ naloziSeznam(); },[]);
+
+  const obdelajSliko=async(file)=>{
+    if(!file)return;
+    setBere(true);
+    showToast&&showToast("⏳ AI bere posnetek...");
+    try{
+      const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
+      const {data,error}=await supabase.functions.invoke("ai-razcleni",{body:{namen:"kontakt",tip:"image",slikaBase64:b64,mediaType:file.type||"image/png"}});
+      if(error)throw error;
+      const txt=(data.content||[]).map(i=>i.text||"").join("").replace(/```json|```/g,"").trim();
+      const p=JSON.parse(txt);
+      if(!p.firma&&!p.email){ showToast&&showToast("❌ Na posnetku ni razvidnega podjetja.",true); setBere(false); return; }
+      setOsnutek({
+        firma:p.firma||"",oseba:p.oseba||"",email:p.email||"",telefon:p.telefon||"",
+        drzava:p.drzava||"",od_kraj:p.odKraj||"",do_kraj:p.doKraj||"",vozilo:p.vozilo||"",
+        datum_objave:p.datum||"",cena:p.cena||"",opomba:p.opomba||"",vir:"timocom",
+      });
+    }catch(e){ console.error(e); showToast&&showToast("❌ AI ni mogel prebrati posnetka.",true); }
+    setBere(false);
+  };
+
+  useEffect(()=>{
+    const naPaste=async(e)=>{
+      const it=(e.clipboardData&&e.clipboardData.items)||[];
+      for(let i=0;i<it.length;i++){
+        if(it[i].type&&it[i].type.indexOf("image/")===0){
+          e.preventDefault();
+          await obdelajSliko(it[i].getAsFile());
+          return;
+        }
+      }
+    };
+    window.addEventListener("paste",naPaste);
+    return ()=>window.removeEventListener("paste",naPaste);
+  },[]);
+
+  const shrani=async()=>{
+    if(!osnutek)return;
+    try{
+      const {error}=await supabase.from("potencialne_stranke").insert([osnutek]);
+      if(error)throw error;
+      showToast&&showToast("✅ Shranjeno med potencialne stranke.");
+      setOsnutek(null);
+      naloziSeznam();
+    }catch(e){ console.error(e); showToast&&showToast("❌ Shranjevanje ni uspelo: "+(e.message||""),true); }
+  };
+  const izbrisi=async(id)=>{
+    try{
+      const {error}=await supabase.from("potencialne_stranke").delete().eq("id",id);
+      if(error)throw error;
+      setSeznam(s=>s.filter(x=>x.id!==id));
+    }catch(e){ showToast&&showToast("❌ Brisanje ni uspelo.",true); }
+  };
+  const oznaci=async(r)=>{
+    const cas=r.nagovorjen_cas?null:new Date().toISOString();
+    try{
+      const {error}=await supabase.from("potencialne_stranke").update({nagovorjen_cas:cas}).eq("id",r.id);
+      if(error)throw error;
+      setSeznam(s=>s.map(x=>x.id===r.id?{...x,nagovorjen_cas:cas}:x));
+    }catch(e){ showToast&&showToast("❌ Posodobitev ni uspela.",true); }
+  };
+
+  const relacija=(r)=>[r.od_kraj,r.do_kraj].filter(Boolean).join(" → ");
+  const sestavi=(r)=>{
+    const jz=jeziki[r.id]||povpJezik(r.email,(r.drzava||"")+" "+relacija(r));
+    const T=LEAD_T[jz]||LEAD_T.sl;
+    const telo=[T.pozdrav,"",T.uvod(relacija(r),povpDatum(r.datum_objave)),"",T.kap+" "+kap,"",T.vpr,"",T.konec,OPOMIN_PODPIS].join("\n");
+    return {jz,zadeva:T.zadeva+(relacija(r)?" — "+relacija(r):""),telo};
+  };
+  const odpriMail=(r)=>{
+    const {zadeva,telo}=sestavi(r);
+    window.location.href="mailto:"+encodeURIComponent(r.email||"")+"?subject="+encodeURIComponent(zadeva)+"&body="+encodeURIComponent(telo);
+    if(!r.nagovorjen_cas)oznaci(r);
+  };
+
+  const vidni=seznam.filter(r=>{
+    const q=isci.trim().toLowerCase();
+    if(samoNeNagovorjeni&&r.nagovorjen_cas)return false;
+    if(!q)return true;
+    return [r.firma,r.oseba,r.email,r.od_kraj,r.do_kraj,r.opomba].filter(Boolean).join(" ").toLowerCase().includes(q);
+  });
+
+  const polje=(k,l,ph)=>(
+    <div style={{flex:"1 1 180px",minWidth:150}}>
+      <div style={{fontSize:11,color:"#64748b",fontWeight:700,marginBottom:3}}>{l}</div>
+      <input value={osnutek[k]||""} onChange={e=>setOsnutek(o=>({...o,[k]:e.target.value}))} placeholder={ph||""}
+        style={{width:"100%",boxSizing:"border-box",padding:"7px 10px",border:"1.5px solid #e2e8f0",borderRadius:8,fontSize:13}}/>
+    </div>
+  );
+
+  return <div>
+    <div style={{background:"linear-gradient(135deg,#0f2744,#7c3aed)",color:"#fff",borderRadius:14,padding:"18px 20px",marginBottom:14}}>
+      <div style={{fontSize:18,fontWeight:800}}>🎯 Potencialne stranke</div>
+      <div style={{fontSize:13,opacity:.9,marginTop:4}}>Posnetek objave s TimoComa prilepi s <b>Ctrl+V</b>. AI izlušči podjetje, kontakt in relacijo, ti pa shraniš med potencialne stranke.</div>
+    </div>
+
+    <div style={{background:"#fff",borderRadius:12,padding:14,marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+      <input type="file" id="leadslika" accept="image/*" style={{display:"none"}}
+        onChange={async e=>{const f=e.target.files&&e.target.files[0]; if(f)await obdelajSliko(f); if(e.target)e.target.value="";}}/>
+      <label htmlFor="leadslika" style={{display:"block",border:"2px dashed #c4b5fd",borderRadius:12,padding:"20px 14px",textAlign:"center",cursor:bere?"wait":"pointer",background:bere?"#f5f3ff":"#fff"}}>
+        <div style={{fontSize:14,fontWeight:800,color:"#6d28d9"}}>{bere?"⏳ AI bere posnetek...":"📋 Prilepi posnetek s Ctrl+V"}</div>
+        <div style={{fontSize:12,color:"#94a3b8",marginTop:4}}>ali klikni za izbiro datoteke</div>
+      </label>
+    </div>
+
+    {osnutek&&<div style={{background:"#fff",borderRadius:12,padding:14,marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:"2px solid #a78bfa"}}>
+      <div style={{fontSize:14,fontWeight:800,color:"#0f2744",marginBottom:10}}>Preveri in shrani</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
+        {polje("firma","Podjetje")}{polje("oseba","Kontaktna oseba")}{polje("drzava","Država","DE")}
+      </div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
+        {polje("email","E-naslov")}{polje("telefon","Telefon")}
+      </div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
+        {polje("od_kraj","Naklad")}{polje("do_kraj","Razklad")}{polje("vozilo","Vozilo")}
+      </div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
+        {polje("datum_objave","Datum (YYYY-MM-DD)")}{polje("cena","Cena")}{polje("opomba","Opomba")}
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={shrani} style={{flex:1,background:"linear-gradient(135deg,#5b21b6,#7c3aed)",color:"#fff",border:"none",borderRadius:10,padding:"11px",fontSize:14,fontWeight:700,cursor:"pointer"}}>💾 Shrani</button>
+        <button onClick={()=>setOsnutek(null)} style={{background:"#fff",color:"#b91c1c",border:"1.5px solid #fecaca",borderRadius:10,padding:"11px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}}>Prekliči</button>
+      </div>
+    </div>}
+
+    <div style={{background:"#fff",borderRadius:12,padding:14,marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+      <div style={{fontSize:12,fontWeight:700,color:"#64748b",marginBottom:6}}>KAJ PONUJAM (gre v vsak mail)</div>
+      <input value={kap} onChange={e=>setKap(e.target.value)}
+        style={{width:"100%",boxSizing:"border-box",padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13}}/>
+    </div>
+
+    <div style={{background:"#fff",borderRadius:12,padding:14,marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+      <input value={isci} onChange={e=>setIsci(e.target.value)} placeholder="🔍 Išči podjetje, kraj, kontakt..."
+        style={{flex:1,minWidth:180,padding:"8px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13}}/>
+      <label style={{fontSize:12,color:"#334155",fontWeight:600,display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}>
+        <input type="checkbox" checked={samoNeNagovorjeni} onChange={e=>setSamoNeNagovorjeni(e.target.checked)}/>
+        samo še nenagovorjeni
+      </label>
+      <button onClick={naloziSeznam} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",background:"#fff",color:"#334155",fontSize:12,fontWeight:700,cursor:"pointer"}}>🔄 Osveži</button>
+      <span style={{fontSize:12,color:"#64748b"}}>{nalagam?"nalagam...":vidni.length+" od "+seznam.length}</span>
+    </div>
+
+    {!nalagam&&seznam.length===0&&<div style={{background:"#fff",borderRadius:12,padding:28,textAlign:"center",color:"#94a3b8",fontSize:13}}>Seznam je prazen. Prilepi prvi posnetek s TimoComa.</div>}
+
+    {vidni.map(r=>{
+      const {jz}=sestavi(r);
+      return <div key={r.id} style={{background:"#fff",borderRadius:12,padding:14,marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",borderLeft:"5px solid "+(r.nagovorjen_cas?"#16a34a":"#7c3aed")}}>
+        <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",alignItems:"baseline"}}>
+          <div style={{fontSize:15,fontWeight:800,color:"#0f2744"}}>{r.firma||"(brez imena)"}{r.drzava?<span style={{fontSize:11,color:"#64748b",marginLeft:8}}>{r.drzava}</span>:null}</div>
+          <div style={{fontSize:12,color:"#64748b"}}>{r.datum_objave?povpDatum(r.datum_objave):""}{r.cena?" · "+r.cena:""}</div>
+        </div>
+        {relacija(r)&&<div style={{fontSize:13,fontWeight:600,color:"#334155",marginTop:4}}>{relacija(r)}{r.vozilo?<span style={{color:"#94a3b8",fontWeight:400}}>{"  ·  "+r.vozilo}</span>:null}</div>}
+        {r.opomba&&<div style={{fontSize:12,color:"#64748b",marginTop:3}}>{r.opomba}</div>}
+        <div style={{fontSize:12,marginTop:6,color:r.email?"#15803d":"#b91c1c",fontWeight:600}}>
+          {r.oseba?r.oseba+" · ":""}{r.email||"ni e-naslova"}{r.telefon?" · "+r.telefon:""}
+        </div>
+        {r.nagovorjen_cas&&<div style={{fontSize:11,color:"#15803d",fontWeight:700,marginTop:4}}>✅ Nagovorjen {povpDatum(String(r.nagovorjen_cas).slice(0,10))}</div>}
+        <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap",alignItems:"center"}}>
+          {["sl","de","en","it"].map(k=>(
+            <button key={k} onClick={()=>setJeziki(j=>({...j,[r.id]:k}))}
+              style={{padding:"5px 10px",borderRadius:7,border:"1.5px solid "+(jz===k?"#7c3aed":"#e2e8f0"),background:jz===k?"#f5f3ff":"#fff",color:jz===k?"#6d28d9":"#64748b",fontSize:11,fontWeight:700,cursor:"pointer"}}>{k.toUpperCase()}</button>
+          ))}
+          <div style={{flex:1}}></div>
+          <button onClick={()=>oznaci(r)} style={{padding:"7px 10px",borderRadius:8,border:"1.5px solid #e2e8f0",background:"#fff",color:"#334155",fontSize:12,fontWeight:700,cursor:"pointer"}}>{r.nagovorjen_cas?"Prekliči oznako":"Označi kot nagovorjen"}</button>
+          <button onClick={()=>odpriMail(r)} disabled={!r.email}
+            style={{padding:"7px 14px",borderRadius:8,border:"none",background:r.email?"linear-gradient(135deg,#5b21b6,#7c3aed)":"#cbd5e1",color:"#fff",fontSize:12,fontWeight:700,cursor:r.email?"pointer":"not-allowed"}}>✉️ Povpraševanje</button>
+          <button onClick={()=>izbrisi(r.id)} style={{padding:"7px 10px",borderRadius:8,border:"1.5px solid #fecaca",background:"#fff",color:"#b91c1c",fontSize:11,fontWeight:700,cursor:"pointer"}}>🗑️</button>
+        </div>
+      </div>;
+    })}
+  </div>;
 }
 
 function OpominiTab({nalogi,showToast}){
