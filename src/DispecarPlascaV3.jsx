@@ -143,7 +143,26 @@ function naslovnicaHtml(n){
     <div class="opo">Računu priloži CMR in originalni nalog (naslednje strani).</div>
   </div>`;
 }
-const natisniVse=(n,cmrSlike=[])=>{
+// ===== PDF -> SLIKE (da se pas za fakturiranje zanesljivo natisne) =====
+async function pdfVSlike(url,najvec=8,skala=2){
+  const lib=await naloziPdfJs();
+  const r=await fetch(url);
+  if(!r.ok)throw new Error("HTTP "+r.status);
+  const ab=await r.arrayBuffer();
+  const doc=await lib.getDocument({data:ab}).promise;
+  const out=[];
+  const n=Math.min(doc.numPages,najvec);
+  for(let i=1;i<=n;i++){
+    const pg=await doc.getPage(i);
+    const vp=pg.getViewport({scale:skala});
+    const c=document.createElement("canvas");
+    c.width=Math.round(vp.width); c.height=Math.round(vp.height);
+    await pg.render({canvasContext:c.getContext("2d"),viewport:vp}).promise;
+    out.push(c.toDataURL("image/jpeg",0.82));
+  }
+  return out;
+}
+const natisniVse=async(n,cmrSlike=[])=>{
   const nalUrl=n.original_pdf_url||n.originalPdfUrl;
   const nalStevilka=n.stevilkaNaloga||n.stevilka_naloga||"";
   const w=window.open("","_blank");
@@ -154,9 +173,20 @@ const natisniVse=(n,cmrSlike=[])=>{
   let body="";
   if(nalUrl){
     const pas=pasFakturaHtml(n);
-    body+=jePdf
-      ?`<div class="page">${pas}<embed src="${nalUrl}" type="application/pdf" class="pdf s"/></div>`
-      :`<div class="page">${pas}<img src="${nalUrl}" class="doc s"/></div>`;
+    let slike=null;
+    if(jePdf){
+      try{ w.document.write("<p style='font-family:sans-serif;padding:20px;color:#64748b'>Pripravljam nalog za tiskanje...</p>"); }catch(e){}
+      try{ slike=await pdfVSlike(nalUrl); }catch(e){ console.warn("PDF v slike ni uspelo, uporabljam vdelani PDF.",e); slike=null; }
+    }
+    if(slike&&slike.length){
+      slike.forEach((d,i)=>{
+        body+=`<div class="page">${i===0?pas:""}<img src="${d}" class="doc${i===0?" s":""}"/></div>`;
+      });
+    }else{
+      body+=jePdf
+        ?`<div class="page">${pas}<embed src="${nalUrl}" type="application/pdf" class="pdf s"/></div>`
+        :`<div class="page">${pas}<img src="${nalUrl}" class="doc s"/></div>`;
+    }
   }
   (cmrSlike||[]).forEach((sl,i)=>{
     const url=sl.url||sl.img;
@@ -164,6 +194,7 @@ const natisniVse=(n,cmrSlike=[])=>{
     body+=`<div class="page">${header(`CMR dokument ${i+1}/${cmrSlike.length}`)}<img src="${url}" class="doc"/></div>`;
   });
   if(!body){w.document.write("<p style='font-family:sans-serif;padding:20px'>Ni dokumentov za tiskanje.</p>");w.document.close();return;}
+  try{w.document.open();}catch(e){}
   w.document.write(`<!DOCTYPE html><html><head><title>${nalStevilka} - nalog + CMR</title><style>@page{size:A4;margin:8mm;}.nasl{padding:0 4mm;font-size:12pt;color:#0f2744;}.nhdr{border-bottom:3px solid #0f2744;padding-bottom:8px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:baseline;}.nt{font-size:20pt;font-weight:800;letter-spacing:.5px;}.nn{font-size:14pt;font-weight:700;color:#334155;}.nt2{width:100%;border-collapse:collapse;margin-bottom:14px;}.nt2 td{border-bottom:1px solid #e2e8f0;padding:6px 4px;vertical-align:top;}.nt2 .k{width:38%;color:#64748b;font-size:10.5pt;}.nt2 .v{font-weight:700;}.zn{border:2px solid #0f2744;border-radius:6px;padding:10px 14px;margin-bottom:14px;}.zn-l{font-size:9.5pt;color:#64748b;letter-spacing:.5px;}.zn-v{font-size:24pt;font-weight:800;line-height:1.1;}.zn-d{font-size:10pt;color:#334155;margin-top:4px;}.mb{background:#f1f5f9;border-left:5px solid #0f2744;padding:10px 14px;margin-bottom:14px;}.mb-l{font-size:9.5pt;color:#64748b;letter-spacing:.5px;margin-bottom:4px;}.mb-v{font-size:14pt;font-weight:800;word-break:break-all;}.mb-x{font-size:11pt;color:#b91c1c;font-weight:700;}.nav{border:1px solid #cbd5e1;border-radius:6px;padding:10px 14px;margin-bottom:14px;}.nav-l{font-size:9.5pt;color:#64748b;letter-spacing:.5px;margin-bottom:4px;}.nav-v{font-size:11pt;white-space:pre-wrap;}.opo{font-size:10.5pt;color:#334155;border-top:1px dashed #cbd5e1;padding-top:8px;}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;}.page{page-break-after:always;}.page:last-child{page-break-after:auto;}.hdr{background:#0f2744;color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}.hdr-l{font-size:10px;opacity:0.7;text-transform:uppercase;letter-spacing:1px;}.hdr-num{font-size:22px;font-weight:800;font-family:monospace;letter-spacing:1px;}.hdr-r{text-align:right;font-size:11px;opacity:0.85;}.doc{display:block;width:100%;max-height:255mm;object-fit:contain;}.pdf{display:block;width:100%;height:255mm;border:none;}.pdf.s{height:240mm;}.doc.s{max-height:240mm;}.pas{border:2px solid #0f2744;border-radius:5px;margin-bottom:8px;overflow:hidden;}.pas-g{display:flex;}.pas-c{padding:6px 10px;flex:1;border-right:1px solid #cbd5e1;}.pas-c:last-child{border-right:none;}.pas-z{flex:0 0 32%;background:#f1f5f9;}.pas-m{flex:0 0 38%;}.pas-l{font-size:7.5pt;color:#64748b;letter-spacing:.6px;font-weight:700;}.pas-v{font-size:17pt;font-weight:800;color:#0f2744;line-height:1.15;}.pas-s{font-size:8pt;color:#334155;}.pas-e{font-size:10.5pt;font-weight:800;color:#0f2744;word-break:break-all;line-height:1.3;}.pas-x{font-size:9.5pt;font-weight:700;color:#b91c1c;}.pas-k{font-size:9.5pt;font-weight:700;color:#0f2744;line-height:1.35;}.pas-n{border-top:1px solid #cbd5e1;padding:5px 10px;font-size:8.5pt;color:#0f2744;background:#fafbfc;}</style></head><body>${body}</body></html>`);
   w.document.close();
   const doPrint=()=>{try{w.focus();w.print();}catch(e){}};
@@ -217,7 +248,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="15.11.2026 f";
+const VERZIJA="15.11.2026 h";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
@@ -1726,6 +1757,14 @@ function PotencialneTab({showToast}){
     }catch(e){ showToast&&showToast("❌ Posodobitev ni uspela.",true); }
   };
 
+  const [urejamMail,setUrejamMail]=useState("");
+  const [novMail,setNovMail]=useState("");
+  const shraniMail=async(r)=>{
+    const v=novMail.trim();
+    await posodobi(r,{email:v||null});
+    setUrejamMail(""); setNovMail("");
+    if(v)showToast&&showToast("✅ E-naslov shranjen.");
+  };
   const relacija=(r)=>[r.od_kraj,r.do_kraj].filter(Boolean).join(" → ");
   const sestavi=(r)=>{
     const jz=jeziki[r.id]||povpJezik(r.email,(r.drzava||"")+" "+relacija(r));
@@ -1841,9 +1880,19 @@ function PotencialneTab({showToast}){
         </div>
         {relacija(r)&&<div style={{fontSize:13,fontWeight:600,color:"#334155",marginTop:4}}>{relacija(r)}{r.vozilo?<span style={{color:"#94a3b8",fontWeight:400}}>{"  ·  "+r.vozilo}</span>:null}</div>}
         {r.opomba&&<div style={{fontSize:12,color:"#64748b",marginTop:3}}>{r.opomba}</div>}
-        <div style={{fontSize:12,marginTop:6,color:r.email?"#15803d":"#b91c1c",fontWeight:600}}>
-          {r.oseba?r.oseba+" · ":""}{r.email||"ni e-naslova"}{r.telefon?" · "+r.telefon:""}
-        </div>
+        {urejamMail===r.id
+          ? <div style={{display:"flex",gap:6,marginTop:6,alignItems:"center",flexWrap:"wrap"}}>
+              <input autoFocus value={novMail} onChange={e=>setNovMail(e.target.value)}
+                onKeyDown={e=>{if(e.key==="Enter")shraniMail(r);if(e.key==="Escape"){setUrejamMail("");setNovMail("");}}}
+                placeholder="ime@podjetje.com"
+                style={{flex:1,minWidth:180,padding:"6px 10px",border:"1.5px solid #a78bfa",borderRadius:8,fontSize:12}}/>
+              <button onClick={()=>shraniMail(r)} style={{padding:"6px 12px",borderRadius:8,border:"none",background:"#16a34a",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Shrani</button>
+              <button onClick={()=>{setUrejamMail("");setNovMail("");}} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid #e2e8f0",background:"#fff",color:"#64748b",fontSize:12,fontWeight:700,cursor:"pointer"}}>Prekliči</button>
+            </div>
+          : <div onClick={()=>{setUrejamMail(r.id);setNovMail(r.email||"");}} title="Klikni za vnos ali popravek"
+              style={{fontSize:12,marginTop:6,color:r.email?"#15803d":"#b91c1c",fontWeight:600,cursor:"pointer",textDecoration:"underline dotted",textUnderlineOffset:3}}>
+              {r.oseba?r.oseba+" · ":""}{r.email||"✏️ ni e-naslova — klikni za vnos"}{r.telefon?" · "+r.telefon:""}
+            </div>}
         {r.nagovorjen_cas&&<div style={{fontSize:11,color:"#15803d",fontWeight:700,marginTop:4}}>✅ Nagovorjen {povpDatum(String(r.nagovorjen_cas).slice(0,10))}</div>}
         <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap",alignItems:"center"}}>
           {["sl","de","en","it"].map(k=>(
@@ -5230,9 +5279,24 @@ async function dodajMedPotencialne(n,showToast){
   const firma=String((n&&n.stranka)||"").trim();
   if(!firma){ showToast&&showToast("Nalog nima naročnika.",true); return false; }
   try{
-    const {data:obst,error:e1}=await supabase.from("potencialne_stranke").select("id").eq("firma",firma).limit(1);
+    const {data:obst,error:e1}=await supabase.from("potencialne_stranke").select("id,email,od_kraj,do_kraj").eq("firma",firma).limit(1);
     if(e1)throw e1;
-    if(obst&&obst.length){ showToast&&showToast("ℹ️ "+firma+" je že med potencialnimi."); return false; }
+    if(obst&&obst.length){
+      const r=obst[0];
+      const najdi0=(t)=>String(t||"").match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)||[];
+      const novMail=String(n.kontaktEmail||n.kontakt_email||"").trim()||(najdi0(n.emaili)[0]||"");
+      const dop={};
+      if(!String(r.email||"").trim()&&novMail)dop.email=novMail;
+      if(!String(r.od_kraj||"").trim()&&String(n.nakKraj||n.nak_kraj||"").trim())dop.od_kraj=String(n.nakKraj||n.nak_kraj).trim();
+      if(!String(r.do_kraj||"").trim()&&String(n.razKraj||n.raz_kraj||"").trim())dop.do_kraj=String(n.razKraj||n.raz_kraj).trim();
+      if(Object.keys(dop).length){
+        await supabase.from("potencialne_stranke").update(dop).eq("id",r.id);
+        showToast&&showToast("✅ "+firma+": dopolnjen "+(dop.email?"e-naslov":"podatek")+".");
+        return true;
+      }
+      showToast&&showToast("ℹ️ "+firma+" je že med potencialnimi.");
+      return false;
+    }
     const najdi=(t)=>String(t||"").match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)||[];
     const mail=String(n.kontaktEmail||n.kontakt_email||"").trim()||(najdi(n.emaili)[0]||"");
     const zn=String(n.znesek||n.znesek_original||"").trim();
