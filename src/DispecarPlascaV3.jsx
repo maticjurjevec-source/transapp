@@ -217,7 +217,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="15.11.2026 d";
+const VERZIJA="15.11.2026 f";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
@@ -1224,7 +1224,7 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
         )}
         {/* Tabs */}
         <div style={s.tabs}>
-          {[["nalogi","📋 Nalogi"],["tedenski","📅 Tedenski"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`],["gps",`📍 GPS${gpsOpoz.length>0?` ⚠️${gpsOpoz.length}`:""}`],["razkladi","🗺️ Razkladi"],["kalkulator","💰 Kalkulator"],["opomini","🔔 Opomini"],["povprasevanja","📣 Povpraševanja"],["potencialne","🎯 Potencialne"]].map(([id,label])=>(
+          {[["nalogi","📋 Nalogi"],["tedenski","📅 Tedenski"],["email","📧 Email → Nalog"],["vozniki","👥 Vozniki"],["obracuni","💶 Obračuni"],["dopusti","🌴 Dopusti"],["prosticmr",`📸 CMR${(st.prostiCMR||[]).filter(c=>!c.povezan).length>0?` (${(st.prostiCMR||[]).filter(c=>!c.povezan).length})`:""}`],["gps",`📍 GPS${gpsOpoz.length>0?` ⚠️${gpsOpoz.length}`:""}`],["razkladi","🗺️ Razkladi"],["kalkulator","💰 Kalkulator"],["opomini","🔔 Opomini"],["iskanje","📣 Iskanje tovora"]].map(([id,label])=>(
             <button key={id} style={{...s.tab,...(tab===id?s.tabOn:{})}} onClick={()=>setTab(id)}>{label}</button>
           ))}
         </div>
@@ -1238,7 +1238,7 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
         {tab==="prosticmr"&&<ProstiCMRTab st={st} upd={upd} showToast={showToast}/>}
         {tab==="email"&&<EmailNalogTab upd={upd} showToast={showToast} naložiPodatke={naložiPodatke} vozniki={vozniki}/>}
         {tab==="komunikacija"&&<KomunikacijaTab showToast={showToast}/>}
-        {tab==="kalkulator"&&<KalkulatorTab vozniki={vozniki} gpsVozila={gpsVozila}/>}{tab==="opomini"&&<OpominiTab nalogi={st.nalogi} showToast={showToast}/>}{tab==="povprasevanja"&&<PovprasevanjaTab nalogi={st.nalogi} showToast={showToast}/>}{tab==="potencialne"&&<PotencialneTab showToast={showToast}/>}{tab==="dopusti"&&<DopustiTab vozniki={vozniki} showToast={showToast}/>}{tab==="razkladi"&&<RazkladiTab nalogi={st.nalogi} vozniki={vozniki} gpsVozila={gpsVozila} showToast={showToast} onSelect={odpriNalog}/>}{tab==="gps"&&<GpsTab nalogi={st.nalogi} vozniki={vozniki}/>}
+        {tab==="kalkulator"&&<KalkulatorTab vozniki={vozniki} gpsVozila={gpsVozila}/>}{tab==="opomini"&&<OpominiTab nalogi={st.nalogi} showToast={showToast}/>}{tab==="iskanje"&&<IskanjeTovoraTab nalogi={st.nalogi} showToast={showToast}/>}{tab==="dopusti"&&<DopustiTab vozniki={vozniki} showToast={showToast}/>}{tab==="razkladi"&&<RazkladiTab nalogi={st.nalogi} vozniki={vozniki} gpsVozila={gpsVozila} showToast={showToast} onSelect={odpriNalog}/>}{tab==="gps"&&<GpsTab nalogi={st.nalogi} vozniki={vozniki}/>}
       </div>
       {/* Nov nalog modal */}
       {modal==="nalog"&&(
@@ -1630,6 +1630,8 @@ function PotencialneTab({showToast}){
   const [osnutek,setOsnutek]=useState(null);
   const [isci,setIsci]=useState("");
   const [samoNeNagovorjeni,setSamoNeNagovorjeni]=useState(false);
+  const [samoPriljubljeni,setSamoPriljubljeni]=useState(false);
+  const [poOceni,setPoOceni]=useState(false);
   const [kap,setKap]=useState(()=>{try{return localStorage.getItem("povp_kap")||POVP_PRIVZETA_KAP;}catch(e){return POVP_PRIVZETA_KAP;}});
   const [jeziki,setJeziki]=useState(()=>{try{return JSON.parse(localStorage.getItem("lead_jeziki")||"{}");}catch(e){return {};}});
   useEffect(()=>{try{localStorage.setItem("povp_kap",kap);}catch(e){}},[kap]);
@@ -1661,6 +1663,7 @@ function PotencialneTab({showToast}){
         firma:p.firma||"",oseba:p.oseba||"",email:p.email||"",telefon:p.telefon||"",
         drzava:p.drzava||"",od_kraj:p.odKraj||"",do_kraj:p.doKraj||"",vozilo:p.vozilo||"",
         datum_objave:p.datum||"",cena:p.cena||"",opomba:p.opomba||"",vir:"timocom",
+        ocena_cene:null,priljubljen:false,
       });
     }catch(e){ console.error(e); showToast&&showToast("❌ AI ni mogel prebrati posnetka.",true); }
     setBere(false);
@@ -1698,6 +1701,22 @@ function PotencialneTab({showToast}){
       setSeznam(s=>s.filter(x=>x.id!==id));
     }catch(e){ showToast&&showToast("❌ Brisanje ni uspelo.",true); }
   };
+  const posodobi=async(r,polja)=>{
+    try{
+      const {error}=await supabase.from("potencialne_stranke").update(polja).eq("id",r.id);
+      if(error)throw error;
+      setSeznam(s=>s.map(x=>x.id===r.id?{...x,...polja}:x));
+    }catch(e){ showToast&&showToast("❌ Posodobitev ni uspela.",true); }
+  };
+  const Zvezdice=({v,nast,velikost})=>(
+    <span style={{whiteSpace:"nowrap"}}>
+      {[1,2,3,4,5].map(i=>(
+        <span key={i} onClick={e=>{e.stopPropagation();nast(v===i?null:i);}}
+          title={["slabo plača","podpovprečno","povprečno","dobro","odlično"][i-1]}
+          style={{cursor:"pointer",fontSize:velikost||15,color:(v||0)>=i?"#f59e0b":"#d9dee7",lineHeight:1,padding:"0 1px"}}>★</span>
+      ))}
+    </span>
+  );
   const oznaci=async(r)=>{
     const cas=r.nagovorjen_cas?null:new Date().toISOString();
     try{
@@ -1723,8 +1742,12 @@ function PotencialneTab({showToast}){
   const vidni=seznam.filter(r=>{
     const q=isci.trim().toLowerCase();
     if(samoNeNagovorjeni&&r.nagovorjen_cas)return false;
+    if(samoPriljubljeni&&!r.priljubljen)return false;
     if(!q)return true;
     return [r.firma,r.oseba,r.email,r.od_kraj,r.do_kraj,r.opomba].filter(Boolean).join(" ").toLowerCase().includes(q);
+  }).sort((a,b)=>{
+    if(poOceni)return (b.ocena_cene||0)-(a.ocena_cene||0);
+    return (b.priljubljen?1:0)-(a.priljubljen?1:0);
   });
 
   const polje=(k,l,ph)=>(
@@ -1764,6 +1787,16 @@ function PotencialneTab({showToast}){
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
         {polje("datum_objave","Datum (YYYY-MM-DD)")}{polje("cena","Cena")}{polje("opomba","Opomba")}
       </div>
+      <div style={{display:"flex",gap:14,alignItems:"center",flexWrap:"wrap",marginBottom:12,padding:"10px 12px",background:"#fafafa",border:"1px solid #e2e8f0",borderRadius:9}}>
+        <div style={{fontSize:12,fontWeight:700,color:"#64748b"}}>Moja ocena cene:</div>
+        <Zvezdice v={osnutek.ocena_cene} velikost={20} nast={(x)=>setOsnutek(o=>({...o,ocena_cene:x}))}/>
+        <div style={{fontSize:11,color:"#94a3b8"}}>1★ slabo plača · 5★ odlično</div>
+        <div style={{flex:1}}></div>
+        <label style={{fontSize:12,fontWeight:700,color:"#b45309",display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}>
+          <input type="checkbox" checked={!!osnutek.priljubljen} onChange={e=>setOsnutek(o=>({...o,priljubljen:e.target.checked}))}/>
+          ⭐ Priljubljen
+        </label>
+      </div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={shrani} style={{flex:1,background:"linear-gradient(135deg,#5b21b6,#7c3aed)",color:"#fff",border:"none",borderRadius:10,padding:"11px",fontSize:14,fontWeight:700,cursor:"pointer"}}>💾 Shrani</button>
         <button onClick={()=>setOsnutek(null)} style={{background:"#fff",color:"#b91c1c",border:"1.5px solid #fecaca",borderRadius:10,padding:"11px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}}>Prekliči</button>
@@ -1783,6 +1816,8 @@ function PotencialneTab({showToast}){
         <input type="checkbox" checked={samoNeNagovorjeni} onChange={e=>setSamoNeNagovorjeni(e.target.checked)}/>
         samo še nenagovorjeni
       </label>
+      <button onClick={()=>setSamoPriljubljeni(v=>!v)} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid "+(samoPriljubljeni?"#f59e0b":"#e2e8f0"),background:samoPriljubljeni?"#fffbeb":"#fff",color:samoPriljubljeni?"#b45309":"#334155",fontSize:12,fontWeight:700,cursor:"pointer"}}>⭐ Priljubljeni</button>
+      <button onClick={()=>setPoOceni(v=>!v)} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid "+(poOceni?"#0f2744":"#e2e8f0"),background:poOceni?"#0f2744":"#fff",color:poOceni?"#fff":"#334155",fontSize:12,fontWeight:700,cursor:"pointer"}}>Po oceni</button>
       <button onClick={naloziSeznam} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",background:"#fff",color:"#334155",fontSize:12,fontWeight:700,cursor:"pointer"}}>🔄 Osveži</button>
       <span style={{fontSize:12,color:"#64748b"}}>{nalagam?"nalagam...":vidni.length+" od "+seznam.length}</span>
     </div>
@@ -1791,10 +1826,18 @@ function PotencialneTab({showToast}){
 
     {vidni.map(r=>{
       const {jz}=sestavi(r);
-      return <div key={r.id} style={{background:"#fff",borderRadius:12,padding:14,marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",borderLeft:"5px solid "+(r.nagovorjen_cas?"#16a34a":"#7c3aed")}}>
+      return <div key={r.id} style={{background:"#fff",borderRadius:12,padding:14,marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",borderLeft:"5px solid "+(r.priljubljen?"#f59e0b":(r.nagovorjen_cas?"#16a34a":"#7c3aed"))}}>
         <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",alignItems:"baseline"}}>
-          <div style={{fontSize:15,fontWeight:800,color:"#0f2744"}}>{r.firma||"(brez imena)"}{r.drzava?<span style={{fontSize:11,color:"#64748b",marginLeft:8}}>{r.drzava}</span>:null}</div>
-          <div style={{fontSize:12,color:"#64748b"}}>{r.datum_objave?povpDatum(r.datum_objave):""}{r.cena?" · "+r.cena:""}</div>
+          <div style={{fontSize:15,fontWeight:800,color:"#0f2744",display:"flex",alignItems:"center",gap:8}}>
+            <span onClick={()=>posodobi(r,{priljubljen:!r.priljubljen})} title="Priljubljen"
+              style={{cursor:"pointer",fontSize:17,color:r.priljubljen?"#f59e0b":"#d9dee7",lineHeight:1}}>⭐</span>
+            <span>{r.firma||"(brez imena)"}</span>
+            {r.drzava?<span style={{fontSize:11,color:"#64748b",fontWeight:600}}>{r.drzava}</span>:null}
+          </div>
+          <div style={{fontSize:12,color:"#64748b",display:"flex",alignItems:"center",gap:8}}>
+            <Zvezdice v={r.ocena_cene} nast={(x)=>posodobi(r,{ocena_cene:x})}/>
+            <span>{r.datum_objave?povpDatum(r.datum_objave):""}{r.cena?" · "+r.cena:""}</span>
+          </div>
         </div>
         {relacija(r)&&<div style={{fontSize:13,fontWeight:600,color:"#334155",marginTop:4}}>{relacija(r)}{r.vozilo?<span style={{color:"#94a3b8",fontWeight:400}}>{"  ·  "+r.vozilo}</span>:null}</div>}
         {r.opomba&&<div style={{fontSize:12,color:"#64748b",marginTop:3}}>{r.opomba}</div>}
@@ -1815,6 +1858,26 @@ function PotencialneTab({showToast}){
         </div>
       </div>;
     })}
+  </div>;
+}
+
+// ===== ISKANJE TOVORA (zdruzen zavihek) =====
+function IskanjeTovoraTab({nalogi,showToast}){
+  const [pod,setPod]=useState(()=>{try{return localStorage.getItem("isk_pod")||"stranke";}catch(e){return "stranke";}});
+  useEffect(()=>{try{localStorage.setItem("isk_pod",pod);}catch(e){}},[pod]);
+  const gb=(aktiven,barva)=>({
+    flex:1,padding:"11px 14px",borderRadius:10,border:"1.5px solid "+(aktiven?barva:"#e2e8f0"),
+    background:aktiven?barva:"#fff",color:aktiven?"#fff":"#64748b",
+    fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",
+  });
+  return <div>
+    <div style={{display:"flex",gap:8,marginBottom:14}}>
+      <button onClick={()=>setPod("stranke")} style={gb(pod==="stranke","#1e40af")}>🤝 Obstoječe stranke</button>
+      <button onClick={()=>setPod("potencialne")} style={gb(pod==="potencialne","#7c3aed")}>🎯 Potencialne</button>
+    </div>
+    {pod==="stranke"
+      ? <PovprasevanjaTab nalogi={nalogi} showToast={showToast}/>
+      : <PotencialneTab showToast={showToast}/>}
   </div>;
 }
 
