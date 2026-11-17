@@ -253,7 +253,44 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="17.11.2026 c";
+const VERZIJA="17.11.2026 d";
+
+// ===== TRAJNE NASTAVITVE: zrcaljenje v bazo, da prezivijo menjavo racunalnika =====
+const TRAJNI=/^(opomin_|razkladi_|povp_|lead_|isk_|kalk_nast|prazna_rocno|ai_predloge_)/;
+const _casovniki={};
+function zapisiNastavitev(k,v){
+  try{clearTimeout(_casovniki[k]);}catch(e){}
+  _casovniki[k]=setTimeout(()=>{
+    try{
+      supabase.from("app_nastavitve").upsert({kljuc:k,vrednost:v,posodobljeno:new Date().toISOString()},{onConflict:"kljuc"}).then(()=>{},()=>{});
+    }catch(e){}
+  },800);
+}
+let _zrcalo=false;
+function vklopiZrcalo(){
+  if(_zrcalo)return; _zrcalo=true;
+  try{
+    const izvirni=localStorage.setItem.bind(localStorage);
+    localStorage.setItem=function(k,v){ izvirni(k,v); try{ if(TRAJNI.test(String(k)))zapisiNastavitev(String(k),String(v)); }catch(e){} };
+  }catch(e){}
+}
+async function sinhronizirajNastavitve(){
+  try{
+    const {data,error}=await supabase.from("app_nastavitve").select("kljuc,vrednost");
+    if(error)throw error;
+    const vBazi={};
+    (data||[]).forEach(r=>{ vBazi[r.kljuc]=true; try{ if(r.vrednost!=null)localStorage.setItem(r.kljuc,r.vrednost); }catch(e){} });
+    const manjka=[];
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i);
+      if(!k||!TRAJNI.test(k)||vBazi[k])continue;
+      manjka.push({kljuc:k,vrednost:localStorage.getItem(k),posodobljeno:new Date().toISOString()});
+    }
+    if(manjka.length)await supabase.from("app_nastavitve").upsert(manjka,{onConflict:"kljuc"});
+  }catch(e){}
+  vklopiZrcalo();
+}
+
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
@@ -449,7 +486,7 @@ function CropCMRModal({cmr,nalStevilka,onClose,onSaved,showToast}){
   </div>);
 }
 
-export default function DispecarPlasca() {
+function DispecarPlasca() {
   const [st,setSt]=useState(initState);
   const [tab,setTab]=useState("nalogi");
   const [gpsVozila,setGpsVozila]=useState([]);
@@ -6388,3 +6425,11 @@ const s={
   mbody:{padding:"14px 18px 22px"},
   empty:{textAlign:"center",color:"#94a3b8",padding:"40px 20px",fontSize:14},
 };
+
+
+export default function TransApp(){
+  const [pripravljen,setPripravljen]=useState(false);
+  useEffect(()=>{ sinhronizirajNastavitve().then(()=>setPripravljen(true)); },[]);
+  if(!pripravljen) return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"system-ui,-apple-system,sans-serif",color:"#64748b",fontSize:14}}>Nalagam nastavitve...</div>;
+  return <DispecarPlasca/>;
+}
