@@ -253,7 +253,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="17.11.2026 b";
+const VERZIJA="17.11.2026 c";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
@@ -3054,6 +3054,112 @@ function PreverjanjeObracuna({o,nalogi,tarife}){
   </div>;
 }
 
+function HitriIzracun({nalogi,tarife}){
+  const [odprt,setOdprt]=useState(false);
+  const [vozniki,setVozniki]=useState([]);
+  const [vid,setVid]=useState("");
+  const [od,setOd]=useState("");
+  const [doD,setDoD]=useState("");
+  const [izid,setIzid]=useState(null);
+  const [berem,setBerem]=useState(false);
+
+  useEffect(()=>{
+    if(!odprt||vozniki.length)return;
+    supabase.from("vozniki").select("id,ime,priimek,vozilo").order("priimek").then(({data})=>{ if(data)setVozniki(data); });
+  },[odprt]);
+
+  const voznik=vozniki.find(v=>String(v.id)===String(vid))||null;
+  const reg=String((voznik&&voznik.vozilo)||"").trim();
+
+  const izracunaj=async()=>{
+    if(!vid||!od||!doD){setIzid({napaka:"Izberi voznika in oba datuma."});return;}
+    setBerem(true);setIzid(null);
+    let km=null,kmOd=null,kmDo=null,zapisov=0;
+    try{
+      const dan=new Date(doD+"T00:00:00"); dan.setDate(dan.getDate()+1);
+      const doPlus=dan.toISOString().slice(0,10);
+      if(reg){
+        const {data}=await supabase.from("stanje_stevca").select("datum,km")
+          .eq("reg_tablica",reg).gte("datum",od).lte("datum",doPlus).order("datum");
+        zapisov=(data||[]).length;
+        if(data&&data.length>=2){ km=data[data.length-1].km-data[0].km; kmOd=data[0].datum; kmDo=data[data.length-1].datum; }
+      }
+    }catch(e){}
+    const vObdobju=(nalogi||[]).filter(n=>{
+      if(String(n.voznikId||n.voznik_id||"")!==String(vid))return false;
+      const d=String(n.nakDatum||n.nak_datum||"").slice(0,10);
+      const d2=String(n.razDatum||n.raz_datum||"").slice(0,10);
+      return (d&&d>=od&&d<=doD)||(d2&&d2>=od&&d2<=doD);
+    }).sort((a,b)=>String(a.nakDatum||a.nak_datum||"").localeCompare(String(b.nakDatum||b.nak_datum||"")));
+    const postankov=vObdobju.reduce((a,n)=>a+2+((Array.isArray(n.postanki)?n.postanki.length:0)),0);
+    const znesek=(km!=null?km*tarife.km:0)+vObdobju.length*tarife.stranka;
+    setBerem(false);
+    setIzid({km,kmOd,kmDo,zapisov,nalogi:vObdobju,postankov,znesek:Math.round(znesek*100)/100});
+  };
+
+  if(!odprt) return <button style={{...s.fBtn,marginBottom:10}} onClick={()=>setOdprt(true)}>🧮 Hitri izračun za voznika</button>;
+
+  return <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:12,padding:14,marginBottom:12}}>
+    <div style={{display:"flex",alignItems:"center",marginBottom:10}}>
+      <div style={{fontWeight:800,fontSize:15,color:"#0f2744"}}>🧮 Hitri izračun za voznika</div>
+      <button style={{...s.fBtn,marginLeft:"auto"}} onClick={()=>{setOdprt(false);setIzid(null);}}>Zapri</button>
+    </div>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end"}}>
+      <div style={{flex:"1 1 200px"}}>
+        <div style={{fontSize:11,fontWeight:700,color:"#64748b",marginBottom:3}}>VOZNIK</div>
+        <select style={s.inp} value={vid} onChange={e=>{setVid(e.target.value);setIzid(null);}}>
+          <option value="">— izberi —</option>
+          {vozniki.map(v=><option key={v.id} value={v.id}>{v.ime+" "+v.priimek+(v.vozilo?(" · "+v.vozilo):"")}</option>)}
+        </select>
+      </div>
+      <div style={{flex:"0 1 150px"}}>
+        <div style={{fontSize:11,fontWeight:700,color:"#64748b",marginBottom:3}}>OD</div>
+        <input type="date" style={s.inp} value={od} onChange={e=>{setOd(e.target.value);setIzid(null);}}/>
+      </div>
+      <div style={{flex:"0 1 150px"}}>
+        <div style={{fontSize:11,fontWeight:700,color:"#64748b",marginBottom:3}}>DO</div>
+        <input type="date" style={s.inp} value={doD} onChange={e=>{setDoD(e.target.value);setIzid(null);}}/>
+      </div>
+      <button style={{...s.btnSm,background:"#1d4ed8",padding:"10px 16px"}} disabled={berem} onClick={izracunaj}>{berem?"računam...":"Izračunaj"}</button>
+    </div>
+
+    {izid&&izid.napaka&&<div style={{marginTop:10,fontSize:13,color:"#b91c1c"}}>{izid.napaka}</div>}
+
+    {izid&&!izid.napaka&&<div style={{marginTop:12}}>
+      <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+        <div style={{flex:"1 1 150px",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:9,padding:"10px 12px"}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#64748b"}}>KILOMETRI PO ŠTEVCU</div>
+          {izid.km!=null
+            ? <><div style={{fontSize:20,fontWeight:800,color:"#0f2744"}}>{izid.km.toLocaleString("sl-SI")} km</div>
+                <div style={{fontSize:11,color:"#94a3b8"}}>{reg+" · "+izid.kmOd+" → "+izid.kmDo}</div></>
+            : <div style={{fontSize:12,color:"#94a3b8",marginTop:4}}>{reg?("Ni dovolj zapisov ("+izid.zapisov+"). Zapisovanje teče od 17.11.2026."):"Voznik nima vpisanega vozila."}</div>}
+        </div>
+        <div style={{flex:"1 1 130px",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:9,padding:"10px 12px"}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#64748b"}}>NALOGI</div>
+          <div style={{fontSize:20,fontWeight:800,color:"#0f2744"}}>{izid.nalogi.length}</div>
+          <div style={{fontSize:11,color:"#94a3b8"}}>{izid.postankov+" postankov"}</div>
+        </div>
+        <div style={{flex:"1 1 150px",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:9,padding:"10px 12px"}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#15803d"}}>INFORMATIVNI ZNESEK</div>
+          <div style={{fontSize:20,fontWeight:800,color:"#15803d"}}>{izid.znesek.toFixed(2)} €</div>
+          <div style={{fontSize:11,color:"#94a3b8"}}>{"km × "+tarife.km+" + nalogi × "+tarife.stranka+" €"}</div>
+        </div>
+      </div>
+      {izid.nalogi.length>0&&<div style={{marginTop:12}}>
+        <div style={{fontSize:12,fontWeight:700,color:"#64748b",marginBottom:6}}>NALOGI V OBDOBJU</div>
+        {izid.nalogi.map((n,i)=>(
+          <div key={n.id||i} style={{display:"flex",gap:10,alignItems:"center",padding:"6px 0",borderTop:i?"1px solid #f1f5f9":"none",fontSize:12}}>
+            <span style={{color:"#94a3b8",width:82}}>{String(n.nakDatum||n.nak_datum||"").slice(0,10).split("-").reverse().join(".")}</span>
+            <span style={{flex:1,color:"#0f2744",fontWeight:600}}>{(n.nakKraj||n.nak_kraj||"—")+" → "+(n.razKraj||n.raz_kraj||"—")}</span>
+            <span style={{color:"#64748b"}}>{n.stranka||""}</span>
+          </div>
+        ))}
+      </div>}
+      {izid.nalogi.length===0&&<div style={{marginTop:10,fontSize:12,color:"#94a3b8"}}>V tem obdobju ta voznik nima nalogov.</div>}
+    </div>}
+  </div>;
+}
+
 function ObracuniTab({obracuni,onSelect,nalogi}){
   const [tedenskiOb,setTedenskiOb]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -3132,6 +3238,7 @@ function ObracuniTab({obracuni,onSelect,nalogi}){
       <div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:800}}>{skupajKm.toLocaleString()} km</div><div style={{fontSize:11,opacity:0.7}}>Skupaj km</div></div>
       <div style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:800,color:"#86efac"}}>{skupajZnesek.toFixed(0)} €</div><div style={{fontSize:11,opacity:0.7}}>Za izplačilo</div></div>
     </div>
+    <HitriIzracun nalogi={nalogi} tarife={{km:TARIFA_KM,stranka:TARIFA_STR,dopust:TARIFA_DOPUST}}/>
     <div style={{position:"relative",marginBottom:10}}>
       <input style={{...s.inp,paddingLeft:34}} placeholder="🔍 Išči voznika..." value={iskanje} onChange={e=>setIskanje(e.target.value)}/>
       <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:14,color:"#94a3b8",pointerEvents:"none"}}>🔍</span>
