@@ -253,7 +253,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="16.11.2026 a";
+const VERZIJA="17.11.2026 b";
 const load=()=>{try{return JSON.parse(localStorage.getItem(LS))||null;}catch{return null;}};
 const save=(s)=>{try{localStorage.setItem(LS,JSON.stringify(s));}catch{}};
 const initState=()=>load()||{nalogi:DEMO,obracuni:[{id:"OBR-001",voznikId:"V001",datZac:"2025-03-31",datKon:"2025-04-06",km:1840,stranke:4,stroski:[{tip:"vikend",znesek:80}],zakljucen:true,zakljucenCas:new Date(Date.now()-86400000*3).toISOString()}],racuni:[{id:"RAC-2025-001",nalogId:"NAL-2025-0038",stranka:"DHL Express",znesek:1240,datum:"2025-04-07",rok:"2025-05-07",status:"poslan",opombe:""},{id:"RAC-2025-002",nalogId:"NAL-2025-0039",stranka:"Roth GmbH",znesek:980.50,datum:"2025-04-03",rok:"2025-05-03",status:"placano",opombe:""}],prostiCMR:[]};
@@ -1270,7 +1270,7 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
         {tab==="ai"&&<AiIskalnikTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog} showToast={showToast}/>}
         {tab==="tedenski"&&<TedenskiPregledTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog} showToast={showToast}/>}{tab==="poti"&&<PotiTab showToast={showToast}/>}
         {tab==="vozniki"&&<VoznikiTab nalogi={st.nalogi} vozniki={vozniki} onSelect={odpriNalog} showToast={showToast} gpsVozila={gpsVozila} onReload={naložiPodatke}/>}
-        {tab==="obracuni"&&<ObracuniTab obracuni={st.obracuni} onSelect={setSelObracun}/>}
+        {tab==="obracuni"&&<ObracuniTab obracuni={st.obracuni} nalogi={st.nalogi} onSelect={setSelObracun}/>}
         {tab==="finance"&&<FinanceTab st={st} upd={upd} showToast={showToast} supabase={supabase} setActiveTab={setTab}/>}
         {tab==="prosticmr"&&<ProstiCMRTab st={st} upd={upd} showToast={showToast}/>}
         {tab==="email"&&<EmailNalogTab upd={upd} showToast={showToast} naložiPodatke={naložiPodatke} vozniki={vozniki}/>}
@@ -2913,7 +2913,148 @@ function VoznikiTab({nalogi,vozniki,onSelect,showToast,gpsVozila,onReload}){
   </div>);
 }
 
-function ObracuniTab({obracuni,onSelect}){
+// ===== PREVERJANJE TEDENSKEGA OBRACUNA =====
+function kljucKraja(x){
+  return String(x||"")
+    .normalize?String(x||"").normalize("NFKD").replace(/[̀-ͯ]/g,"").toLowerCase()
+      .replace(/\(([a-z]{1,3})\)/g," ").replace(/\b(si|slo|d|de|at|it|hr|hu|cz|sk|pl|nl|be|fr)\b/g," ")
+      .replace(/[^a-z0-9]+/g," ").replace(/\b\d{4,6}\b/g," ").trim()
+    :String(x||"").toLowerCase();
+}
+function preveriObracun(o,nalogi,tarife){
+  const od=String(o.datum_od||o.dat_zac||"").slice(0,10);
+  const doD=String(o.datum_do||o.dat_kon||"").slice(0,10);
+  const vid=o.voznik_id||o.voznikId||(o.vozniki&&o.vozniki.id);
+  const opozorila=[];
+
+  // --- racunski del ---
+  const kmZac=Number(o.km_zacetek||0), kmKon=Number(o.km_konec||0);
+  const kmVpis=Number(o.km_prevozeni||0);
+  const kmRazlika=(kmZac&&kmKon)?(kmKon-kmZac):null;
+  if(kmRazlika!=null&&kmVpis&&kmRazlika!==kmVpis){
+    opozorila.push({t:"napaka",b:"Kilometri se ne ujemajo",d:kmKon+" − "+kmZac+" = "+kmRazlika+" km, vpisano pa je "+kmVpis+" km."});
+  }
+  const zKm=(kmVpis||0)*tarife.km;
+  const zStr=Number(o.stevilo_strank||0)*tarife.stranka;
+  const zDop=Number(o.dopust_dni||0)*tarife.dopust;
+  const zOst=(o.drugi_stroski||[]).reduce((a,x)=>a+(parseFloat(x.znesek)||0),0);
+  const izracun=Math.round((zKm+zStr+zDop+zOst)*100)/100;
+  const vpisan=Math.round(Number(o.sestevek||0)*100)/100;
+  if(vpisan&&Math.abs(izracun-vpisan)>0.05){
+    opozorila.push({t:"napaka",b:"Seštevek ne drži",d:"Izračun "+izracun.toFixed(2)+" €, vpisano "+vpisan.toFixed(2)+" €. Razlika "+(vpisan-izracun).toFixed(2)+" €."});
+  }
+
+  // --- primerjava z nalogi ---
+  const vObdobju=(nalogi||[]).filter(n=>{
+    if(String(n.voznikId||n.voznik_id||"")!==String(vid||""))return false;
+    const d=String(n.nakDatum||n.nak_datum||"").slice(0,10);
+    const d2=String(n.razDatum||n.raz_datum||"").slice(0,10);
+    if(!od||!doD)return false;
+    return (d&&d>=od&&d<=doD)||(d2&&d2>=od&&d2<=doD);
+  });
+  const prevozi=(o.prevozi||[]).filter(x=>x&&(x.nak||x.raz));
+  const ujemaSe=(pv,n)=>{
+    const a=kljucKraja(pv.nak), b=kljucKraja(pv.raz);
+    const na=kljucKraja(n.nakKraj||n.nak_kraj), nb=kljucKraja(n.razKraj||n.raz_kraj);
+    const del=(x,y)=>x&&y&&(x.indexOf(y)>=0||y.indexOf(x)>=0);
+    return (del(a,na)&&del(b,nb))||(!pv.raz&&del(a,na));
+  };
+  const uporabljeni={};
+  const vrstice=prevozi.map(pv=>{
+    const zadetek=vObdobju.find((n,i)=>!uporabljeni[i]&&ujemaSe(pv,n));
+    if(zadetek){const i=vObdobju.indexOf(zadetek);uporabljeni[i]=true;}
+    return {pv,nalog:zadetek||null};
+  });
+  const brezNaloga=vrstice.filter(v=>!v.nalog).length;
+  const nepokriti=vObdobju.filter((n,i)=>!uporabljeni[i]);
+
+  if(brezNaloga)opozorila.push({t:"opozorilo",b:brezNaloga+" "+(brezNaloga===1?"vožnja brez naloga":"voženj brez naloga"),d:"Voznik jih je vpisal, v sistemu pa zanje ni naloga."});
+  if(nepokriti.length)opozorila.push({t:"info",b:nepokriti.length+" nalogov ni na obračunu",d:nepokriti.map(n=>(n.stevilkaNaloga||n.stevilka_naloga||"")+" "+(n.nakKraj||"")+" → "+(n.razKraj||"")).join("; ")});
+  if(prevozi.length&&Number(o.stevilo_strank||0)&&prevozi.length!==Number(o.stevilo_strank))
+    opozorila.push({t:"opozorilo",b:"Število strank ne ustreza seznamu",d:"Vpisanih strank: "+o.stevilo_strank+", voženj na seznamu: "+prevozi.length+"."});
+  if(kmVpis&&prevozi.length&&(kmVpis/prevozi.length)>1800)
+    opozorila.push({t:"info",b:"Veliko kilometrov na vožnjo",d:Math.round(kmVpis/prevozi.length)+" km na vožnjo. Preveri, ali kak naklad manjka."});
+
+  return {od,doD,izracun,vpisan,zKm,zStr,zDop,zOst,kmRazlika,vrstice,nepokriti,opozorila,stNalogov:vObdobju.length};
+}
+function PreverjanjeObracuna({o,nalogi,tarife}){
+  const r=preveriObracun(o,nalogi,tarife);
+  const [gps,setGps]=useState(null);
+  const reg=String((o.vozniki&&o.vozniki.vozilo)||o.vozilo||"").trim();
+  useEffect(()=>{
+    let zivo=true;
+    (async()=>{
+      if(!reg||!r.od||!r.doD){setGps({ni:true});return;}
+      try{
+        const dan=new Date(r.doD+"T00:00:00"); dan.setDate(dan.getDate()+1);
+        const doPlus=dan.toISOString().slice(0,10);
+        const {data,error}=await supabase.from("stanje_stevca").select("datum,km")
+          .eq("reg_tablica",reg).gte("datum",r.od).lte("datum",doPlus).order("datum");
+        if(error)throw error;
+        if(!zivo)return;
+        if(!data||data.length<2){setGps({ni:true,n:(data||[]).length});return;}
+        const prvi=data[0], zadnji=data[data.length-1];
+        setGps({km:zadnji.km-prvi.km,od:prvi.datum,doD:zadnji.datum,n:data.length});
+      }catch(e){ if(zivo)setGps({ni:true}); }
+    })();
+    return ()=>{zivo=false;};
+  },[reg,r.od,r.doD]);
+  const kmVpis=Number(o.km_prevozeni||0);
+  const razlikaGps=(gps&&gps.km!=null&&kmVpis)?(kmVpis-gps.km):null;
+  const barva=(t)=>t==="napaka"?{b:"#fef2f2",r:"#fecaca",t:"#b91c1c",i:"❌"}
+    :t==="opozorilo"?{b:"#fffbeb",r:"#fde68a",t:"#b45309",i:"⚠️"}
+    :{b:"#eff6ff",r:"#bfdbfe",t:"#1d4ed8",i:"ℹ️"};
+  return <div className="no-print" style={{background:"#fff",borderRadius:12,padding:16,marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+    <div style={{fontSize:15,fontWeight:800,color:"#0f2744",marginBottom:4}}>🔍 Preverjanje</div>
+    <div style={{fontSize:12,color:"#64748b",marginBottom:12}}>
+      Obdobje {r.od||"?"} – {r.doD||"?"} · v sistemu {r.stNalogov} {r.stNalogov===1?"nalog":(r.stNalogov===2?"naloga":(r.stNalogov<5?"nalogi":"nalogov"))}
+    </div>
+
+    {r.opozorila.length===0
+      ? <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:9,padding:"10px 14px",fontSize:13,fontWeight:700,color:"#15803d"}}>✅ Vse se ujema.</div>
+      : r.opozorila.map((x,i)=>{const c=barva(x.t);return (
+        <div key={i} style={{background:c.b,border:"1px solid "+c.r,borderRadius:9,padding:"9px 13px",marginBottom:7}}>
+          <div style={{fontSize:13,fontWeight:700,color:c.t}}>{c.i} {x.b}</div>
+          <div style={{fontSize:12,color:"#334155",marginTop:2}}>{x.d}</div>
+        </div>);})}
+
+    <div style={{marginTop:12,display:"flex",gap:14,flexWrap:"wrap",fontSize:12,color:"#334155"}}>
+      <div><b>{r.zKm.toFixed(2)} €</b> kilometrina</div>
+      <div><b>{r.zStr.toFixed(2)} €</b> stranke</div>
+      {r.zDop>0&&<div><b>{r.zDop.toFixed(2)} €</b> dopust</div>}
+      {r.zOst>0&&<div><b>{r.zOst.toFixed(2)} €</b> ostalo</div>}
+      <div style={{marginLeft:"auto"}}>izračun <b>{r.izracun.toFixed(2)} €</b>{r.vpisan?<span> · vpisano <b>{r.vpisan.toFixed(2)} €</b></span>:null}</div>
+    </div>
+
+    <div style={{marginTop:12,padding:"10px 13px",borderRadius:9,background:"#f8fafc",border:"1px solid #e2e8f0"}}>
+      <div style={{fontSize:12,fontWeight:700,color:"#64748b",marginBottom:4}}>EUROWAG · VOZILO {reg||"?"}</div>
+      {!gps
+        ? <div style={{fontSize:12,color:"#94a3b8"}}>berem...</div>
+        : gps.ni
+          ? <div style={{fontSize:12,color:"#94a3b8"}}>Za to obdobje ni dovolj zapisov stanja števca{gps.n?(" (najdenih "+gps.n+")"):""}. Zapisovanje teče od 17.11.2026.</div>
+          : <div style={{fontSize:13,color:"#0f2744"}}>
+              <b>{gps.km.toLocaleString("sl-SI")} km</b> po števcu ({gps.od} → {gps.doD})
+              {kmVpis?<span style={{color:"#64748b"}}>{" · voznik je vpisal "+kmVpis.toLocaleString("sl-SI")+" km"}</span>:null}
+              {razlikaGps!=null&&<span style={{marginLeft:8,fontWeight:800,color:Math.abs(razlikaGps)<=50?"#15803d":(Math.abs(razlikaGps)<=200?"#b45309":"#b91c1c")}}>
+                {(razlikaGps>0?"+":"")+razlikaGps.toLocaleString("sl-SI")+" km"}
+              </span>}
+            </div>}
+    </div>
+
+    {r.vrstice.length>0&&<div style={{marginTop:12}}>
+      <div style={{fontSize:12,fontWeight:700,color:"#64748b",marginBottom:6}}>VOŽNJE NA OBRAČUNU</div>
+      {r.vrstice.map((v,i)=>(
+        <div key={i} style={{display:"flex",gap:10,alignItems:"center",padding:"6px 0",borderTop:i?"1px solid #f1f5f9":"none",fontSize:12}}>
+          <span style={{width:18,textAlign:"center"}}>{v.nalog?"✅":"⚠️"}</span>
+          <span style={{flex:1,color:"#0f2744",fontWeight:600}}>{(v.pv.nak||"—")+" → "+(v.pv.raz||"—")}</span>
+          <span style={{color:"#64748b"}}>{v.nalog?((v.nalog.stevilkaNaloga||v.nalog.stevilka_naloga||"")+" · "+(v.nalog.stranka||"")):"ni naloga"}</span>
+        </div>
+      ))}
+    </div>}
+  </div>;
+}
+
+function ObracuniTab({obracuni,onSelect,nalogi}){
   const [tedenskiOb,setTedenskiOb]=useState([]);
   const [loading,setLoading]=useState(true);
   const [selOb,setSelOb]=useState(null);
@@ -2957,6 +3098,7 @@ function ObracuniTab({obracuni,onSelect}){
         <button style={s.fBtn} onClick={()=>setSelOb(null)}>← Nazaj</button>
         <button style={{...s.btnSm,marginLeft:"auto",background:"#16a34a"}} onClick={natisniObracun}>🖨️ Natisni / Shrani PDF</button>
       </div>
+      <PreverjanjeObracuna o={o} nalogi={nalogi} tarife={{km:TARIFA_KM,stranka:TARIFA_STR,dopust:TARIFA_DOPUST}}/>
       <div className="print-area">
       <div style={{background:"linear-gradient(135deg,#0f2744,#1d4ed8)",borderRadius:14,padding:18,color:"#fff",marginBottom:14}}>
         <div style={{fontSize:18,fontWeight:800}}>{v?`${v.ime} ${v.priimek}`:"Voznik"}</div>
