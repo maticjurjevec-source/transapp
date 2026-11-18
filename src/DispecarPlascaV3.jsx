@@ -253,7 +253,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="17.11.2026 d";
+const VERZIJA="18.11.2026 a";
 
 // ===== TRAJNE NASTAVITVE: zrcaljenje v bazo, da prezivijo menjavo racunalnika =====
 const TRAJNI=/^(opomin_|razkladi_|povp_|lead_|isk_|kalk_nast|prazna_rocno|ai_predloge_)/;
@@ -278,8 +278,19 @@ async function sinhronizirajNastavitve(){
   try{
     const {data,error}=await supabase.from("app_nastavitve").select("kljuc,vrednost");
     if(error)throw error;
+    const prazno=(x)=>{const t=String(x==null?"":x).trim();return t===""||t==="{}"||t==="[]"||t==="null"||t==="0";};
     const vBazi={};
-    (data||[]).forEach(r=>{ vBazi[r.kljuc]=true; try{ if(r.vrednost!=null)localStorage.setItem(r.kljuc,r.vrednost); }catch(e){} });
+    const nazaj=[];
+    (data||[]).forEach(r=>{
+      vBazi[r.kljuc]=true;
+      try{
+        const lokalno=localStorage.getItem(r.kljuc);
+        // ce je v bazi prazno, v brskalniku pa nekaj je, obvelja brskalnik
+        if(prazno(r.vrednost)&&!prazno(lokalno)){ nazaj.push({kljuc:r.kljuc,vrednost:lokalno,posodobljeno:new Date().toISOString()}); return; }
+        if(r.vrednost!=null)localStorage.setItem(r.kljuc,r.vrednost);
+      }catch(e){}
+    });
+    if(nazaj.length)await supabase.from("app_nastavitve").upsert(nazaj,{onConflict:"kljuc"});
     const manjka=[];
     for(let i=0;i<localStorage.length;i++){
       const k=localStorage.key(i);
@@ -2951,6 +2962,22 @@ function VoznikiTab({nalogi,vozniki,onSelect,showToast,gpsVozila,onReload}){
 }
 
 // ===== PREVERJANJE TEDENSKEGA OBRACUNA =====
+function normTablica(x){ return String(x||"").toUpperCase().replace(/[^A-Z0-9]/g,""); }
+
+async function beriStevec(reg,od,doD){
+  const n=normTablica(reg);
+  if(!n||!od||!doD) return null;
+  const dan=new Date(doD+"T00:00:00"); dan.setDate(dan.getDate()+1);
+  const doPlus=dan.toISOString().slice(0,10);
+  const {data,error}=await supabase.from("stanje_stevca").select("reg_tablica,datum,km")
+    .gte("datum",od).lte("datum",doPlus).order("datum");
+  if(error) throw error;
+  const moji=(data||[]).filter(r=>normTablica(r.reg_tablica)===n);
+  if(moji.length<2) return {ni:true,n:moji.length};
+  const prvi=moji[0], zadnji=moji[moji.length-1];
+  return {km:zadnji.km-prvi.km,od:prvi.datum,doD:zadnji.datum,n:moji.length};
+}
+
 function kljucKraja(x){
   return String(x||"")
     .normalize?String(x||"").normalize("NFKD").replace(/[̀-ͯ]/g,"").toLowerCase()
@@ -3023,15 +3050,9 @@ function PreverjanjeObracuna({o,nalogi,tarife}){
     (async()=>{
       if(!reg||!r.od||!r.doD){setGps({ni:true});return;}
       try{
-        const dan=new Date(r.doD+"T00:00:00"); dan.setDate(dan.getDate()+1);
-        const doPlus=dan.toISOString().slice(0,10);
-        const {data,error}=await supabase.from("stanje_stevca").select("datum,km")
-          .eq("reg_tablica",reg).gte("datum",r.od).lte("datum",doPlus).order("datum");
-        if(error)throw error;
+        const izid=await beriStevec(reg,r.od,r.doD);
         if(!zivo)return;
-        if(!data||data.length<2){setGps({ni:true,n:(data||[]).length});return;}
-        const prvi=data[0], zadnji=data[data.length-1];
-        setGps({km:zadnji.km-prvi.km,od:prvi.datum,doD:zadnji.datum,n:data.length});
+        setGps(izid||{ni:true});
       }catch(e){ if(zivo)setGps({ni:true}); }
     })();
     return ()=>{zivo=false;};
@@ -3113,13 +3134,9 @@ function HitriIzracun({nalogi,tarife}){
     setBerem(true);setIzid(null);
     let km=null,kmOd=null,kmDo=null,zapisov=0;
     try{
-      const dan=new Date(doD+"T00:00:00"); dan.setDate(dan.getDate()+1);
-      const doPlus=dan.toISOString().slice(0,10);
       if(reg){
-        const {data}=await supabase.from("stanje_stevca").select("datum,km")
-          .eq("reg_tablica",reg).gte("datum",od).lte("datum",doPlus).order("datum");
-        zapisov=(data||[]).length;
-        if(data&&data.length>=2){ km=data[data.length-1].km-data[0].km; kmOd=data[0].datum; kmDo=data[data.length-1].datum; }
+        const izid=await beriStevec(reg,od,doD);
+        if(izid){ zapisov=izid.n||0; if(izid.km!=null){ km=izid.km; kmOd=izid.od; kmDo=izid.doD; } }
       }
     }catch(e){}
     const vObdobju=(nalogi||[]).filter(n=>{
