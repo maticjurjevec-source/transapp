@@ -253,7 +253,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="22.11.2026 b";
+const VERZIJA="22.11.2026 c";
 
 // ===== TRAJNE NASTAVITVE: zrcaljenje v bazo, da prezivijo menjavo racunalnika =====
 const TRAJNI=/^(opomin_|razkladi_|povp_|lead_|isk_|kalk_nast|prazna_rocno|ai_predloge_)/;
@@ -1852,6 +1852,43 @@ const LEAD_T={
       vpr:"Per carichi simili, contattateci pure.",
       konec:"Cordiali saluti,"},
 };
+// ===== SMER ZA POTENCIALNE STRANKE (SI <-> tujina) =====
+const SI_KRAJI=("ljubljana maribor celje kranj koper velenje novo mesto ptuj trbovlje kamnik jesenice nova gorica domzale domžale "+
+"skofja loka škofja loka murska sobota izola piran portoroz portorož lucija ankaran sezana sežana divaca divača postojna ilirska bistrica "+
+"logatec vrhnika grosuplje ivancna ivančna litija zagorje hrastnik krsko krško brezice brežice sevnica lasko laško sentjur šentjur "+
+"rogaska rogaška slovenska bistrica slovenske konjice zrece zreče sostanj šoštanj mozirje nazarje zalec žalec prebold polzela vransko "+
+"slovenj gradec ravne dravograd mezica mežica prevalje radlje ruse ruše selnica lovrenc pesnica sentilj šentilj lenart ormoz ormož "+
+"ljutomer gornja radgona radenci lendava beltinci turnisce turnišče moravske toplice puconci idrija ajdovscina ajdovščina vipava "+
+"tolmin bovec kobarid bled bohinj radovljica trzic tržič kranjska gora zelezniki železniki ziri žiri gorenja vas sencur šenčur "+
+"medvode vodice komenda cerklje naklo mengez mengeš trzin lukovica moravce cerknica ribnica kocevje kočevje crnomelj črnomelj "+
+"metlika trebnje sentrupert kidricevo kidričevo race rače hoce hoče miklavz miklavž starse starše duplek videm majsperk hrpelje "+
+"pivka vrtojba miren renče rence sempeter šempeter solkan tolmin deskle anhovo zagorje ob savi lesce zirovnica žirovnica").split(" ");
+function jeSI(kraj){
+  const t=String(kraj||"").toLowerCase().trim();
+  if(!t)return null;
+  if(/\b(si|slo)\b|sloveni|slowenien/.test(t))return true;
+  if(/\bsi[-\s]?\d{4}\b/.test(t))return true;
+  const d=drzavaIzNaslova(kraj,"");
+  if(d)return d==="SI";
+  for(let i=0;i<SI_KRAJI.length;i++){ const k=SI_KRAJI[i]; if(k.length>3&&t.indexOf(k)>=0)return true; }
+  return null;
+}
+const LEAD_SMER={
+  izvoz:{kod:"izvoz",label:"Izvoz",icon:"🟢",color:"#16a34a",bg:"#f0fdf4"},
+  uvoz:{kod:"uvoz",label:"Uvoz",icon:"🔵",color:"#2563eb",bg:"#eff6ff"},
+  domaci:{kod:"domaci",label:"Domači",icon:"🏠",color:"#64748b",bg:"#f1f5f9"},
+  tuje:{kod:"tuje",label:"Tuje",icon:"🌍",color:"#7c3aed",bg:"#f5f3ff"},
+  "?":{kod:"?",label:"Ni znano",icon:"❓",color:"#94a3b8",bg:"#f8fafc"},
+};
+function smerLeada(r){
+  const a=jeSI(r&&r.od_kraj), b=jeSI(r&&r.do_kraj);
+  if(a===null||b===null)return LEAD_SMER["?"];
+  if(a&&!b)return LEAD_SMER.izvoz;
+  if(!a&&b)return LEAD_SMER.uvoz;
+  if(a&&b)return LEAD_SMER.domaci;
+  return LEAD_SMER.tuje;
+}
+
 function PotencialneTab({showToast}){
   const [seznam,setSeznam]=useState([]);
   const [nalagam,setNalagam]=useState(false);
@@ -1860,6 +1897,8 @@ function PotencialneTab({showToast}){
   const [isci,setIsci]=useState("");
   const [samoNeNagovorjeni,setSamoNeNagovorjeni]=useState(false);
   const [samoPriljubljeni,setSamoPriljubljeni]=useState(false);
+  const [smerF,setSmerF]=useState(()=>{try{return localStorage.getItem("lead_smer")||"vse";}catch(e){return "vse";}});
+  useEffect(()=>{try{localStorage.setItem("lead_smer",smerF);}catch(e){}},[smerF]);
   const [poOceni,setPoOceni]=useState(false);
   const [kap,setKap]=useState(()=>{try{return localStorage.getItem("povp_kap")||POVP_PRIVZETA_KAP;}catch(e){return POVP_PRIVZETA_KAP;}});
   const [jeziki,setJeziki]=useState(()=>{try{return JSON.parse(localStorage.getItem("lead_jeziki")||"{}");}catch(e){return {};}});
@@ -1980,6 +2019,7 @@ function PotencialneTab({showToast}){
     const q=isci.trim().toLowerCase();
     if(samoNeNagovorjeni&&r.nagovorjen_cas)return false;
     if(samoPriljubljeni&&!r.priljubljen)return false;
+    if(smerF!=="vse"&&smerLeada(r).kod!==smerF)return false;
     if(!q)return true;
     return [r.firma,r.oseba,r.email,r.od_kraj,r.do_kraj,r.opomba].filter(Boolean).join(" ").toLowerCase().includes(q);
   }).sort((a,b)=>{
@@ -2057,6 +2097,13 @@ function PotencialneTab({showToast}){
       <button onClick={()=>setPoOceni(v=>!v)} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid "+(poOceni?"#0f2744":"#e2e8f0"),background:poOceni?"#0f2744":"#fff",color:poOceni?"#fff":"#334155",fontSize:12,fontWeight:700,cursor:"pointer"}}>Po oceni</button>
       <button onClick={naloziSeznam} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",background:"#fff",color:"#334155",fontSize:12,fontWeight:700,cursor:"pointer"}}>🔄 Osveži</button>
       <span style={{fontSize:12,color:"#64748b"}}>{nalagam?"nalagam...":vidni.length+" od "+seznam.length}</span>
+      <div style={{flexBasis:"100%",height:0}}/>
+      {[["vse","Vse",""],["izvoz","Izvoz","🟢"],["uvoz","Uvoz","🔵"],["domaci","Domači","🏠"],["tuje","Tuje","🌍"],["?","Ni znano","❓"]].map(([k,l,ik])=>{
+        const n=k==="vse"?seznam.length:seznam.filter(r=>smerLeada(r).kod===k).length;
+        const on=smerF===k;
+        if(k!=="vse"&&n===0)return null;
+        return <button key={k} onClick={()=>setSmerF(k)} style={{padding:"6px 11px",borderRadius:999,border:"1.5px solid "+(on?"#0f2744":"#e2e8f0"),background:on?"#0f2744":"#fff",color:on?"#fff":"#334155",fontSize:12,fontWeight:700,cursor:"pointer"}}>{(ik?ik+" ":"")+l+" ("+n+")"}</button>;
+      })}
     </div>
 
     {!nalagam&&seznam.length===0&&<div style={{background:"#fff",borderRadius:12,padding:28,textAlign:"center",color:"#94a3b8",fontSize:13}}>Seznam je prazen. Prilepi prvi posnetek s TimoComa.</div>}
@@ -2070,6 +2117,7 @@ function PotencialneTab({showToast}){
               style={{cursor:"pointer",fontSize:17,color:r.priljubljen?"#f59e0b":"#d9dee7",lineHeight:1}}>⭐</span>
             <span>{r.firma||"(brez imena)"}</span>
             {r.drzava?<span style={{fontSize:11,color:"#64748b",fontWeight:600}}>{r.drzava}</span>:null}
+            {(()=>{const sm=smerLeada(r);return sm.kod==="?"?null:<span style={{fontSize:10.5,fontWeight:800,background:sm.bg,color:sm.color,borderRadius:999,padding:"2px 9px"}}>{sm.icon+" "+sm.label}</span>;})()}
           </div>
           <div style={{fontSize:12,color:"#64748b",display:"flex",alignItems:"center",gap:8}}>
             <Zvezdice v={r.ocena_cene} nast={(x)=>posodobi(r,{ocena_cene:x})}/>
