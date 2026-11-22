@@ -253,7 +253,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="18.11.2026 a";
+const VERZIJA="22.11.2026 a";
 
 // ===== TRAJNE NASTAVITVE: zrcaljenje v bazo, da prezivijo menjavo racunalnika =====
 const TRAJNI=/^(opomin_|razkladi_|povp_|lead_|isk_|kalk_nast|prazna_rocno|ai_predloge_)/;
@@ -497,9 +497,109 @@ function CropCMRModal({cmr,nalStevilka,onClose,onSaved,showToast}){
   </div>);
 }
 
+
+// ===== JAVLJANJA STATUSA (zahteve narocnika iz originalnega naloga) =====
+const JAV_KDAJ={pred_nakladom:"pred nakladom",ob_nakladu:"ob nakladu",ob_razkladu:"ob razkladu",po_razkladu:"po razkladu",dnevno:"dnevno",drugo:"po dogovoru"};
+
+function normJavljanja(n){
+  const sur=n&&n.javljanja;
+  if(!Array.isArray(sur))return [];
+  return sur.filter(x=>x&&(x.kaj||x.komu)).map(x=>({
+    kaj:String(x.kaj||"").trim(),
+    komu:String(x.komu||"").trim(),
+    kdaj:(String(x.kdaj||"drugo").trim().toLowerCase().replace(/\s+/g,"_")),
+    opravljeno:!!x.opravljeno,
+    cas:x.cas||null
+  }));
+}
+
+function javRok(n,j){
+  const nak=String(n.nakDatum||n.nak_datum||"").slice(0,10);
+  const raz=String(n.razDatum||n.raz_datum||"").slice(0,10);
+  const k=String(j.kdaj||"");
+  const dan=(d,p)=>{ if(!d)return ""; const x=new Date(d+"T00:00:00"); x.setDate(x.getDate()+p); return x.toISOString().slice(0,10); };
+  if(k==="pred_nakladom") return dan(nak,-1)||raz;
+  if(k==="ob_nakladu")    return nak||raz;
+  if(k==="ob_razkladu")   return raz||nak;
+  if(k==="po_razkladu")   return raz||nak;
+  return nak||raz;
+}
+
+function javZapadla(nalogi){
+  const danes=new Date().toISOString().slice(0,10);
+  const out=[];
+  (nalogi||[]).forEach(n=>{
+    if(n.status==="fakturirano")return;
+    const js=normJavljanja(n);
+    const cakajo=js.filter(j=>{ if(j.opravljeno)return false; const r=javRok(n,j); return r&&r<=danes; });
+    if(cakajo.length)out.push({n,cakajo});
+  });
+  return out;
+}
+
+function javMailto(n,j){
+  const st=n.stevilkaNaloga||n.stevilka_naloga||"";
+  const ref=n.nakReferenca||n.nak_referenca||n.razReferenca||n.raz_referenca||"";
+  const zad=(st?st+" ":"")+(ref?("/ ref. "+ref+" "):"")+"- "+(j.kaj||"status posiljke");
+  const telo="Pozdravljeni,\n\n"+(j.kaj||"")+"\n\nNalog: "+st+"\nRelacija: "+(n.nakKraj||n.nak_kraj||"")+" - "+(n.razKraj||n.raz_kraj||"")+"\n"+(ref?("Referenca: "+ref+"\n"):"")+"\nLep pozdrav,\nMatjaz Jurjevec s.p.";
+  return "mailto:"+encodeURIComponent(j.komu||"")+"?subject="+encodeURIComponent(zad)+"&body="+encodeURIComponent(telo);
+}
+
+function JavljanjaPas({n,onShrani,showToast}){
+  const [js,setJs]=useState(()=>normJavljanja(n));
+  const [dodajam,setDodajam]=useState(false);
+  const [nov,setNov]=useState({kaj:"",komu:"",kdaj:"ob_nakladu"});
+  useEffect(()=>{ setJs(normJavljanja(n)); },[n&&n.id]);
+
+  const shrani=(arr)=>{ setJs(arr); if(onShrani)onShrani(arr); };
+  const preklopi=(i)=>{ const a=js.map((x,k)=>k!==i?x:({...x,opravljeno:!x.opravljeno,cas:x.opravljeno?null:new Date().toISOString()})); shrani(a); };
+  const zbrisi=(i)=>{ shrani(js.filter((x,k)=>k!==i)); };
+  const dodaj=()=>{
+    if(!nov.kaj.trim()){ if(showToast)showToast("Vpiši, kaj je treba javiti",true); return; }
+    shrani([...js,{kaj:nov.kaj.trim(),komu:nov.komu.trim(),kdaj:nov.kdaj,opravljeno:false,cas:null}]);
+    setNov({kaj:"",komu:"",kdaj:"ob_nakladu"}); setDodajam(false);
+  };
+  const casSlo=(c)=>{ try{ const d=new Date(c); return d.toLocaleDateString("sl-SI")+" ob "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }catch(e){ return ""; } };
+
+  if(!js.length&&!dodajam) return <div style={{marginBottom:12}}>
+    <button onClick={()=>setDodajam(true)} style={{background:"#fff",border:"1.5px dashed #fdba74",color:"#c2410c",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>📣 + dodaj zahtevo za javljanje</button>
+  </div>;
+
+  return <div style={{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:12,padding:"13px 14px",marginBottom:12}}>
+    <div style={{fontSize:12,fontWeight:800,color:"#9a3412",marginBottom:9,letterSpacing:0.3}}>📣 NAROČNIK ZAHTEVA JAVLJANJE</div>
+    {js.map((j,i)=>(
+      <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"8px 0",borderTop:i?"1px solid #fde8d2":"none"}}>
+        <div onClick={()=>preklopi(i)} title={j.opravljeno?"Prekliči":"Označi kot javljeno"}
+             style={{width:19,height:19,flex:"0 0 auto",marginTop:1,borderRadius:5,cursor:"pointer",border:"2px solid "+(j.opravljeno?"#16a34a":"#fb923c"),background:j.opravljeno?"#16a34a":"#fff",color:"#fff",fontSize:13,fontWeight:800,lineHeight:"16px",textAlign:"center"}}>{j.opravljeno?"✓":""}</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13.5,fontWeight:700,color:j.opravljeno?"#15803d":"#0f2744",textDecoration:j.opravljeno?"line-through":"none"}}>{j.kaj}</div>
+          <div style={{fontSize:11.5,color:j.opravljeno?"#16a34a":"#9a6a3a",marginTop:2}}>
+            <span style={{display:"inline-block",background:j.opravljeno?"#dcfce7":"#ffedd5",color:j.opravljeno?"#15803d":"#9a3412",borderRadius:999,padding:"1px 8px",fontSize:10.5,fontWeight:800,marginRight:6}}>{JAV_KDAJ[j.kdaj]||j.kdaj}</span>
+            {j.opravljeno?("javljeno "+casSlo(j.cas)):(j.komu||"ni naslova")}
+          </div>
+        </div>
+        {!j.opravljeno&&j.komu&&<a href={javMailto(n,j)} style={{background:"#fff",border:"1.5px solid #fdba74",color:"#c2410c",borderRadius:8,padding:"5px 11px",fontSize:12,fontWeight:700,textDecoration:"none",whiteSpace:"nowrap"}}>✉ Javi</a>}
+        <button onClick={()=>zbrisi(i)} title="Izbriši zahtevo" style={{background:"none",border:"none",color:"#cbd5e1",fontSize:15,cursor:"pointer",padding:"2px 4px"}}>🗑</button>
+      </div>
+    ))}
+    {dodajam
+      ? <div style={{marginTop:9,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+          <input value={nov.kaj} onChange={e=>setNov({...nov,kaj:e.target.value})} placeholder="Kaj je treba javiti" style={{...s.inp,flex:"2 1 180px",padding:"7px 10px",fontSize:12}}/>
+          <input value={nov.komu} onChange={e=>setNov({...nov,komu:e.target.value})} placeholder="E-naslov" style={{...s.inp,flex:"1 1 150px",padding:"7px 10px",fontSize:12}}/>
+          <select value={nov.kdaj} onChange={e=>setNov({...nov,kdaj:e.target.value})} style={{...s.inp,flex:"0 1 150px",padding:"7px 10px",fontSize:12}}>
+            {Object.keys(JAV_KDAJ).map(k=><option key={k} value={k}>{JAV_KDAJ[k]}</option>)}
+          </select>
+          <button onClick={dodaj} style={{background:"#ea580c",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>Dodaj</button>
+          <button onClick={()=>setDodajam(false)} style={{background:"none",border:"none",color:"#94a3b8",fontSize:12,cursor:"pointer"}}>Prekliči</button>
+        </div>
+      : <button onClick={()=>setDodajam(true)} style={{marginTop:9,width:"100%",background:"#fff",border:"1.5px dashed #fdba74",color:"#c2410c",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ dodaj zahtevo</button>}
+  </div>;
+}
+
 function DispecarPlasca() {
   const [st,setSt]=useState(initState);
   const [tab,setTab]=useState("nalogi");
+  const [javOdprt,setJavOdprt]=useState(false);
   const [gpsVozila,setGpsVozila]=useState([]);
   useEffect(()=>{
     let ustavi=false;
@@ -567,6 +667,14 @@ function DispecarPlasca() {
   }, []);
 
   
+
+  const shraniJavljanja = async (id, arr) => {
+    try{
+      const {error}=await supabase.from("nalogi").update({javljanja:arr}).eq("id",id);
+      if(error)throw error;
+      setSt(p=>({...p,nalogi:(p.nalogi||[]).map(x=>x.id===id?{...x,javljanja:arr}:x)}));
+    }catch(e){ showToast("❌ Javljanja ni bilo mogoče shraniti",true); }
+  };
 
   const naložiPodatke = async () => {
     setLoading(true);
@@ -1127,6 +1235,7 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
             <div><div style={{fontSize:12,color:"#64748b"}}>Naslednji korak</div><div style={{fontWeight:700,color:SC[naslednji.next].color}}>{naslednji.icon} {naslednji.label}</div></div>
             <button style={{background:SC[naslednji.next].color,color:"#fff",border:"none",borderRadius:10,padding:"9px 16px",fontWeight:700,cursor:"pointer"}} onClick={()=>spremenStatus(n.id,naslednji.next)}>Potrdi →</button>
           </div>}
+         <JavljanjaPas n={n} showToast={showToast} onShrani={(arr)=>shraniJavljanja(n.id,arr)}/>
          <Sec title="🧭 Smer (izvoz/uvoz)">
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10}}>
               <span style={{fontSize:12,color:"#64748b"}}>Trenutno:</span>
@@ -1293,6 +1402,32 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
             <span style={{fontSize:20}}>→</span>
           </div>
         )}
+        {(()=>{
+
+          const zap=javZapadla(st.nalogi);
+          const koliko=zap.reduce((a,x)=>a+x.cakajo.length,0);
+          if(!koliko)return null;
+          return <div style={{marginBottom:14}}>
+            <div onClick={()=>setJavOdprt(!javOdprt)} style={{background:"linear-gradient(135deg,#b45309,#f59e0b)",borderRadius:14,padding:"14px 16px",color:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 2px 8px rgba(180,83,9,.25)"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:24}}>📣</span>
+                <div>
+                  <div style={{fontWeight:800,fontSize:15}}>{koliko} {koliko===1?"javljanje te čaka":"javljanj te čaka"}</div>
+                  <div style={{fontSize:12,opacity:0.9}}>Naročniki zahtevajo status — klikni za pregled</div>
+                </div>
+              </div>
+              <span style={{fontSize:20}}>{javOdprt?"▾":"→"}</span>
+            </div>
+            {javOdprt&&<div style={{background:"#fff",border:"1px solid #fed7aa",borderTop:"none",borderRadius:"0 0 12px 12px",padding:"4px 14px 10px"}}>
+              {zap.map(({n,cakajo})=>(
+                <div key={n.id} onClick={()=>odpriNalog(n)} style={{padding:"9px 0",borderTop:"1px solid #f1f5f9",cursor:"pointer"}}>
+                  <div style={{fontSize:13,fontWeight:700,color:"#0f2744"}}>{(n.stevilkaNaloga||n.stevilka_naloga||"")+" · "+(n.nakKraj||n.nak_kraj||"—")+" → "+(n.razKraj||n.raz_kraj||"—")}</div>
+                  {cakajo.map((j,i)=><div key={i} style={{fontSize:12,color:"#9a6a3a",marginTop:2}}>{"• "+j.kaj+" ("+(JAV_KDAJ[j.kdaj]||j.kdaj)+")"}</div>)}
+                </div>
+              ))}
+            </div>}
+          </div>;
+        })()}
         {gpsOpoz.length>0&&(
           <div onClick={()=>setTab("gps")} style={{background:gpsHuda>0?"#fef2f2":"#fffbeb",border:"1.5px solid "+(gpsHuda>0?"#fecaca":"#fde68a"),borderRadius:12,padding:"10px 14px",marginBottom:12,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>
             <span style={{fontSize:18,flexShrink:0}}>⚠️</span>
@@ -3146,7 +3281,7 @@ function HitriIzracun({nalogi,tarife}){
       return (d&&d>=od&&d<=doD)||(d2&&d2>=od&&d2<=doD);
     }).sort((a,b)=>String(a.nakDatum||a.nak_datum||"").localeCompare(String(b.nakDatum||b.nak_datum||"")));
     const postankov=vObdobju.reduce((a,n)=>a+2+((Array.isArray(n.postanki)?n.postanki.length:0)),0);
-    const znesek=(km!=null?km*tarife.km:0)+vObdobju.length*tarife.stranka;
+    const znesek=(km!=null?km*tarife.km:0)+postankov*tarife.stranka;
     setBerem(false);
     setIzid({km,kmOd,kmDo,zapisov,nalogi:vObdobju,postankov,znesek:Math.round(znesek*100)/100});
   };
@@ -3189,14 +3324,14 @@ function HitriIzracun({nalogi,tarife}){
             : <div style={{fontSize:12,color:"#94a3b8",marginTop:4}}>{reg?("Ni dovolj zapisov ("+izid.zapisov+"). Zapisovanje teče od 17.11.2026."):"Voznik nima vpisanega vozila."}</div>}
         </div>
         <div style={{flex:"1 1 130px",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:9,padding:"10px 12px"}}>
-          <div style={{fontSize:11,fontWeight:700,color:"#64748b"}}>NALOGI</div>
-          <div style={{fontSize:20,fontWeight:800,color:"#0f2744"}}>{izid.nalogi.length}</div>
-          <div style={{fontSize:11,color:"#94a3b8"}}>{izid.postankov+" postankov"}</div>
+          <div style={{fontSize:11,fontWeight:700,color:"#64748b"}}>POSTANKI (STRANKE)</div>
+          <div style={{fontSize:20,fontWeight:800,color:"#0f2744"}}>{izid.postankov}</div>
+          <div style={{fontSize:11,color:"#94a3b8"}}>{"v "+izid.nalogi.length+" nalogih"}</div>
         </div>
         <div style={{flex:"1 1 150px",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:9,padding:"10px 12px"}}>
           <div style={{fontSize:11,fontWeight:700,color:"#15803d"}}>INFORMATIVNI ZNESEK</div>
           <div style={{fontSize:20,fontWeight:800,color:"#15803d"}}>{izid.znesek.toFixed(2)} €</div>
-          <div style={{fontSize:11,color:"#94a3b8"}}>{"km × "+tarife.km+" + nalogi × "+tarife.stranka+" €"}</div>
+          <div style={{fontSize:11,color:"#94a3b8"}}>{"km × "+tarife.km+" + postanki × "+tarife.stranka+" €"}</div>
         </div>
       </div>
       {izid.nalogi.length>0&&<div style={{marginTop:12}}>
@@ -3206,6 +3341,7 @@ function HitriIzracun({nalogi,tarife}){
             <span style={{color:"#94a3b8",width:82}}>{String(n.nakDatum||n.nak_datum||"").slice(0,10).split("-").reverse().join(".")}</span>
             <span style={{flex:1,color:"#0f2744",fontWeight:600}}>{(n.nakKraj||n.nak_kraj||"—")+" → "+(n.razKraj||n.raz_kraj||"—")}</span>
             <span style={{color:"#64748b"}}>{n.stranka||""}</span>
+            <span style={{color:"#94a3b8",width:74,textAlign:"right"}}>{(2+((Array.isArray(n.postanki)?n.postanki.length:0)))+" postank."}</span>
           </div>
         ))}
       </div>}
