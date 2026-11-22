@@ -253,7 +253,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="22.11.2026 a";
+const VERZIJA="22.11.2026 b";
 
 // ===== TRAJNE NASTAVITVE: zrcaljenje v bazo, da prezivijo menjavo racunalnika =====
 const TRAJNI=/^(opomin_|razkladi_|povp_|lead_|isk_|kalk_nast|prazna_rocno|ai_predloge_)/;
@@ -513,6 +513,11 @@ function normJavljanja(n){
   }));
 }
 
+function javResno(j){
+  const t=String((j&&j.kaj)||"").toLowerCase();
+  return /zara[cč]un|kazn|kazen|globa|p[eo]nal|odbit|odtegn|strošk|strosk|vertragsstrafe|p[öo]nale|strafe|penalt|fine\b|charge|deduct/.test(t);
+}
+
 function javRok(n,j){
   const nak=String(n.nakDatum||n.nak_datum||"").slice(0,10);
   const raz=String(n.razDatum||n.raz_datum||"").slice(0,10);
@@ -568,18 +573,18 @@ function JavljanjaPas({n,onShrani,showToast}){
   return <div style={{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:12,padding:"13px 14px",marginBottom:12}}>
     <div style={{fontSize:12,fontWeight:800,color:"#9a3412",marginBottom:9,letterSpacing:0.3}}>📣 NAROČNIK ZAHTEVA JAVLJANJE</div>
     {js.map((j,i)=>(
-      <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"8px 0",borderTop:i?"1px solid #fde8d2":"none"}}>
+      <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"8px 10px",margin:"4px -4px",borderRadius:8,borderTop:i?"1px solid #fde8d2":"none",background:(!j.opravljeno&&javResno(j))?"#fef2f2":"transparent"}}>
         <div onClick={()=>preklopi(i)} title={j.opravljeno?"Prekliči":"Označi kot javljeno"}
-             style={{width:19,height:19,flex:"0 0 auto",marginTop:1,borderRadius:5,cursor:"pointer",border:"2px solid "+(j.opravljeno?"#16a34a":"#fb923c"),background:j.opravljeno?"#16a34a":"#fff",color:"#fff",fontSize:13,fontWeight:800,lineHeight:"16px",textAlign:"center"}}>{j.opravljeno?"✓":""}</div>
+             style={{width:19,height:19,flex:"0 0 auto",marginTop:1,borderRadius:5,cursor:"pointer",border:"2px solid "+(j.opravljeno?"#16a34a":(javResno(j)?"#dc2626":"#fb923c")),background:j.opravljeno?"#16a34a":"#fff",color:"#fff",fontSize:13,fontWeight:800,lineHeight:"16px",textAlign:"center"}}>{j.opravljeno?"✓":""}</div>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:13.5,fontWeight:700,color:j.opravljeno?"#15803d":"#0f2744",textDecoration:j.opravljeno?"line-through":"none"}}>{j.kaj}</div>
-          <div style={{fontSize:11.5,color:j.opravljeno?"#16a34a":"#9a6a3a",marginTop:2}}>
-            <span style={{display:"inline-block",background:j.opravljeno?"#dcfce7":"#ffedd5",color:j.opravljeno?"#15803d":"#9a3412",borderRadius:999,padding:"1px 8px",fontSize:10.5,fontWeight:800,marginRight:6}}>{JAV_KDAJ[j.kdaj]||j.kdaj}</span>
+          <div style={{fontSize:13.5,fontWeight:700,color:j.opravljeno?"#15803d":(javResno(j)?"#b91c1c":"#0f2744"),textDecoration:j.opravljeno?"line-through":"none"}}>{(!j.opravljeno&&javResno(j)?"⚠️ ":"")+j.kaj}</div>
+          <div style={{fontSize:11.5,color:j.opravljeno?"#16a34a":(javResno(j)?"#b91c1c":"#9a6a3a"),marginTop:2}}>
+            <span style={{display:"inline-block",background:j.opravljeno?"#dcfce7":(javResno(j)?"#fee2e2":"#ffedd5"),color:j.opravljeno?"#15803d":(javResno(j)?"#b91c1c":"#9a3412"),borderRadius:999,padding:"1px 8px",fontSize:10.5,fontWeight:800,marginRight:6}}>{JAV_KDAJ[j.kdaj]||j.kdaj}</span>
             {j.opravljeno?("javljeno "+casSlo(j.cas)):(j.komu||"ni naslova")}
           </div>
         </div>
         {!j.opravljeno&&j.komu&&<a href={javMailto(n,j)} style={{background:"#fff",border:"1.5px solid #fdba74",color:"#c2410c",borderRadius:8,padding:"5px 11px",fontSize:12,fontWeight:700,textDecoration:"none",whiteSpace:"nowrap"}}>✉ Javi</a>}
-        <button onClick={()=>zbrisi(i)} title="Izbriši zahtevo" style={{background:"none",border:"none",color:"#cbd5e1",fontSize:15,cursor:"pointer",padding:"2px 4px"}}>🗑</button>
+        <button onClick={()=>zbrisi(i)} title="Odstrani — tega ni treba javljati" style={{background:"none",border:"1px solid #e2e8f0",color:"#94a3b8",fontSize:11,fontWeight:700,cursor:"pointer",padding:"4px 8px",borderRadius:7,whiteSpace:"nowrap"}}>✕ ni treba</button>
       </div>
     ))}
     {dodajam
@@ -592,7 +597,10 @@ function JavljanjaPas({n,onShrani,showToast}){
           <button onClick={dodaj} style={{background:"#ea580c",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>Dodaj</button>
           <button onClick={()=>setDodajam(false)} style={{background:"none",border:"none",color:"#94a3b8",fontSize:12,cursor:"pointer"}}>Prekliči</button>
         </div>
-      : <button onClick={()=>setDodajam(true)} style={{marginTop:9,width:"100%",background:"#fff",border:"1.5px dashed #fdba74",color:"#c2410c",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ dodaj zahtevo</button>}
+      : <div style={{marginTop:9,display:"flex",gap:8,alignItems:"center"}}>
+          <button onClick={()=>setDodajam(true)} style={{flex:1,background:"#fff",border:"1.5px dashed #fdba74",color:"#c2410c",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ dodaj zahtevo</button>
+          {js.filter(x=>!x.opravljeno).length>1&&<button onClick={()=>{ if(window.confirm("Odstranim vse zahteve, ki še niso javljene?")) shrani(js.filter(x=>x.opravljeno)); }} style={{background:"none",border:"1px solid #e2e8f0",color:"#94a3b8",borderRadius:9,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>✕ nobeno ni treba</button>}
+        </div>}
   </div>;
 }
 
@@ -1406,14 +1414,15 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
 
           const zap=javZapadla(st.nalogi);
           const koliko=zap.reduce((a,x)=>a+x.cakajo.length,0);
+          const resnih=zap.reduce((a,x)=>a+x.cakajo.filter(javResno).length,0);
           if(!koliko)return null;
           return <div style={{marginBottom:14}}>
-            <div onClick={()=>setJavOdprt(!javOdprt)} style={{background:"linear-gradient(135deg,#b45309,#f59e0b)",borderRadius:14,padding:"14px 16px",color:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 2px 8px rgba(180,83,9,.25)"}}>
+            <div onClick={()=>setJavOdprt(!javOdprt)} style={{background:resnih?"linear-gradient(135deg,#991b1b,#dc2626)":"linear-gradient(135deg,#b45309,#f59e0b)",borderRadius:14,padding:"14px 16px",color:"#fff",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:resnih?"0 2px 8px rgba(153,27,27,.25)":"0 2px 8px rgba(180,83,9,.25)"}}>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
                 <span style={{fontSize:24}}>📣</span>
                 <div>
                   <div style={{fontWeight:800,fontSize:15}}>{koliko} {koliko===1?"javljanje te čaka":"javljanj te čaka"}</div>
-                  <div style={{fontSize:12,opacity:0.9}}>Naročniki zahtevajo status — klikni za pregled</div>
+                  <div style={{fontSize:12,opacity:0.9}}>{resnih?("Od tega "+resnih+" z napovedanim odbitkom — klikni za pregled"):"Naročniki zahtevajo status — klikni za pregled"}</div>
                 </div>
               </div>
               <span style={{fontSize:20}}>{javOdprt?"▾":"→"}</span>
@@ -1422,7 +1431,7 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
               {zap.map(({n,cakajo})=>(
                 <div key={n.id} onClick={()=>odpriNalog(n)} style={{padding:"9px 0",borderTop:"1px solid #f1f5f9",cursor:"pointer"}}>
                   <div style={{fontSize:13,fontWeight:700,color:"#0f2744"}}>{(n.stevilkaNaloga||n.stevilka_naloga||"")+" · "+(n.nakKraj||n.nak_kraj||"—")+" → "+(n.razKraj||n.raz_kraj||"—")}</div>
-                  {cakajo.map((j,i)=><div key={i} style={{fontSize:12,color:"#9a6a3a",marginTop:2}}>{"• "+j.kaj+" ("+(JAV_KDAJ[j.kdaj]||j.kdaj)+")"}</div>)}
+                  {cakajo.map((j,i)=><div key={i} style={{fontSize:12,color:javResno(j)?"#b91c1c":"#9a6a3a",fontWeight:javResno(j)?700:400,marginTop:2}}>{(javResno(j)?"⚠️ ":"• ")+j.kaj+" ("+(JAV_KDAJ[j.kdaj]||j.kdaj)+")"}</div>)}
                 </div>
               ))}
             </div>}
