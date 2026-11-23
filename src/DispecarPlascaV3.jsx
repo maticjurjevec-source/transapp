@@ -253,7 +253,7 @@ const DEMO=[
 ];
 
 const LS="dispecar_v2";
-const VERZIJA="22.11.2026 c";
+const VERZIJA="23.11.2026 a";
 
 // ===== TRAJNE NASTAVITVE: zrcaljenje v bazo, da prezivijo menjavo racunalnika =====
 const TRAJNI=/^(opomin_|razkladi_|povp_|lead_|isk_|kalk_nast|prazna_rocno|ai_predloge_)/;
@@ -536,7 +536,7 @@ function javZapadla(nalogi){
   (nalogi||[]).forEach(n=>{
     if(n.status==="fakturirano")return;
     const js=normJavljanja(n);
-    const cakajo=js.filter(j=>{ if(j.opravljeno)return false; const r=javRok(n,j); return r&&r<=danes; });
+    const cakajo=js.map((j,i)=>({j,i})).filter(({j})=>{ if(j.opravljeno)return false; const r=javRok(n,j); return r&&r<=danes; });
     if(cakajo.length)out.push({n,cakajo});
   });
   return out;
@@ -1430,8 +1430,22 @@ if(editId){if(window.confirm("Posodobim nalog z novimi podatki?\n\nV redu = poso
             {javOdprt&&<div style={{background:"#fff",border:"1px solid #fed7aa",borderTop:"none",borderRadius:"0 0 12px 12px",padding:"4px 14px 10px"}}>
               {zap.map(({n,cakajo})=>(
                 <div key={n.id} onClick={()=>odpriNalog(n)} style={{padding:"9px 0",borderTop:"1px solid #f1f5f9",cursor:"pointer"}}>
-                  <div style={{fontSize:13,fontWeight:700,color:"#0f2744"}}>{(n.stevilkaNaloga||n.stevilka_naloga||"")+" · "+(n.nakKraj||n.nak_kraj||"—")+" → "+(n.razKraj||n.raz_kraj||"—")}</div>
-                  {cakajo.map((j,i)=><div key={i} style={{fontSize:12,color:javResno(j)?"#b91c1c":"#9a6a3a",fontWeight:javResno(j)?700:400,marginTop:2}}>{(javResno(j)?"⚠️ ":"• ")+j.kaj+" ("+(JAV_KDAJ[j.kdaj]||j.kdaj)+")"}</div>)}
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{flex:1,fontSize:13,fontWeight:700,color:"#0f2744"}}>{(n.stevilkaNaloga||n.stevilka_naloga||"")+" · "+(n.nakKraj||n.nak_kraj||"—")+" → "+(n.razKraj||n.raz_kraj||"—")}</div>
+                    {cakajo.length>1&&<button onClick={(e)=>{e.stopPropagation();const c=new Date().toISOString();const kljuci={};cakajo.forEach(({i})=>kljuci[i]=1);const arr=normJavljanja(n).map((x,k)=>kljuci[k]?({...x,opravljeno:true,cas:c}):x);shraniJavljanja(n.id,arr);}}
+                      style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:7,padding:"3px 9px",fontSize:10.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>✓ vse javljeno</button>}
+                  </div>
+                  {cakajo.map(({j,i})=>(
+                    <div key={i} style={{display:"flex",alignItems:"flex-start",gap:8,marginTop:4}}>
+                      <div onClick={(e)=>{e.stopPropagation();const arr=normJavljanja(n).map((x,k)=>k!==i?x:({...x,opravljeno:true,cas:new Date().toISOString()}));shraniJavljanja(n.id,arr);}}
+                           title="Označi kot javljeno"
+                           style={{width:17,height:17,flex:"0 0 auto",marginTop:1,borderRadius:4,cursor:"pointer",background:"#fff",border:"2px solid "+(javResno(j)?"#dc2626":"#fb923c")}}/>
+                      <div style={{flex:1,minWidth:0,fontSize:12,color:javResno(j)?"#b91c1c":"#9a6a3a",fontWeight:javResno(j)?700:400}}>{(javResno(j)?"⚠️ ":"")+j.kaj+" ("+(JAV_KDAJ[j.kdaj]||j.kdaj)+")"}</div>
+                      <button onClick={(e)=>{e.stopPropagation();const arr=normJavljanja(n).filter((x,k)=>k!==i);shraniJavljanja(n.id,arr);}}
+                              title="Tega ni treba javljati"
+                              style={{background:"none",border:"1px solid #e2e8f0",color:"#94a3b8",fontSize:10.5,fontWeight:700,cursor:"pointer",padding:"2px 7px",borderRadius:6,whiteSpace:"nowrap"}}>✕ ni treba</button>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>}
